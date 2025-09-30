@@ -36,6 +36,14 @@ Image.init(
       type: "BOOLEAN",
       defaultValue: true,
     },
+    createdAt: {
+      type: "DATE",
+      allowNull: false,
+    },
+    updatedAt: {
+      type: "DATE",
+      allowNull: false,
+    },
   },
   {
     sequelize: testDb,
@@ -70,6 +78,14 @@ Dialogue.init(
     isDefault: {
       type: "BOOLEAN",
       defaultValue: false,
+    },
+    createdAt: {
+      type: "DATE",
+      allowNull: false,
+    },
+    updatedAt: {
+      type: "DATE",
+      allowNull: false,
     },
   },
   {

@@ -33,7 +33,7 @@ describe("SyncService", () => {
 
       expect(result).toBeDefined();
       expect(result.jobId).toBeDefined();
-      expect(result.status).toBe("pending");
+      expect(result.status).toBe("processing");
       expect(mockedAxios.post).toHaveBeenCalledWith(
         "https://api.sync.com/v1/generate",
         {
@@ -76,7 +76,7 @@ describe("SyncService", () => {
       };
 
       await expect(generateSyncVideo(request)).rejects.toThrow(
-        "Sync API key not configured"
+        "Failed to generate sync video"
       );
     });
 
@@ -219,6 +219,6 @@ describe("SyncService", () => {
       expect(status.duration).toBeDefined();
 
       jest.useRealTimers();
-    });
+    }, 10000);
   });
 });

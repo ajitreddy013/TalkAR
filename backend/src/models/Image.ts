@@ -1,5 +1,5 @@
-import { DataTypes, Model, Optional } from 'sequelize';
-import { sequelize } from '../config/database';
+import { DataTypes, Model, Optional } from "sequelize";
+import { sequelize } from "../config/database";
 
 export interface ImageAttributes {
   id: string;
@@ -12,9 +12,13 @@ export interface ImageAttributes {
   updatedAt: Date;
 }
 
-export interface ImageCreationAttributes extends Optional<ImageAttributes, 'id' | 'createdAt' | 'updatedAt'> {}
+export interface ImageCreationAttributes
+  extends Optional<ImageAttributes, "id" | "createdAt" | "updatedAt"> {}
 
-export class Image extends Model<ImageAttributes, ImageCreationAttributes> implements ImageAttributes {
+export class Image
+  extends Model<ImageAttributes, ImageCreationAttributes>
+  implements ImageAttributes
+{
   public id!: string;
   public name!: string;
   public description?: string;
@@ -41,9 +45,13 @@ export interface DialogueAttributes {
   updatedAt: Date;
 }
 
-export interface DialogueCreationAttributes extends Optional<DialogueAttributes, 'id' | 'createdAt' | 'updatedAt'> {}
+export interface DialogueCreationAttributes
+  extends Optional<DialogueAttributes, "id" | "createdAt" | "updatedAt"> {}
 
-export class Dialogue extends Model<DialogueAttributes, DialogueCreationAttributes> implements DialogueAttributes {
+export class Dialogue
+  extends Model<DialogueAttributes, DialogueCreationAttributes>
+  implements DialogueAttributes
+{
   public id!: string;
   public imageId!: string;
   public text!: string;
@@ -55,77 +63,96 @@ export class Dialogue extends Model<DialogueAttributes, DialogueCreationAttribut
 }
 
 // Initialize models
-Image.init({
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
+Image.init(
+  {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    imageUrl: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    thumbnailUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
   },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  imageUrl: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  thumbnailUrl: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  isActive: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
+  {
+    sequelize,
+    tableName: "images",
+    timestamps: true,
   }
-}, {
-  sequelize,
-  tableName: 'images',
-  timestamps: true
-});
+);
 
-Dialogue.init({
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
+Dialogue.init(
+  {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    imageId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: "images",
+        key: "id",
+      },
+    },
+    text: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    language: {
+      type: DataTypes.STRING(5),
+      allowNull: false,
+    },
+    voiceId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    isDefault: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
   },
-  imageId: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'images',
-      key: 'id'
-    }
-  },
-  text: {
-    type: DataTypes.TEXT,
-    allowNull: false
-  },
-  language: {
-    type: DataTypes.STRING(5),
-    allowNull: false
-  },
-  voiceId: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  isDefault: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
+  {
+    sequelize,
+    tableName: "dialogues",
+    timestamps: true,
   }
-}, {
-  sequelize,
-  tableName: 'dialogues',
-  timestamps: true
-});
+);
 
 // Define associations
-Image.hasMany(Dialogue, { foreignKey: 'imageId', as: 'dialogues' });
-Dialogue.belongsTo(Image, { foreignKey: 'imageId', as: 'image' });
-
-export { Image, Dialogue };
-
+Image.hasMany(Dialogue, { foreignKey: "imageId", as: "dialogues" });
+Dialogue.belongsTo(Image, { foreignKey: "imageId", as: "image" });
