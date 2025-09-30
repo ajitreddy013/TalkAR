@@ -16,7 +16,12 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix"
   },
-  "keywords": ["ar", "talking-head", "sync-api", "mobile-app"],
+  "keywords": [
+    "ar",
+    "talking-head",
+    "sync-api",
+    "mobile-app"
+  ],
   "author": "TalkAR Team",
   "license": "MIT",
   "dependencies": {
@@ -59,15 +64,22 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "testMatch": ["**/tests/**/*.test.ts"],
+    "testMatch": [
+      "**/tests/**/*.test.ts"
+    ],
     "collectCoverageFrom": [
       "src/**/*.ts",
       "!src/**/*.d.ts",
       "!src/tests/**/*"
     ],
     "coverageDirectory": "coverage",
-    "coverageReporters": ["text", "lcov", "html"],
-    "setupFilesAfterEnv": ["<rootDir>/src/tests/setup.ts"]
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/src/tests/setup.ts"
+    ]
   }
 }
-
