@@ -1,8 +1,15 @@
 package com.talkar.app.data.models
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import androidx.room.TypeConverters
 import com.google.gson.annotations.SerializedName
+import com.talkar.app.data.local.Converters
 
+@Entity(tableName = "imagerecognition")
+@TypeConverters(Converters::class)
 data class ImageRecognition(
+    @PrimaryKey
     @SerializedName("id")
     val id: String,
     
