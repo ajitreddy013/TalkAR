@@ -9,6 +9,7 @@ import { notFound } from './middleware/notFound';
 import imageRoutes from './routes/images';
 import syncRoutes from './routes/sync';
 import adminRoutes from './routes/admin';
+import authRoutes from './routes/auth';
 
 // Load environment variables
 dotenv.config();
@@ -27,6 +28,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/images', imageRoutes);
 app.use('/api/v1/sync', syncRoutes);
 app.use('/api/v1/admin', adminRoutes);

@@ -35,15 +35,29 @@ class ARViewModel : ViewModel() {
         }
     }
     
-    fun recognizeImage(imageId: String) {
+    fun recognizeImage(imageRecognition: ImageRecognition) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             
-            imageRepository.getImageById(imageId).collect { image ->
-                _recognizedImage.value = image
+            try {
+                // Update the recognized image
+                _recognizedImage.value = imageRecognition
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    recognizedImage = image
+                    recognizedImage = imageRecognition
+                )
+                
+                // Load additional image data from repository if needed
+                imageRepository.getImageById(imageRecognition.id).collect { fullImageData ->
+                    _recognizedImage.value = fullImageData
+                    _uiState.value = _uiState.value.copy(
+                        recognizedImage = fullImageData
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Failed to process recognized image: ${e.message}"
                 )
             }
         }

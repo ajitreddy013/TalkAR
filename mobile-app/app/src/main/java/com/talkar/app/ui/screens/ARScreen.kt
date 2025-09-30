@@ -50,8 +50,8 @@ fun ARScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                onImageRecognized = { imageId ->
-                    viewModel.recognizeImage(imageId)
+                onImageRecognized = { imageRecognition ->
+                    viewModel.recognizeImage(imageRecognition)
                 }
             )
             

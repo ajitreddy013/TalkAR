@@ -50,3 +50,32 @@ export const validateDialogue = (req: Request, res: Response, next: NextFunction
   next();
 };
 
+export const validateAuthRequest = (req: Request, res: Response, next: NextFunction) => {
+  const schema = Joi.object({
+    email: Joi.string().email().required(),
+    password: Joi.string().min(6).required(),
+    role: Joi.string().valid('admin', 'user').optional()
+  });
+  
+  const { error } = schema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ error: error.details[0].message });
+  }
+  
+  next();
+};
+
+export const validateChangePassword = (req: Request, res: Response, next: NextFunction) => {
+  const schema = Joi.object({
+    currentPassword: Joi.string().required(),
+    newPassword: Joi.string().min(6).required()
+  });
+  
+  const { error } = schema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ error: error.details[0].message });
+  }
+  
+  next();
+};
+
