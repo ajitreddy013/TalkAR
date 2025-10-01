@@ -52,11 +52,11 @@ class ARImageRecognitionService(private val context: Context) {
             true
         } catch (e: UnavailableException) {
             Log.e(tag, "ARCore unavailable", e)
-            _error.value = "ARCore is not available: ${e.message}"
+            _error.value = "ARCore is not available: ${e.message}. Please test on a physical device for full AR functionality."
             false
         } catch (e: Exception) {
             Log.e(tag, "Failed to initialize AR service", e)
-            _error.value = "Failed to initialize AR service: ${e.message}"
+            _error.value = "Failed to initialize AR service: ${e.message}. This may be due to running in an emulator."
             false
         }
     }
