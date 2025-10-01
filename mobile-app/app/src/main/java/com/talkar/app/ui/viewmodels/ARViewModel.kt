@@ -6,6 +6,7 @@ import com.talkar.app.TalkARApplication
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.SyncRequest
 import com.talkar.app.data.models.SyncResponse
+import com.google.ar.core.AugmentedImage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -22,6 +23,9 @@ class ARViewModel : ViewModel() {
     
     private val _syncVideo = MutableStateFlow<SyncResponse?>(null)
     val syncVideo: StateFlow<SyncResponse?> = _syncVideo.asStateFlow()
+    
+    private val _recognizedAugmentedImage = MutableStateFlow<AugmentedImage?>(null)
+    val recognizedAugmentedImage: StateFlow<AugmentedImage?> = _recognizedAugmentedImage.asStateFlow()
     
     init {
         loadImages()
@@ -63,6 +67,10 @@ class ARViewModel : ViewModel() {
         }
     }
     
+    fun setRecognizedAugmentedImage(augmentedImage: AugmentedImage) {
+        _recognizedAugmentedImage.value = augmentedImage
+    }
+    
     fun generateSyncVideo(text: String, language: String, voiceId: String? = null) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isGeneratingVideo = true)
@@ -97,6 +105,7 @@ class ARViewModel : ViewModel() {
     fun resetRecognition() {
         _recognizedImage.value = null
         _syncVideo.value = null
+        _recognizedAugmentedImage.value = null
         _uiState.value = _uiState.value.copy(
             recognizedImage = null,
             syncVideo = null
