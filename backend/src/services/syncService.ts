@@ -48,6 +48,10 @@ export const generateSyncVideo = async (
       `Generating sync video for: "${request.text}" in ${request.language}`
     );
 
+    // Ensure English language for proper lip-sync
+    const language = request.language.toLowerCase() === "en" ? "en" : "en";
+    const text = request.text;
+
     // Update job status to processing
     job.status = "processing";
     syncJobs.set(jobId, job);
@@ -84,6 +88,12 @@ export const generateSyncVideo = async (
             },
           ],
           outputFileName: `talkar_${jobId}`,
+          // Enhanced parameters for better English lip-sync
+          language: language, // Force English
+          voiceId: request.voiceId || "en-female-1", // Default English female voice
+          lipSync: true,
+          headMovement: true,
+          quality: "high",
         },
         {
           headers: {
