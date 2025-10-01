@@ -109,7 +109,9 @@ class ARImageRecognitionService(private val context: Context) {
                 config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
                 
                 // Enable image tracking
-                config.augmentedImageDatabase = imageDatabase
+                imageDatabase?.let { database ->
+                    config.augmentedImageDatabase = database
+                }
                 
                 // Configure session
                 session.configure(config)
