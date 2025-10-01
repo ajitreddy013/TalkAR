@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ARView(
     onImageRecognized: (ImageRecognition) -> Unit,
+    onAugmentedImageRecognized: (com.google.ar.core.AugmentedImage) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -36,6 +37,9 @@ fun ARView(
     // Handle recognized images
     LaunchedEffect(recognizedImages) {
         recognizedImages.forEach { augmentedImage ->
+            // Pass the augmented image for AR overlay positioning
+            onAugmentedImageRecognized(augmentedImage)
+            
             val imageRecognition = arService.getRecognizedImage(augmentedImage.name ?: "")
             imageRecognition?.let { onImageRecognized(it) }
         }
