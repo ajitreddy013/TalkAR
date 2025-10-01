@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import com.talkar.app.ui.components.ARView
+import com.talkar.app.ui.components.AROverlay
+import com.talkar.app.ui.components.ARVideoOverlay
 import com.talkar.app.ui.components.ImageRecognitionCard
 import com.talkar.app.ui.components.SyncVideoPlayer
 import com.talkar.app.ui.viewmodels.ARViewModel
@@ -23,6 +25,7 @@ fun ARScreen(
     val uiState by viewModel.uiState.collectAsState()
     val recognizedImage by viewModel.recognizedImage.collectAsState()
     val syncVideo by viewModel.syncVideo.collectAsState()
+    val recognizedAugmentedImage by viewModel.recognizedAugmentedImage.collectAsState()
     
     Scaffold(
         topBar = {
@@ -40,7 +43,7 @@ fun ARScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -48,12 +51,34 @@ fun ARScreen(
             // AR View
             ARView(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                    .fillMaxSize(),
                 onImageRecognized = { imageRecognition ->
                     viewModel.recognizeImage(imageRecognition)
+                },
+                onAugmentedImageRecognized = { augmentedImage ->
+                    viewModel.setRecognizedAugmentedImage(augmentedImage)
                 }
             )
+            
+            // AR Overlay positioned over recognized image
+            if (recognizedAugmentedImage != null && syncVideo != null) {
+                AROverlay(
+                    recognizedImage = recognizedAugmentedImage,
+                    syncVideo = syncVideo,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            
+            // Fallback video overlay for non-AR display
+            if (recognizedImage != null && syncVideo != null && recognizedAugmentedImage == null) {
+                ARVideoOverlay(
+                    videoUrl = syncVideo.videoUrl,
+                    isVisible = true,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp)
+                )
+            }
             
             // Content based on state
             when {
