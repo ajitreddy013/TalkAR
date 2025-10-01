@@ -23,7 +23,7 @@ data class ImageRecognition(
     val description: String?,
     
     @SerializedName("dialogues")
-    val dialogues: List<Dialogue>,
+    val dialogues: List<Dialogue> = emptyList(),
     
     @SerializedName("createdAt")
     val createdAt: String,
