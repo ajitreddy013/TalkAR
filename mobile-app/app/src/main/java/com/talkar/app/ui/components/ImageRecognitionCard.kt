@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.talkar.app.data.models.ImageRecognition
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImageRecognitionCard(
     image: ImageRecognition,
