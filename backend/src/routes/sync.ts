@@ -11,12 +11,13 @@ const router = express.Router();
 // Generate sync video
 router.post("/generate", validateSyncRequest, async (req, res, next) => {
   try {
-    const { text, language, voiceId } = req.body;
+    const { text, language, voiceId, imageUrl } = req.body;
 
     const result = await generateSyncVideo({
       text,
       language,
       voiceId,
+      imageUrl, // Include the recognized image URL
     });
 
     return res.json(result);

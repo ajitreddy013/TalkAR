@@ -5,6 +5,7 @@ interface SyncRequest {
   text: string;
   language: string;
   voiceId?: string;
+  imageUrl?: string; // URL of the recognized image for AR overlay
 }
 
 interface SyncResponse {
@@ -52,7 +53,20 @@ export const generateSyncVideo = async (
     syncJobs.set(jobId, job);
 
     try {
-      // Make request to sync.so API with correct format
+      // For TalkAR, we need to:
+      // 1. Use the recognized image as the video input
+      // 2. Convert the script text to audio using TTS
+      // 3. Generate lipsync video
+
+      // First, we need to get the recognized image URL from the request
+      const imageUrl =
+        request.imageUrl || "https://assets.sync.so/docs/example-video.mp4";
+
+      // For now, we'll use a simple approach:
+      // - Use the recognized image as video input
+      // - Convert text to audio (in production, use TTS service)
+      // - Generate lipsync video
+
       const response = await axios.post(
         `${syncApiUrl}/generate`,
         {
@@ -60,14 +74,16 @@ export const generateSyncVideo = async (
           input: [
             {
               type: "video",
-              url: "https://assets.sync.so/docs/example-video.mp4" // Default video for now
+              url: imageUrl, // Use the recognized image as video input
             },
             {
               type: "audio",
-              url: `data:audio/wav;base64,${Buffer.from(request.text).toString('base64')}` // Convert text to audio
-            }
+              url: `data:audio/wav;base64,${Buffer.from(request.text).toString(
+                "base64"
+              )}`, // Script text as audio
+            },
           ],
-          outputFileName: `talkar_${jobId}`
+          outputFileName: `talkar_${jobId}`,
         },
         {
           headers: {
@@ -98,23 +114,29 @@ export const generateSyncVideo = async (
           videoUrl: response.data.videoUrl || response.data.outputUrl,
         };
         syncJobs.set(jobId, processingJob);
-        
+
         // Poll for completion (simplified - in production use webhooks)
         setTimeout(async () => {
           try {
-            const statusResponse = await axios.get(`${syncApiUrl}/status/${response.data.jobId || jobId}`, {
-              headers: { "x-api-key": syncApiKey }
-            });
-            
+            const statusResponse = await axios.get(
+              `${syncApiUrl}/status/${response.data.jobId || jobId}`,
+              {
+                headers: { "x-api-key": syncApiKey },
+              }
+            );
+
             if (statusResponse.data.status === "completed") {
               const completedJob: SyncResponse = {
                 jobId,
                 status: "completed",
-                videoUrl: statusResponse.data.videoUrl || statusResponse.data.outputUrl,
+                videoUrl:
+                  statusResponse.data.videoUrl || statusResponse.data.outputUrl,
                 duration: statusResponse.data.duration || 10,
               };
               syncJobs.set(jobId, completedJob);
-              console.log(`Sync video completed for job ${jobId}: ${completedJob.videoUrl}`);
+              console.log(
+                `Sync video completed for job ${jobId}: ${completedJob.videoUrl}`
+              );
             }
           } catch (pollError) {
             console.error("Error polling sync status:", pollError);
@@ -194,7 +216,9 @@ export const getAvailableVoices = async (): Promise<any[]> => {
 
       return response.data;
     } catch (voicesError) {
-      console.warn("Sync.so doesn't have voices endpoint, using default voices");
+      console.warn(
+        "Sync.so doesn't have voices endpoint, using default voices"
+      );
       // Return default voices if voices endpoint doesn't exist
       return [
         { id: "voice-1", name: "Male Voice 1", language: "en", gender: "male" },
