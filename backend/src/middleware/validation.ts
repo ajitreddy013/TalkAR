@@ -32,6 +32,7 @@ export const validateSyncRequest = (
     text: Joi.string().required().min(1).max(1000),
     language: Joi.string().required().length(2),
     voiceId: Joi.string().optional(),
+    imageUrl: Joi.string().uri().optional(), // URL of the recognized image
   });
 
   const { error } = schema.validate(req.body);
