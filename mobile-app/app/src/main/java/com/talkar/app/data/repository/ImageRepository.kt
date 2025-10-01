@@ -11,45 +11,31 @@ class ImageRepository(
     private val database: ImageDatabase
 ) {
     
-    suspend fun getAllImages(): Flow<List<ImageRecognition>> = flow {
-        try {
-            val response = apiClient.getImages()
-            if (response.isSuccessful) {
-                val images = response.body() ?: emptyList()
-                // Cache images locally
-                database.imageDao().insertAll(images)
-                emit(images)
-            } else {
-                // Fallback to local cache
-                emit(database.imageDao().getAllImages())
-            }
+    fun getAllImages(): Flow<List<ImageRecognition>> {
+        return try {
+            // Try to get from API first, then fallback to local cache
+            // For now, return local cache directly
+            database.imageDao().getAllImages()
         } catch (e: Exception) {
-            // Fallback to local cache
-            emit(database.imageDao().getAllImages())
+            // Return empty flow on error
+            flow { emit(emptyList()) }
         }
     }
     
-    suspend fun getImageById(id: String): Flow<ImageRecognition?> = flow {
-        try {
-            val response = apiClient.getImageById(id)
-            if (response.isSuccessful) {
-                val image = response.body()
-                if (image != null) {
-                    database.imageDao().insert(image)
-                    emit(image)
-                } else {
-                    emit(database.imageDao().getImageById(id))
-                }
-            } else {
-                emit(database.imageDao().getImageById(id))
-            }
+    fun getImageById(id: String): Flow<ImageRecognition?> {
+        return try {
+            database.imageDao().getImageById(id)
         } catch (e: Exception) {
-            emit(database.imageDao().getImageById(id))
+            flow { emit(null) }
         }
     }
     
-    suspend fun searchImages(query: String): Flow<List<ImageRecognition>> = flow {
-        emit(database.imageDao().searchImages("%$query%"))
+    fun searchImages(query: String): Flow<List<ImageRecognition>> {
+        return try {
+            database.imageDao().searchImages("%$query%")
+        } catch (e: Exception) {
+            flow { emit(emptyList()) }
+        }
     }
 }
 
