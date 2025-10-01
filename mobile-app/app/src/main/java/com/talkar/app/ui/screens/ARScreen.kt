@@ -73,17 +73,21 @@ fun ARScreen(
                             .fillMaxWidth()
                             .padding(16.dp)
                     ) {
-                        ImageRecognitionCard(
-                            image = recognizedImage,
-                            onGenerateVideo = { text, language, voiceId ->
-                                viewModel.generateSyncVideo(text, language, voiceId)
-                            }
-                        )
+                        val currentRecognizedImage = recognizedImage
+                        if (currentRecognizedImage != null) {
+                            ImageRecognitionCard(
+                                image = currentRecognizedImage,
+                                onGenerateVideo = { text, language, voiceId ->
+                                    viewModel.generateSyncVideo(text, language, voiceId)
+                                }
+                            )
+                        }
                         
-                        if (syncVideo != null) {
+                        val currentSyncVideo = syncVideo
+                        if (currentSyncVideo != null) {
                             Spacer(modifier = Modifier.height(16.dp))
                             SyncVideoPlayer(
-                                videoUrl = syncVideo.videoUrl,
+                                videoUrl = currentSyncVideo.videoUrl,
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
