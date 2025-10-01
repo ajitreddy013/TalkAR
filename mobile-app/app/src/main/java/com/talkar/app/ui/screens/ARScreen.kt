@@ -8,7 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.collectAsState
 import com.talkar.app.ui.components.ARView
 import com.talkar.app.ui.components.ImageRecognitionCard
 import com.talkar.app.ui.components.SyncVideoPlayer
@@ -20,9 +20,9 @@ fun ARScreen(
     viewModel: ARViewModel,
     modifier: Modifier = Modifier
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val recognizedImage by viewModel.recognizedImage.collectAsStateWithLifecycle()
-    val syncVideo by viewModel.syncVideo.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsState()
+    val recognizedImage by viewModel.recognizedImage.collectAsState()
+    val syncVideo by viewModel.syncVideo.collectAsState()
     
     Scaffold(
         topBar = {
