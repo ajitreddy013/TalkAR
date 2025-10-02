@@ -28,12 +28,8 @@ export const ImageService = {
 
   getImageById: (id: string) => api.get(`/images/${id}`),
 
-  createImage: (imageData: FormData) =>
-    api.post("/images", imageData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    }),
+  // Let the browser set the correct multipart boundary automatically
+  createImage: (imageData: FormData) => api.post("/images", imageData),
 
   updateImage: (id: string, data: Partial<Image>) =>
     api.put(`/images/${id}`, data),

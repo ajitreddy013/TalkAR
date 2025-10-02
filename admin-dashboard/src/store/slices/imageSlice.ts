@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import { ImageService } from "../services/imageService";
+import { ImageService } from "../../services/imageService";
 
 export interface Image {
   id: string;
@@ -42,9 +42,12 @@ export const fetchImages = createAsyncThunk(
   "images/fetchImages",
   async (_, { rejectWithValue }) => {
     try {
+      console.log("Fetching images...");
       const response = await ImageService.getAllImages();
+      console.log("Images fetched successfully:", response.data);
       return response.data;
     } catch (error: any) {
+      console.error("Failed to fetch images:", error);
       return rejectWithValue(
         error.response?.data?.error || "Failed to fetch images"
       );
@@ -124,6 +127,9 @@ const imageSlice = createSlice({
       })
       .addCase(createImage.fulfilled, (state, action) => {
         state.images.unshift(action.payload);
+      })
+      .addCase(createImage.rejected, (state, action) => {
+        state.error = action.payload as string;
       })
       .addCase(updateImage.fulfilled, (state, action) => {
         const index = state.images.findIndex(

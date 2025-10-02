@@ -61,3 +61,29 @@ data class SyncResponse(
     val status: String
 )
 
+data class TalkingHeadVideo(
+    @SerializedName("imageId")
+    val imageId: String,
+    
+    @SerializedName("videoUrl")
+    val videoUrl: String,
+    
+    @SerializedName("duration")
+    val duration: Int,
+    
+    @SerializedName("title")
+    val title: String,
+    
+    @SerializedName("description")
+    val description: String,
+    
+    @SerializedName("language")
+    val language: String,
+    
+    @SerializedName("voiceId")
+    val voiceId: String,
+    
+    @SerializedName("createdAt")
+    val createdAt: String
+)
+

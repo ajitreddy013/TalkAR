@@ -71,38 +71,28 @@ export const generateSyncVideo = async (
       // - Convert text to audio (in production, use TTS service)
       // - Generate lipsync video
 
-      const response = await axios.post(
-        `${syncApiUrl}/generate`,
-        {
-          model: "lipsync-2",
-          input: [
-            {
-              type: "video",
-              url: imageUrl, // Use the recognized image as video input
-            },
-            {
-              type: "audio",
-              url: `data:audio/wav;base64,${Buffer.from(request.text).toString(
-                "base64"
-              )}`, // Script text as audio
-            },
-          ],
-          outputFileName: `talkar_${jobId}`,
-          // Enhanced parameters for better English lip-sync
-          language: language, // Force English
-          voiceId: request.voiceId || "en-female-1", // Default English female voice
-          lipSync: true,
-          headMovement: true,
-          quality: "high",
+      // TODO: In production, you need to:
+      // 1. Convert text to audio using TTS service
+      // 2. Upload audio file to get a proper URL
+      // 3. Use that audio URL in the sync request
+
+      // For now, let's use a mock response for testing
+      console.log(`Mock sync video generation for: "${request.text}"`);
+
+      // Simulate API call delay
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Mock successful response
+      const mockResponse = {
+        data: {
+          status: "completed",
+          videoUrl: `https://assets.sync.so/docs/example-talking-head.mp4`,
+          outputUrl: `https://assets.sync.so/docs/example-talking-head.mp4`,
+          duration: 15,
         },
-        {
-          headers: {
-            "x-api-key": syncApiKey,
-            "Content-Type": "application/json",
-          },
-          timeout: 60000, // 60 second timeout for video processing
-        }
-      );
+      };
+
+      const response = mockResponse;
 
       // Handle the response from sync.so API
       if (response.data.status === "completed" || response.data.videoUrl) {
@@ -179,6 +169,29 @@ export const getSyncStatus = async (jobId: string): Promise<SyncResponse> => {
   }
 
   return job;
+};
+
+export const getTalkingHeadVideo = async (imageId: string): Promise<any> => {
+  try {
+    // For now, return a mock talking head video
+    // In production, this would fetch from database or storage
+    const mockTalkingHeadVideo = {
+      imageId: imageId,
+      videoUrl: "https://assets.sync.so/docs/example-talking-head.mp4", // Mock video URL
+      duration: 15, // 15 seconds
+      title: "Welcome to TalkAR",
+      description: "This is a pre-saved talking head video for this image",
+      language: "en",
+      voiceId: "en-female-1",
+      createdAt: new Date().toISOString(),
+    };
+
+    console.log(`Returning talking head video for image ${imageId}`);
+    return mockTalkingHeadVideo;
+  } catch (error) {
+    console.error("Error getting talking head video:", error);
+    throw new Error("Failed to get talking head video");
+  }
 };
 
 export const getAvailableVoices = async (): Promise<any[]> => {

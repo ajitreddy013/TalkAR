@@ -17,10 +17,13 @@ interface ApiService {
     
     @GET("sync/status/{jobId}")
     suspend fun getSyncStatus(@Path("jobId") jobId: String): Response<SyncResponse>
+    
+    @GET("sync/talking-head/{imageId}")
+    suspend fun getTalkingHeadVideo(@Path("imageId") imageId: String): Response<TalkingHeadVideo>
 }
 
 object ApiClient {
-    private const val BASE_URL = "https://api.talkar.com/v1/"
+    private const val BASE_URL = "http://10.208.144.127:3000/api/v1/"
     
     fun create(): ApiService {
         return retrofit2.Retrofit.Builder()
