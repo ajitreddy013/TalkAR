@@ -14,20 +14,21 @@ import android.view.ViewGroup
 import android.widget.VideoView
 import com.google.ar.core.AugmentedImage
 import com.talkar.app.data.models.SyncResponse
+import com.talkar.app.data.models.TalkingHeadVideo
 
 @Composable
 fun AROverlay(
     recognizedImage: AugmentedImage?,
-    syncVideo: SyncResponse?,
+    talkingHeadVideo: TalkingHeadVideo?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     
-    if (recognizedImage != null && syncVideo != null) {
+    if (recognizedImage != null && talkingHeadVideo != null) {
         // Create AR overlay positioned over the recognized image
         AndroidView(
             factory = { ctx ->
-                createAROverlayView(ctx, recognizedImage, syncVideo)
+                createAROverlayView(ctx, recognizedImage, talkingHeadVideo)
             },
             modifier = modifier
         )
@@ -37,7 +38,7 @@ fun AROverlay(
 private fun createAROverlayView(
     context: Context,
     augmentedImage: AugmentedImage,
-    syncVideo: SyncResponse
+    talkingHeadVideo: TalkingHeadVideo
 ): android.view.View {
     return android.widget.FrameLayout(context).apply {
         layoutParams = ViewGroup.LayoutParams(
@@ -51,7 +52,7 @@ private fun createAROverlayView(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            setVideoPath(syncVideo.videoUrl)
+            setVideoPath(talkingHeadVideo.videoUrl)
             setOnPreparedListener { mediaPlayer ->
                 mediaPlayer.isLooping = true
                 mediaPlayer.start()
@@ -154,7 +155,7 @@ fun ARVideoOverlay(
                     OutlinedButton(
                         onClick = { /* Pause video */ },
                         modifier = Modifier.weight(1f),
-                        colors = OutlinedButtonDefaults.outlinedButtonColors(
+                        colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = Color.White
                         )
                     ) {

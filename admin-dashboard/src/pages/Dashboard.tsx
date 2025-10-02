@@ -14,13 +14,12 @@ import {
   Visibility,
   TrendingUp,
 } from "@mui/icons-material";
-import { useDispatch, useSelector } from "react-redux";
-import { RootState } from "../store/store";
 import { fetchImages } from "../store/slices/imageSlice";
+import { useAppDispatch, useAppSelector } from "../store/hooks";
 
 const Dashboard: React.FC = () => {
-  const dispatch = useDispatch();
-  const { images, loading } = useSelector((state: RootState) => state.images);
+  const dispatch = useAppDispatch();
+  const { images, loading } = useAppSelector((state) => state.images);
 
   useEffect(() => {
     dispatch(fetchImages());

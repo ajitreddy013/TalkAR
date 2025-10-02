@@ -1,7 +1,8 @@
 import express from "express";
 import { Image, Dialogue } from "../models/Image";
-import { uploadImage } from "../services/uploadService";
+import { uploadImage, uploadToS3 } from "../services/uploadService";
 import { validateImageUpload } from "../middleware/validation";
+import path from "path";
 
 const router = express.Router();
 
@@ -56,10 +57,21 @@ router.post(
   async (req, res, next) => {
     try {
       const { name, description } = req.body;
-      const imageUrl = req.file?.path; // Use path instead of location for local storage
+      let imageUrl: string;
 
-      if (!imageUrl) {
-        return res.status(400).json({ error: "Image upload failed" });
+      if (!req.file) {
+        return res.status(400).json({ error: "Image file is required" });
+      }
+
+      // Handle S3 upload for production or local file storage for development
+      if (process.env.NODE_ENV === 'production' && process.env.AWS_S3_BUCKET) {
+        // Upload to S3
+        imageUrl = await uploadToS3(req.file);
+      } else {
+        // Use local file path
+        imageUrl = req.file.path;
+        // Convert to relative path for serving
+        imageUrl = `/uploads/${path.basename(imageUrl)}`;
       }
 
       const image = await Image.create({

@@ -3,6 +3,7 @@ import {
   generateSyncVideo,
   getSyncStatus,
   getAvailableVoices,
+  getTalkingHeadVideo,
 } from "../services/syncService";
 import { validateSyncRequest } from "../middleware/validation";
 
@@ -44,6 +45,20 @@ router.get("/voices", async (req, res, next) => {
   try {
     const voices = await getAvailableVoices();
     return res.json(voices);
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Get pre-saved talking head video for recognized image
+router.get("/talking-head/:imageId", async (req, res, next) => {
+  try {
+    const { imageId } = req.params;
+
+    // Get the talking head video for this specific image
+    const talkingHeadVideo = await getTalkingHeadVideo(imageId);
+
+    return res.json(talkingHeadVideo);
   } catch (error) {
     return next(error);
   }

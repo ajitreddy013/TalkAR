@@ -7,19 +7,17 @@ import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.SyncRequest
 import com.talkar.app.data.models.SyncResponse
 import com.talkar.app.data.models.TalkingHeadVideo
-import com.talkar.app.data.services.ARImageRecognitionService
 import com.google.ar.core.AugmentedImage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-class ARViewModel : ViewModel() {
+class SimpleARViewModel : ViewModel() {
     
     private val imageRepository = TalkARApplication.instance.imageRepository
     private val syncRepository = TalkARApplication.instance.syncRepository
-    private val arService = TalkARApplication.instance.arImageRecognitionService
     
-    private val _uiState = MutableStateFlow(ARUiState())
-    val uiState: StateFlow<ARUiState> = _uiState.asStateFlow()
+    private val _uiState = MutableStateFlow(SimpleARUiState())
+    val uiState: StateFlow<SimpleARUiState> = _uiState.asStateFlow()
     
     private val _recognizedImage = MutableStateFlow<ImageRecognition?>(null)
     val recognizedImage: StateFlow<ImageRecognition?> = _recognizedImage.asStateFlow()
@@ -34,31 +32,13 @@ class ARViewModel : ViewModel() {
     val recognizedAugmentedImage: StateFlow<AugmentedImage?> = _recognizedAugmentedImage.asStateFlow()
     
     init {
-        loadImages()
-    }
-    
-    private fun loadImages() {
-        viewModelScope.launch {
-            try {
-                imageRepository.getAllImages().collect { images ->
-                    _uiState.update { it.copy(images = images) }
-                    
-                    // Load images into ARCore database for recognition
-                    if (images.isNotEmpty()) {
-                        android.util.Log.d("ARViewModel", "Loading ${images.size} images into ARCore database")
-                        arService.loadImagesFromAPI(images)
-                    }
-                }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    error = "Failed to load images: ${e.message}"
-                )
-            }
-        }
+        // Simplified initialization - no heavy processing
+        android.util.Log.d("SimpleARViewModel", "Simple AR ViewModel initialized")
     }
     
     fun recognizeImage(imageRecognition: ImageRecognition) {
         viewModelScope.launch {
+            android.util.Log.d("SimpleARViewModel", "recognizeImage called for: ${imageRecognition.name}")
             _uiState.value = _uiState.value.copy(isLoading = true)
             
             try {
@@ -71,6 +51,8 @@ class ARViewModel : ViewModel() {
                     )
                 }
                 
+                android.util.Log.d("SimpleARViewModel", "Image set in state: ${imageRecognition.name}")
+                
                 // Trigger haptic feedback for image detection
                 triggerHapticFeedback()
                 
@@ -82,11 +64,14 @@ class ARViewModel : ViewModel() {
                             recognizedImage = fullImageData
                         )
                     }
+                    android.util.Log.d("SimpleARViewModel", "Full image data loaded: ${fullImageData?.name}")
                 }
                 
                 // Automatically fetch talking head video for this image
+                android.util.Log.d("SimpleARViewModel", "About to fetch talking head video for: ${imageRecognition.id}")
                 fetchTalkingHeadVideo(imageRecognition.id)
             } catch (e: Exception) {
+                android.util.Log.e("SimpleARViewModel", "Error in recognizeImage", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Failed to process recognized image: ${e.message}"
@@ -97,14 +82,13 @@ class ARViewModel : ViewModel() {
     
     private fun triggerHapticFeedback() {
         // This would trigger haptic feedback when an image is detected
-        // Implementation depends on the platform
-        android.util.Log.d("ARViewModel", "Image detected - triggering haptic feedback")
+        android.util.Log.d("SimpleARViewModel", "Image detected - triggering haptic feedback")
     }
     
     private fun fetchTalkingHeadVideo(imageId: String) {
         viewModelScope.launch {
             try {
-                android.util.Log.d("ARViewModel", "Fetching talking head video for image: $imageId")
+                android.util.Log.d("SimpleARViewModel", "Fetching talking head video for image: $imageId")
                 
                 // Call the API to get the pre-saved talking head video
                 val response = TalkARApplication.instance.apiClient.getTalkingHeadVideo(imageId)
@@ -113,13 +97,17 @@ class ARViewModel : ViewModel() {
                     val talkingHeadVideo = response.body()
                     if (talkingHeadVideo != null) {
                         _talkingHeadVideo.value = talkingHeadVideo
-                        android.util.Log.d("ARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
+                        android.util.Log.d("SimpleARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
+                        android.util.Log.d("SimpleARViewModel", "Video URL: ${talkingHeadVideo.videoUrl}")
+                    } else {
+                        android.util.Log.e("SimpleARViewModel", "Talking head video response body is null")
                     }
                 } else {
-                    android.util.Log.e("ARViewModel", "Failed to fetch talking head video: ${response.code()}")
+                    android.util.Log.e("SimpleARViewModel", "Failed to fetch talking head video: ${response.code()}")
+                    android.util.Log.e("SimpleARViewModel", "Error message: ${response.message()}")
                 }
             } catch (e: Exception) {
-                android.util.Log.e("ARViewModel", "Error fetching talking head video", e)
+                android.util.Log.e("SimpleARViewModel", "Error fetching talking head video", e)
             }
         }
     }
@@ -151,40 +139,44 @@ class ARViewModel : ViewModel() {
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isGeneratingVideo = false,
-                    error = e.message
+                    error = "Failed to generate sync video: ${e.message}"
                 )
             }
         }
     }
     
+    fun setError(errorMessage: String) {
+        _uiState.value = _uiState.value.copy(error = errorMessage)
+    }
+    
+    fun setArError(errorMessage: String) {
+        _uiState.value = _uiState.value.copy(arError = errorMessage)
+    }
+    
     fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
+        _uiState.value = _uiState.value.copy(error = null, arError = null)
     }
-
-    fun setArError(error: String) {
-        _uiState.value = _uiState.value.copy(error = error)
-    }
-
     
     fun resetRecognition() {
         _recognizedImage.value = null
-        _syncVideo.value = null
         _recognizedAugmentedImage.value = null
-        _uiState.update {
-            it.copy(
-                recognizedImage = null,
-                syncVideo = null
-            )
-        }
+        _talkingHeadVideo.value = null
+        _syncVideo.value = null
+        _uiState.value = _uiState.value.copy(
+            recognizedImage = null,
+            syncVideo = null,
+            error = null,
+            arError = null
+        )
     }
 }
 
-data class ARUiState(
-    val images: List<ImageRecognition> = emptyList(),
+data class SimpleARUiState(
     val isLoading: Boolean = false,
     val isGeneratingVideo: Boolean = false,
+    val images: List<ImageRecognition> = emptyList(),
     val recognizedImage: ImageRecognition? = null,
     val syncVideo: SyncResponse? = null,
-    val error: String? = null
+    val error: String? = null,
+    val arError: String? = null
 )
-
