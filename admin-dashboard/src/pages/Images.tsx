@@ -25,6 +25,7 @@ import {
   deleteImage,
 } from "../store/slices/imageSlice";
 import type { Image as ImageModel } from "../store/slices/imageSlice";
+import { MultiImageUploadDialog } from "../components/MultiImageUploadDialog";
 
 export default function Images() {
   const dispatch = useAppDispatch();
@@ -55,6 +56,9 @@ export default function Images() {
     name: "",
     description: "",
   });
+
+  // Multi-image upload dialog state
+  const [multiImageOpen, setMultiImageOpen] = useState(false);
 
   useEffect(() => {
     dispatch(fetchImages());
@@ -144,17 +148,36 @@ export default function Images() {
     }
   };
 
+  const handleMultiImageSave = async (imageSet: any) => {
+    try {
+      // Refresh the images list to show the new uploads
+      dispatch(fetchImages());
+      setMultiImageOpen(false);
+    } catch (err) {
+      setError("Failed to save multi-image set");
+    }
+  };
+
   return (
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", mb: 3 }}>
         <Typography variant="h4">Images</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setOpen(true)}
-        >
-          Upload Image
-        </Button>
+        <Box sx={{ display: "flex", gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => setMultiImageOpen(true)}
+          >
+            Upload Multi-Images
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setOpen(true)}
+          >
+            Upload Single Image
+          </Button>
+        </Box>
       </Box>
 
       {(error || listError) && (
@@ -322,6 +345,13 @@ export default function Images() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Multi-Image Upload Dialog */}
+      <MultiImageUploadDialog
+        open={multiImageOpen}
+        onClose={() => setMultiImageOpen(false)}
+        onSave={handleMultiImageSave}
+      />
     </Box>
   );
 }

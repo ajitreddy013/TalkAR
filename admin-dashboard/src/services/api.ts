@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const API_BASE_URL =
-  process.env.REACT_APP_API_URL || "http://localhost:3000/api/v1";
+  process.env.REACT_APP_API_URL || "http://localhost:3001/api/v1";
 
 // Derive the backend origin (e.g., http://localhost:3000) for building absolute asset URLs
 export const API_ORIGIN = new URL(API_BASE_URL).origin;

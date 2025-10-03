@@ -1,18 +1,22 @@
 package com.talkar.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
-import com.talkar.app.ui.components.SimpleCameraView
+import com.talkar.app.ui.components.EnhancedCameraView
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
+import com.talkar.app.data.services.EnhancedARService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ARScreen(
+fun EnhancedARScreen(
     viewModel: SimpleARViewModel,
     hasCameraPermission: Boolean = false,
     onPermissionCheck: (() -> Unit)? = null,
@@ -62,16 +66,9 @@ fun ARScreen(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Debug: hasCameraPermission = $hasCameraPermission",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
-                            // Force check permission again
-                            android.util.Log.d("ARScreen", "Manual permission check requested")
+                            android.util.Log.d("EnhancedARScreen", "Manual permission check requested")
                             onPermissionCheck?.invoke()
                         }
                     ) {
@@ -86,7 +83,7 @@ fun ARScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("TalkAR") },
+                title = { Text("TalkAR Enhanced") },
                 actions = {
                     if (recognizedImage != null) {
                         TextButton(
@@ -99,8 +96,8 @@ fun ARScreen(
             )
         }
     ) { paddingValues ->
-        // Simple Camera Preview with AR Overlay - Bypasses depth estimation issues
-        SimpleCameraView(
+        // Enhanced Camera View with AR Overlay and real-time feedback
+        EnhancedCameraView(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues),
