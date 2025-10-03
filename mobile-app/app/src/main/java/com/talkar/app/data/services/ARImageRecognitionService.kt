@@ -704,8 +704,9 @@ class ARImageRecognitionService(private val context: Context) {
                 _isTracking.value = true
                 Log.d(tag, "ARCore processing resumed successfully")
                 
-                // Start frame processing loop on background thread
-                startFrameProcessing()
+                // Skip frame processing loop to avoid MissingGlContextException
+                // Frame processing requires OpenGL context which we don't have in this setup
+                Log.d(tag, "Skipping frame processing to avoid GL context issues")
                 
             } ?: run {
                 Log.w(tag, "Cannot resume - ARCore session is null")
