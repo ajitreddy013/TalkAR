@@ -85,6 +85,7 @@ export const generateSyncVideo = async (
       // Mock successful response
       const mockResponse = {
         data: {
+          jobId: jobId,
           status: "completed",
           videoUrl: `https://assets.sync.so/docs/example-talking-head.mp4`,
           outputUrl: `https://assets.sync.so/docs/example-talking-head.mp4`,

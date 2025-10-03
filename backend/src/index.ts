@@ -10,6 +10,7 @@ import imageRoutes from "./routes/images";
 import syncRoutes from "./routes/sync";
 import adminRoutes from "./routes/admin";
 import authRoutes from "./routes/auth";
+import multiImageRoutes from "./routes/multiImageRoutes";
 
 // Load environment variables
 dotenv.config();
@@ -48,6 +49,7 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/images", imageRoutes);
 app.use("/api/v1/sync", syncRoutes);
 app.use("/api/v1/admin", adminRoutes);
+app.use("/api/multi-images", multiImageRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
