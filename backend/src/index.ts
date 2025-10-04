@@ -105,9 +105,12 @@ const startServer = async () => {
     await sequelize.sync({ alter: true });
     console.log("Database synchronized.");
 
-    app.listen(PORT, () => {
+    app.listen(Number(PORT), "0.0.0.0", () => {
       console.log(`Server is running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV}`);
+      console.log(`Server accessible at: http://0.0.0.0:${PORT}`);
+      console.log(`Local access: http://localhost:${PORT}`);
+      console.log(`Network access: http://10.17.5.127:${PORT}`);
     });
   } catch (error) {
     console.error("Unable to start server:", error);

@@ -60,7 +60,12 @@ class SimpleARService(private val context: Context) {
                 return false
             }
             
+            // Create session with proper configuration
             session = Session(context)
+            
+            // Wait a bit for GL context to be available
+            delay(1000)
+            
             configureSimpleSession()
             initializeSimpleImageDatabase()
             startSimpleTracking()
@@ -69,6 +74,56 @@ class SimpleARService(private val context: Context) {
             true
         } catch (e: Exception) {
             Log.e(tag, "Failed to initialize simple AR service", e)
+            _error.value = "Failed to initialize AR service: ${e.message}"
+            false
+        }
+    }
+    
+    /**
+     * Initialize ARCore session with GL context support
+     */
+    suspend fun initializeWithGLContext(): Boolean {
+        return try {
+            if (!isARCoreSupported()) {
+                _error.value = "ARCore is not supported on this device"
+                return false
+            }
+            
+            // Create session
+            session = Session(context)
+            
+            // Wait for GL context to be ready
+            var attempts = 0
+            val maxAttempts = 20
+            
+            while (attempts < maxAttempts) {
+                try {
+                    // Try to configure the session
+                    configureSimpleSession()
+                    initializeSimpleImageDatabase()
+                    
+                    // Test if GL context is ready by trying to resume
+                    session?.resume()
+                    
+                    Log.d(tag, "ARCore session initialized with GL context support")
+                    return true
+                    
+                } catch (e: com.google.ar.core.exceptions.MissingGlContextException) {
+                    Log.d(tag, "GL context not ready, attempt ${attempts + 1}/$maxAttempts")
+                    delay(500)
+                    attempts++
+                } catch (e: Exception) {
+                    Log.e(tag, "Error during GL context initialization", e)
+                    delay(500)
+                    attempts++
+                }
+            }
+            
+            _error.value = "Failed to initialize ARCore GL context after $maxAttempts attempts"
+            false
+            
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to initialize ARCore with GL context", e)
             _error.value = "Failed to initialize AR service: ${e.message}"
             false
         }
@@ -266,17 +321,54 @@ class SimpleARService(private val context: Context) {
      */
     private fun startSimpleFrameProcessing() {
         GlobalScope.launch(Dispatchers.IO) {
+            var glContextReady = false
+            var glContextWaitTime = 0L
+            val maxGlContextWaitTime = 10000L // 10 seconds max wait
+            
             while (_isTracking.value) {
                 try {
                     session?.let { session ->
+                        // Wait for GL context to be ready
+                        if (!glContextReady) {
+                            if (glContextWaitTime < maxGlContextWaitTime) {
+                                Log.d(tag, "Waiting for GL context... (${glContextWaitTime}ms)")
+                                delay(500)
+                                glContextWaitTime += 500
+                                return@let
+                            } else {
+                                Log.e(tag, "GL context not ready after ${maxGlContextWaitTime}ms")
+                                _error.value = "ARCore GL context initialization timeout. Please restart the app."
+                                _isTracking.value = false
+                                return@launch
+                            }
+                        }
+                        
+                        // Try to update the session only if GL context is ready
                         val frame = session.update()
                         processSimpleFrame(frame)
+                        
+                        // Mark GL context as ready if we successfully got a frame
+                        if (!glContextReady) {
+                            glContextReady = true
+                            Log.d(tag, "GL context is now ready!")
+                        }
                     }
                     
-                    delay(50) // 20 FPS - slower to reduce load
+                    delay(100) // Slower processing to reduce load
+                } catch (e: com.google.ar.core.exceptions.MissingGlContextException) {
+                    Log.w(tag, "Missing GL context, waiting for initialization...")
+                    glContextReady = false
+                    glContextWaitTime = 0L
+                    delay(1000) // Wait for GL context initialization
+                } catch (e: com.google.ar.core.exceptions.SessionPausedException) {
+                    Log.d(tag, "ARCore session paused, waiting...")
+                    delay(1000)
+                } catch (e: com.google.ar.core.exceptions.UnavailableException) {
+                    Log.w(tag, "ARCore unavailable, retrying...")
+                    delay(2000)
                 } catch (e: Exception) {
                     Log.e(tag, "Error in simple frame processing", e)
-                    delay(100)
+                    delay(500)
                 }
             }
         }
