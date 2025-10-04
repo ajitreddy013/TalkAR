@@ -176,6 +176,17 @@ export const MultiImageUploadDialog: React.FC<MultiImageUploadDialogProps> = ({
         })),
       };
 
+      // Debug: print the API URL used by the client
+      try {
+        // eslint-disable-next-line no-console
+        console.log(
+          "Uploading to:",
+          (window as any).API_BASE_URL || process.env.REACT_APP_API_URL
+        );
+      } catch (e) {
+        // ignore
+      }
+
       // Upload to backend
       const result = await MultiImageService.uploadMultiImages(
         multiImageUpload

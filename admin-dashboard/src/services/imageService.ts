@@ -24,29 +24,29 @@ export interface Dialogue {
 }
 
 export const ImageService = {
-  getAllImages: () => api.get("/images"),
+  getAllImages: () => api.get("/api/v1/images"),
 
-  getImageById: (id: string) => api.get(`/images/${id}`),
+  getImageById: (id: string) => api.get(`/api/v1/images/${id}`),
 
   // Let the browser set the correct multipart boundary automatically
-  createImage: (imageData: FormData) => api.post("/images", imageData),
+  createImage: (imageData: FormData) => api.post("/api/v1/images", imageData),
 
   updateImage: (id: string, data: Partial<Image>) =>
-    api.put(`/images/${id}`, data),
+    api.put(`/api/v1/images/${id}`, data),
 
-  deleteImage: (id: string) => api.delete(`/images/${id}`),
+  deleteImage: (id: string) => api.delete(`/api/v1/images/${id}`),
 
   addDialogue: (
     imageId: string,
     dialogueData: Omit<Dialogue, "id" | "imageId" | "createdAt" | "updatedAt">
-  ) => api.post(`/images/${imageId}/dialogues`, dialogueData),
+  ) => api.post(`/api/v1/images/${imageId}/dialogues`, dialogueData),
 
   updateDialogue: (
     imageId: string,
     dialogueId: string,
     data: Partial<Dialogue>
-  ) => api.put(`/images/${imageId}/dialogues/${dialogueId}`, data),
+  ) => api.put(`/api/v1/images/${imageId}/dialogues/${dialogueId}`, data),
 
   deleteDialogue: (imageId: string, dialogueId: string) =>
-    api.delete(`/images/${imageId}/dialogues/${dialogueId}`),
+    api.delete(`/api/v1/images/${imageId}/dialogues/${dialogueId}`),
 };

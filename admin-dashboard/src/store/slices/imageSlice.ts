@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { ImageService } from "../../services/imageService";
+import { MultiImageService } from "../../services/multiImageService";
 
 export interface Image {
   id: string;
@@ -11,6 +12,10 @@ export interface Image {
   createdAt: string;
   updatedAt: string;
   dialogues: Dialogue[];
+  // Multi-image specific fields
+  imageType?: string;
+  objectName?: string;
+  isMultiImage?: boolean;
 }
 
 export interface Dialogue {
@@ -43,9 +48,47 @@ export const fetchImages = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log("Fetching images...");
-      const response = await ImageService.getAllImages();
-      console.log("Images fetched successfully:", response.data);
-      return response.data;
+
+      // Fetch both single images and multi-image sets
+      const [singleImagesResponse, multiImagesResponse] = await Promise.all([
+        ImageService.getAllImages(),
+        MultiImageService.getAllImageSets(),
+      ]);
+
+      const singleImages = singleImagesResponse.data || [];
+      const multiImageSets = multiImagesResponse.imageSets || [];
+
+      // Convert multi-image sets to individual image entries
+      const multiImages: Image[] = [];
+      multiImageSets.forEach((set: any) => {
+        set.images.forEach((img: any) => {
+          multiImages.push({
+            id: img.id,
+            name: img.name,
+            description: `${set.objectName} - ${img.imageType}`,
+            imageUrl: img.imageUrl,
+            thumbnailUrl: img.imageUrl,
+            isActive: true,
+            createdAt: set.createdAt,
+            updatedAt: set.createdAt,
+            dialogues: [],
+            imageType: img.imageType,
+            objectName: set.objectName,
+            isMultiImage: true,
+          });
+        });
+      });
+
+      const allImages = [...singleImages, ...multiImages];
+      console.log(
+        "Images fetched successfully:",
+        allImages.length,
+        "total images"
+      );
+      console.log("Single images:", singleImages.length);
+      console.log("Multi images:", multiImages.length);
+      console.log("All images:", allImages);
+      return allImages;
     } catch (error: any) {
       console.error("Failed to fetch images:", error);
       return rejectWithValue(
