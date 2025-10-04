@@ -13,14 +13,15 @@ export interface Dialogue {
 
 export const DialogueService = {
   getDialoguesByImageId: (imageId: string) =>
-    api.get(`/images/${imageId}/dialogues`),
+    api.get(`/api/v1/images/${imageId}/dialogues`),
 
   createDialogue: (
     dialogueData: Omit<Dialogue, "id" | "createdAt" | "updatedAt">
-  ) => api.post(`/images/${dialogueData.imageId}/dialogues`, dialogueData),
+  ) =>
+    api.post(`/api/v1/images/${dialogueData.imageId}/dialogues`, dialogueData),
 
   updateDialogue: (id: string, data: Partial<Dialogue>) =>
-    api.put(`/dialogues/${id}`, data),
+    api.put(`/api/v1/dialogues/${id}`, data),
 
-  deleteDialogue: (id: string) => api.delete(`/dialogues/${id}`),
+  deleteDialogue: (id: string) => api.delete(`/api/v1/dialogues/${id}`),
 };

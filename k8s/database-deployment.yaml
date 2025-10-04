@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: talkar-postgres
+  labels:
+    app: talkar-postgres
+    tier: database
+spec:
+  serviceName: talkar-postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: talkar-postgres
+  template:
+    metadata:
+      labels:
+        app: talkar-postgres
+        tier: database
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "talkar_production"
+            - name: POSTGRES_USER
+              value: "talkar_user"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: postgres-password
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - talkar_user
+                - -d
+                - talkar_production
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - talkar_user
+                - -d
+                - talkar_production
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: talkar-postgres-service
+  labels:
+    app: talkar-postgres
+spec:
+  selector:
+    app: talkar-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: talkar-secrets
+type: Opaque
+data:
+  # Base64 encoded values - replace with actual values
+  database-url: cG9zdGdyZXNxbDovL3RhbGthcl91c2VyOnBhc3N3b3JkQHRhbGthci1wb3N0Z3Jlcy1zZXJ2aWNlOjU0MzIvdGFsa2FyX3Byb2R1Y3Rpb24=
+  jwt-secret: eW91ci1zdXBlci1zZWNyZXQtand0LWtleS1oZXJl
+  postgres-password: cG9zdGdyZXNfcGFzc3dvcmQ=
+  aws-access-key-id: eW91ci1hd3MtYWNjZXNzLWtleS1pZA==
+  aws-secret-access-key: eW91ci1hd3Mtc2VjcmV0LWFjY2Vzcy1rZXk=
+  sync-api-key: eW91ci1zeW5jLWFwaS1rZXk=
+  firebase-api-key: eW91ci1maXJlYmFzZS1hcGkta2V5
+  firebase-sender-id: eW91ci1maXJlYmFzZS1zZW5kZXItaWQ=
+  firebase-app-id: eW91ci1maXJlYmFzZS1hcHAtaWQ=

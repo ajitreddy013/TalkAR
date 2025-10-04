@@ -15,8 +15,8 @@ import {
   Box,
   Typography,
 } from "@mui/material";
-import { useDispatch } from "react-redux";
 import { createDialogue, updateDialogue } from "../store/slices/dialogueSlice";
+import { useAppDispatch } from "../store/hooks";
 
 interface DialogueDialogProps {
   open: boolean;
@@ -33,7 +33,7 @@ export const DialogueDialog: React.FC<DialogueDialogProps> = ({
   dialogue,
   languages,
 }) => {
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   const [formData, setFormData] = useState({
     text: "",
     language: "en",
@@ -70,7 +70,7 @@ export const DialogueDialog: React.FC<DialogueDialogProps> = ({
             id: dialogue.id,
             data: formData,
           })
-        );
+        ).unwrap();
       } else {
         // Create new dialogue
         await dispatch(
@@ -78,7 +78,7 @@ export const DialogueDialog: React.FC<DialogueDialogProps> = ({
             imageId: image.id,
             ...formData,
           })
-        );
+        ).unwrap();
       }
       onClose();
     } catch (error) {

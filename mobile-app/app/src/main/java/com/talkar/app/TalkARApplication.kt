@@ -5,6 +5,7 @@ import com.talkar.app.data.repository.ImageRepository
 import com.talkar.app.data.repository.SyncRepository
 import com.talkar.app.data.api.ApiClient
 import com.talkar.app.data.local.ImageDatabase
+import com.talkar.app.data.services.ARImageRecognitionService
 
 class TalkARApplication : Application() {
     
@@ -20,6 +21,14 @@ class TalkARApplication : Application() {
         SyncRepository(
             apiClient = ApiClient.create()
         )
+    }
+    
+    val apiClient by lazy { 
+        ApiClient.create()
+    }
+    
+    val arImageRecognitionService by lazy {
+        ARImageRecognitionService(this)
     }
     
     override fun onCreate() {

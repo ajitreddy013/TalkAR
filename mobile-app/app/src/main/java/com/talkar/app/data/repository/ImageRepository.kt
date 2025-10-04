@@ -11,45 +11,52 @@ class ImageRepository(
     private val database: ImageDatabase
 ) {
     
-    suspend fun getAllImages(): Flow<List<ImageRecognition>> = flow {
+    fun getAllImages(): Flow<List<ImageRecognition>> = flow {
         try {
+            android.util.Log.d("ImageRepository", "Fetching images from API...")
+            // First try to get from API
             val response = apiClient.getImages()
+            android.util.Log.d("ImageRepository", "API response: ${response.code()}")
+            
             if (response.isSuccessful) {
                 val images = response.body() ?: emptyList()
-                // Cache images locally
-                database.imageDao().insertAll(images)
+                android.util.Log.d("ImageRepository", "Loaded ${images.size} images from API")
+                
+                // Cache the images locally
+                images.forEach { image ->
+                    database.imageDao().insert(image)
+                }
                 emit(images)
             } else {
-                // Fallback to local cache
-                emit(database.imageDao().getAllImages())
-            }
-        } catch (e: Exception) {
-            // Fallback to local cache
-            emit(database.imageDao().getAllImages())
-        }
-    }
-    
-    suspend fun getImageById(id: String): Flow<ImageRecognition?> = flow {
-        try {
-            val response = apiClient.getImageById(id)
-            if (response.isSuccessful) {
-                val image = response.body()
-                if (image != null) {
-                    database.imageDao().insert(image)
-                    emit(image)
-                } else {
-                    emit(database.imageDao().getImageById(id))
+                android.util.Log.e("ImageRepository", "API failed: ${response.code()}")
+                // Fallback to local cache if API fails
+                database.imageDao().getAllImages().collect { localImages ->
+                    emit(localImages)
                 }
-            } else {
-                emit(database.imageDao().getImageById(id))
             }
         } catch (e: Exception) {
-            emit(database.imageDao().getImageById(id))
+            android.util.Log.e("ImageRepository", "Error fetching images", e)
+            // Fallback to local cache on error
+            database.imageDao().getAllImages().collect { localImages ->
+                emit(localImages)
+            }
         }
     }
     
-    suspend fun searchImages(query: String): Flow<List<ImageRecognition>> = flow {
-        emit(database.imageDao().searchImages("%$query%"))
+    fun getImageById(id: String): Flow<ImageRecognition?> {
+        return try {
+            database.imageDao().getImageById(id)
+        } catch (e: Exception) {
+            flow { emit(null) }
+        }
+    }
+    
+    fun searchImages(query: String): Flow<List<ImageRecognition>> {
+        return try {
+            database.imageDao().searchImages("%$query%")
+        } catch (e: Exception) {
+            flow { emit(emptyList()) }
+        }
     }
 }
 
