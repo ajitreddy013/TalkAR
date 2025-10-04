@@ -1,0 +1,30 @@
+import { Image, Dialogue } from "./Image";
+import { Avatar } from "./Avatar";
+import { ImageAvatarMapping } from "./ImageAvatarMapping";
+
+// Define all model associations
+export function defineAssociations() {
+  // Image associations are already defined in Image.ts
+
+  // Avatar associations
+  Avatar.hasMany(ImageAvatarMapping, {
+    foreignKey: "avatarId",
+    as: "imageMappings",
+  });
+  ImageAvatarMapping.belongsTo(Avatar, {
+    foreignKey: "avatarId",
+    as: "avatar",
+  });
+
+  // Image-Avatar mapping associations
+  Image.hasMany(ImageAvatarMapping, {
+    foreignKey: "imageId",
+    as: "avatarMappings",
+  });
+  ImageAvatarMapping.belongsTo(Image, { foreignKey: "imageId", as: "image" });
+
+  // Avatar-Dialogue associations (for voice mapping)
+  // Note: This is a loose association based on voiceId string matching
+  // Avatar.hasMany(Dialogue, { foreignKey: "voiceId", as: "dialogues" });
+  // Dialogue.belongsTo(Avatar, { foreignKey: "voiceId", as: "avatar" });
+}

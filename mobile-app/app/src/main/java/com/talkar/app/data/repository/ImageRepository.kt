@@ -4,6 +4,7 @@ import com.talkar.app.data.api.ApiService
 import com.talkar.app.data.local.ImageDatabase
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.BackendImage
+import com.talkar.app.data.models.Avatar
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -31,8 +32,8 @@ class ImageRepository(
                         name = backendImage.name,
                         description = backendImage.description,
                         dialogues = backendImage.dialogues,
-                        createdAt = backendImage.createdAt,
-                        updatedAt = backendImage.updatedAt
+                        createdAt = System.currentTimeMillis().toString(),
+                        updatedAt = System.currentTimeMillis().toString()
                     )
                 }
                 
@@ -70,6 +71,81 @@ class ImageRepository(
             database.imageDao().searchImages("%$query%")
         } catch (e: Exception) {
             flow { emit(emptyList()) }
+        }
+    }
+    
+    /**
+     * Get all avatars from API
+     */
+    suspend fun getAvatars(): Result<List<Avatar>> {
+        return try {
+            android.util.Log.d("ImageRepository", "Fetching avatars from API...")
+            val response = apiClient.getAvatars()
+            android.util.Log.d("ImageRepository", "Avatars API response: ${response.code()}")
+            
+            if (response.isSuccessful) {
+                val avatars = response.body() ?: emptyList()
+                android.util.Log.d("ImageRepository", "Loaded ${avatars.size} avatars from API")
+                Result.success(avatars)
+            } else {
+                android.util.Log.e("ImageRepository", "Avatars API failed: ${response.code()}")
+                Result.failure(Exception("API failed: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ImageRepository", "Error fetching avatars", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get avatar for specific image
+     */
+    suspend fun getAvatarForImage(imageId: String): Result<Avatar?> {
+        return try {
+            android.util.Log.d("ImageRepository", "Fetching avatar for image: $imageId")
+            val response = apiClient.getAvatarForImage(imageId)
+            android.util.Log.d("ImageRepository", "Avatar for image API response: ${response.code()}")
+            
+            if (response.isSuccessful) {
+                val avatar = response.body()
+                android.util.Log.d("ImageRepository", "Loaded avatar for image: ${avatar?.name}")
+                Result.success(avatar)
+            } else {
+                android.util.Log.e("ImageRepository", "Avatar for image API failed: ${response.code()}")
+                Result.failure(Exception("API failed: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ImageRepository", "Error fetching avatar for image", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get complete image data with avatar
+     */
+    suspend fun getCompleteImageData(imageId: String): Result<Pair<BackendImage, Avatar?>?> {
+        return try {
+            android.util.Log.d("ImageRepository", "Fetching complete data for image: $imageId")
+            val response = apiClient.getCompleteImageData(imageId)
+            android.util.Log.d("ImageRepository", "Complete data API response: ${response.code()}")
+            
+            if (response.isSuccessful) {
+                val data = response.body()
+                if (data != null) {
+                    val image = data.image
+                    val avatar = data.avatar
+                    android.util.Log.d("ImageRepository", "Loaded complete data: ${image.name} with avatar: ${avatar?.name}")
+                    Result.success(Pair(image, avatar))
+                } else {
+                    Result.success(null)
+                }
+            } else {
+                android.util.Log.e("ImageRepository", "Complete data API failed: ${response.code()}")
+                Result.failure(Exception("API failed: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ImageRepository", "Error fetching complete data", e)
+            Result.failure(e)
         }
     }
 }

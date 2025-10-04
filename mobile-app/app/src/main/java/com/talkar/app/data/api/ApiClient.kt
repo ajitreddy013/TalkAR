@@ -1,6 +1,7 @@
 package com.talkar.app.data.api
 
 import com.talkar.app.data.models.*
+import com.talkar.app.data.config.ApiConfig
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -20,17 +21,85 @@ interface ApiService {
     
     @GET("sync/talking-head/{imageId}")
     suspend fun getTalkingHeadVideo(@Path("imageId") imageId: String): Response<TalkingHeadVideo>
+    
+    // Avatar endpoints
+    @GET("avatars")
+    suspend fun getAvatars(): Response<List<Avatar>>
+    
+    @GET("avatars/{id}")
+    suspend fun getAvatarById(@Path("id") id: String): Response<Avatar>
+    
+    @GET("avatars/image/{imageId}")
+    suspend fun getAvatarForImage(@Path("imageId") imageId: String): Response<Avatar>
+    
+    @GET("avatars/complete/{imageId}")
+    suspend fun getCompleteImageData(@Path("imageId") imageId: String): Response<CompleteImageData>
+    
+    // Lip-sync endpoints
+    @POST("lipsync/generate")
+    suspend fun generateLipSyncVideo(@Body request: LipSyncRequest): Response<LipSyncResponse>
+    
+    @GET("lipsync/status/{videoId}")
+    suspend fun getLipSyncStatus(@Path("videoId") videoId: String): Response<LipSyncResponse>
+    
+    @GET("lipsync/voices")
+    suspend fun getAvailableVoices(): Response<VoicesResponse>
+    
+    @POST("lipsync/talking-head")
+    suspend fun generateTalkingHeadVideo(@Body request: TalkingHeadRequest): Response<LipSyncResponse>
 }
 
 object ApiClient {
-    private const val BASE_URL = "http://10.118.69.236:3000/api/v1/"
-    
     fun create(): ApiService {
         return retrofit2.Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(ApiConfig.API_V1_URL + "/")
             .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
             .build()
             .create(ApiService::class.java)
     }
 }
+
+// Additional data models for API
+data class CompleteImageData(
+    val image: BackendImage,
+    val avatar: Avatar?,
+    val mapping: ImageAvatarMapping?
+)
+
+data class ImageAvatarMapping(
+    val id: String,
+    val isActive: Boolean
+)
+
+data class LipSyncRequest(
+    val imageId: String,
+    val text: String,
+    val voiceId: String? = null,
+    val language: String? = null
+)
+
+data class LipSyncResponse(
+    val success: Boolean,
+    val videoUrl: String? = null,
+    val status: String,
+    val message: String? = null,
+    val processingTime: Long? = null
+)
+
+data class VoicesResponse(
+    val voices: List<Voice>
+)
+
+data class Voice(
+    val id: String,
+    val name: String,
+    val language: String,
+    val gender: String
+)
+
+data class TalkingHeadRequest(
+    val imageId: String,
+    val text: String,
+    val voiceId: String? = null
+)
 

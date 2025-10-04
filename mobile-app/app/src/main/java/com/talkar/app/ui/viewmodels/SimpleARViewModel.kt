@@ -3,10 +3,12 @@ package com.talkar.app.ui.viewmodels
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.talkar.app.TalkARApplication
+import android.content.pm.ApplicationInfo
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.SyncRequest
 import com.talkar.app.data.models.SyncResponse
 import com.talkar.app.data.models.TalkingHeadVideo
+import com.talkar.app.data.config.ApiConfig
 import com.google.ar.core.AugmentedImage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -76,11 +78,27 @@ class SimpleARViewModel : ViewModel() {
                         android.util.Log.d("SimpleARViewModel", "Backend has ${images?.size ?: 0} images")
                         
                         // Check if any backend image matches the detected image
+                        // Prefer deterministic matching by ID. Only allow brittle name-contains or hard-coded test ID
+                        // when the app is built in DEBUG mode (developer fallback).
                         val matchingImage = images?.find { backendImage ->
-                            // Simple matching logic - in real implementation, you'd use image comparison
-                            // For now, we'll match by name or use the test image we uploaded
-                            backendImage.name.contains(imageRecognition.name, ignoreCase = true) ||
-                            backendImage.id == "57c37559-e257-4c77-a93b-8ada45761586" // Our test image
+                            // Deterministic match: backend-provided ID must equal recognized image ID
+                            val idMatch = backendImage.id == imageRecognition.id
+
+                            // Debug-only fallback: name contains match or hard-coded test image id.
+                            val isDebuggable = try {
+                                (TalkARApplication.instance.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+                            } catch (e: Exception) {
+                                false
+                            }
+
+                            val debugFallback = if (isDebuggable) {
+                                backendImage.name.contains(imageRecognition.name, ignoreCase = true) ||
+                                    backendImage.id == "57c37559-e257-4c77-a93b-8ada45761586"
+                            } else {
+                                false
+                            }
+
+                            idMatch || debugFallback
                         }
                         
                         if (matchingImage != null) {
@@ -193,7 +211,7 @@ class SimpleARViewModel : ViewModel() {
                     text = scriptText,
                     language = language,
                     voiceId = voiceId,
-                    imageUrl = "http://10.17.5.127:3000${backendImage.imageUrl}"
+                    imageUrl = ApiConfig.getFullImageUrl(backendImage.imageUrl)
                 )
                 
                 android.util.Log.d("SimpleARViewModel", "Sending sync request with image URL: ${syncRequest.imageUrl}")
