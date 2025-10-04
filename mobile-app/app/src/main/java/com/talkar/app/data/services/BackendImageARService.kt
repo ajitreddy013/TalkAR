@@ -37,7 +37,7 @@ class BackendImageARService(private val context: Context) {
     private var imageDatabase: AugmentedImageDatabase? = null
     
     // Backend API configuration
-    private val baseUrl = "http://localhost:3000/api" // Change to your backend URL
+    private val baseUrl = "http://10.17.5.127:3000/api" // Updated to use correct IP
     private val apiClient = ApiClient(baseUrl)
     
     // Tracking state

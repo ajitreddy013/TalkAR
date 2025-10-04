@@ -52,7 +52,8 @@ data class Dialogue(
 data class SyncRequest(
     val text: String,
     val language: String,
-    val voiceId: String? = null
+    val voiceId: String? = null,
+    val imageUrl: String? = null
 )
 
 data class SyncResponse(
