@@ -150,10 +150,13 @@ export default function Images() {
 
   const handleMultiImageSave = async (imageSet: any) => {
     try {
+      console.log("Multi-image save completed, refreshing images...");
       // Refresh the images list to show the new uploads
-      dispatch(fetchImages());
+      await dispatch(fetchImages());
       setMultiImageOpen(false);
+      console.log("Images refreshed successfully");
     } catch (err) {
+      console.error("Failed to refresh images:", err);
       setError("Failed to save multi-image set");
     }
   };
@@ -220,21 +223,39 @@ export default function Images() {
                 >
                   {image.description}
                 </Typography>
+                {image.isMultiImage && (
+                  <Typography
+                    variant="caption"
+                    display="block"
+                    sx={{ mt: 1, color: "primary.main" }}
+                  >
+                    📦 Multi-Image Set: {image.objectName} ({image.imageType})
+                  </Typography>
+                )}
                 <Typography variant="caption" display="block" sx={{ mt: 1 }}>
                   Created: {new Date(image.createdAt).toLocaleDateString()}
                 </Typography>
               </CardContent>
               <CardActions sx={{ justifyContent: "flex-end" }}>
-                <Button size="small" onClick={() => openEdit(image)}>
-                  Edit
-                </Button>
-                <Button
-                  size="small"
-                  color="error"
-                  onClick={() => handleDelete(image.id)}
-                >
-                  Delete
-                </Button>
+                {!image.isMultiImage && (
+                  <>
+                    <Button size="small" onClick={() => openEdit(image)}>
+                      Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      color="error"
+                      onClick={() => handleDelete(image.id)}
+                    >
+                      Delete
+                    </Button>
+                  </>
+                )}
+                {image.isMultiImage && (
+                  <Typography variant="caption" color="text.secondary">
+                    Managed by Multi-Image System
+                  </Typography>
+                )}
               </CardActions>
             </Card>
           </Grid>

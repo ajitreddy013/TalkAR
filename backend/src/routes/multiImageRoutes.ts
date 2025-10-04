@@ -4,6 +4,9 @@ import path from "path";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 
+// In-memory storage for image sets (in production, use a database)
+let imageSets: any[] = [];
+
 const router = express.Router();
 
 // Configure multer for multiple file uploads
@@ -145,8 +148,8 @@ router.post("/", upload.array("images", 7), async (req, res) => {
       imageSet.images.push(imageRecord);
     }
 
-    // Save image set to database
-    // await ImageSet.create(imageSet);
+    // Save image set to in-memory storage
+    imageSets.push(imageSet);
 
     return res.status(201).json({
       success: true,
@@ -177,57 +180,25 @@ router.post("/", upload.array("images", 7), async (req, res) => {
 // GET /api/multi-images - Get all image sets
 router.get("/", async (req, res) => {
   try {
-    // Get all image sets from database
-    // const imageSets = await ImageSet.findAll({
-    //   include: [ImageRecognition]
-    // });
-
-    // Mock data for now
-    const imageSets = [
-      {
-        id: "1",
-        objectName: "TalkAR Logo",
-        description: "Main company logo",
-        imageCount: 5,
-        createdAt: new Date().toISOString(),
-        images: [
-          {
-            id: "1",
-            name: "TalkAR Logo Front",
-            imageType: "front",
-            imageUrl: "/uploads/logo-front.jpg",
-          },
-          {
-            id: "2",
-            name: "TalkAR Logo Left",
-            imageType: "left_angle",
-            imageUrl: "/uploads/logo-left.jpg",
-          },
-          {
-            id: "3",
-            name: "TalkAR Logo Right",
-            imageType: "right_angle",
-            imageUrl: "/uploads/logo-right.jpg",
-          },
-          {
-            id: "4",
-            name: "TalkAR Logo Bright",
-            imageType: "bright",
-            imageUrl: "/uploads/logo-bright.jpg",
-          },
-          {
-            id: "5",
-            name: "TalkAR Logo Dim",
-            imageType: "dim",
-            imageUrl: "/uploads/logo-dim.jpg",
-          },
-        ],
-      },
-    ];
+    // Return actual image sets from in-memory storage
+    const responseData = imageSets.map((set) => ({
+      id: set.id,
+      objectName: set.objectName,
+      description: set.description,
+      imageCount: set.images.length,
+      createdAt: set.createdAt,
+      images: set.images.map((img: any) => ({
+        id: img.id,
+        name: img.name,
+        imageType: img.imageType,
+        imageUrl: img.imageUrl,
+        required: img.required,
+      })),
+    }));
 
     return res.json({
       success: true,
-      imageSets,
+      imageSets: responseData,
     });
   } catch (error) {
     console.error("Error fetching image sets:", error);
@@ -243,59 +214,31 @@ router.get("/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get image set from database
-    // const imageSet = await ImageSet.findByPk(id, {
-    //   include: [ImageRecognition]
-    // });
-
-    // Mock data for now
-    const imageSet = {
-      id,
-      objectName: "TalkAR Logo",
-      description: "Main company logo",
-      imageCount: 5,
-      createdAt: new Date().toISOString(),
-      images: [
-        {
-          id: "1",
-          name: "TalkAR Logo Front",
-          imageType: "front",
-          imageUrl: "/uploads/logo-front.jpg",
-        },
-        {
-          id: "2",
-          name: "TalkAR Logo Left",
-          imageType: "left_angle",
-          imageUrl: "/uploads/logo-left.jpg",
-        },
-        {
-          id: "3",
-          name: "TalkAR Logo Right",
-          imageType: "right_angle",
-          imageUrl: "/uploads/logo-right.jpg",
-        },
-        {
-          id: "4",
-          name: "TalkAR Logo Bright",
-          imageType: "bright",
-          imageUrl: "/uploads/logo-bright.jpg",
-        },
-        {
-          id: "5",
-          name: "TalkAR Logo Dim",
-          imageType: "dim",
-          imageUrl: "/uploads/logo-dim.jpg",
-        },
-      ],
-    };
+    // Find image set from in-memory storage
+    const imageSet = imageSets.find((set) => set.id === id);
 
     if (!imageSet) {
       return res.status(404).json({ error: "Image set not found" });
     }
 
+    const responseData = {
+      id: imageSet.id,
+      objectName: imageSet.objectName,
+      description: imageSet.description,
+      imageCount: imageSet.images.length,
+      createdAt: imageSet.createdAt,
+      images: imageSet.images.map((img: any) => ({
+        id: img.id,
+        name: img.name,
+        imageType: img.imageType,
+        imageUrl: img.imageUrl,
+        required: img.required,
+      })),
+    };
+
     return res.json({
       success: true,
-      imageSet,
+      imageSet: responseData,
     });
   } catch (error) {
     console.error("Error fetching image set:", error);
@@ -311,44 +254,20 @@ router.get("/:id/images", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get all images for this object set
-    // const images = await ImageRecognition.findAll({
-    //   where: { objectSetId: id }
-    // });
+    // Find image set from in-memory storage
+    const imageSet = imageSets.find((set) => set.id === id);
 
-    // Mock data for now
-    const images = [
-      {
-        id: "1",
-        name: "TalkAR Logo Front",
-        imageType: "front",
-        imageUrl: "/uploads/logo-front.jpg",
-      },
-      {
-        id: "2",
-        name: "TalkAR Logo Left",
-        imageType: "left_angle",
-        imageUrl: "/uploads/logo-left.jpg",
-      },
-      {
-        id: "3",
-        name: "TalkAR Logo Right",
-        imageType: "right_angle",
-        imageUrl: "/uploads/logo-right.jpg",
-      },
-      {
-        id: "4",
-        name: "TalkAR Logo Bright",
-        imageType: "bright",
-        imageUrl: "/uploads/logo-bright.jpg",
-      },
-      {
-        id: "5",
-        name: "TalkAR Logo Dim",
-        imageType: "dim",
-        imageUrl: "/uploads/logo-dim.jpg",
-      },
-    ];
+    if (!imageSet) {
+      return res.status(404).json({ error: "Image set not found" });
+    }
+
+    const images = imageSet.images.map((img: any) => ({
+      id: img.id,
+      name: img.name,
+      imageType: img.imageType,
+      imageUrl: img.imageUrl,
+      required: img.required,
+    }));
 
     return res.json({
       success: true,
@@ -368,25 +287,28 @@ router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get image set and delete all associated images
-    // const imageSet = await ImageSet.findByPk(id, {
-    //   include: [ImageRecognition]
-    // });
+    // Find image set in in-memory storage
+    const imageSetIndex = imageSets.findIndex((set) => set.id === id);
 
-    // if (!imageSet) {
-    //   return res.status(404).json({ error: 'Image set not found' });
-    // }
+    if (imageSetIndex === -1) {
+      return res.status(404).json({ error: "Image set not found" });
+    }
+
+    const imageSet = imageSets[imageSetIndex];
 
     // Delete physical files
-    // for (const image of imageSet.images) {
-    //   if (fs.existsSync(image.filePath)) {
-    //     fs.unlinkSync(image.filePath);
-    //   }
-    // }
+    for (const image of imageSet.images) {
+      if (fs.existsSync(image.filePath)) {
+        try {
+          fs.unlinkSync(image.filePath);
+        } catch (err) {
+          console.warn(`Failed to delete file ${image.filePath}:`, err);
+        }
+      }
+    }
 
-    // Delete from database
-    // await ImageSet.destroy({ where: { id } });
-    // await ImageRecognition.destroy({ where: { objectSetId: id } });
+    // Remove from in-memory storage
+    imageSets.splice(imageSetIndex, 1);
 
     return res.json({
       success: true,
@@ -406,65 +328,28 @@ router.get("/download/:objectName", async (req, res) => {
   try {
     const { objectName } = req.params;
 
-    // Get all images for this object
-    // const images = await ImageRecognition.findAll({
-    //   where: { objectName }
-    // });
+    // Find all image sets for this object name
+    const matchingSets = imageSets.filter(
+      (set) => set.objectName === objectName
+    );
 
-    // Mock data for now
-    const images = [
-      {
-        id: "1",
-        name: "TalkAR Logo Front",
-        imageType: "front",
-        imageUrl: "/uploads/logo-front.jpg",
-      },
-      {
-        id: "2",
-        name: "TalkAR Logo Left",
-        imageType: "left_angle",
-        imageUrl: "/uploads/logo-left.jpg",
-      },
-      {
-        id: "3",
-        name: "TalkAR Logo Right",
-        imageType: "right_angle",
-        imageUrl: "/uploads/logo-right.jpg",
-      },
-      {
-        id: "4",
-        name: "TalkAR Logo Bright",
-        imageType: "bright",
-        imageUrl: "/uploads/logo-bright.jpg",
-      },
-      {
-        id: "5",
-        name: "TalkAR Logo Dim",
-        imageType: "dim",
-        imageUrl: "/uploads/logo-dim.jpg",
-      },
-    ];
-
-    if (images.length === 0) {
+    if (matchingSets.length === 0) {
       return res.status(404).json({ error: "No images found for this object" });
     }
+
+    // Flatten all images from matching sets
+    const allImages = matchingSets.flatMap((set) => set.images);
 
     return res.json({
       success: true,
       objectName,
-      imageCount: images.length,
-      images: images.map((img) => ({
+      imageCount: allImages.length,
+      images: allImages.map((img) => ({
         id: img.id,
         name: img.name,
         imageType: img.imageType,
         imageUrl: `${req.protocol}://${req.get("host")}${img.imageUrl}`,
-        required: [
-          "front",
-          "left_angle",
-          "right_angle",
-          "bright",
-          "dim",
-        ].includes(img.imageType),
+        required: img.required,
       })),
     });
   } catch (error) {

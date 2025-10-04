@@ -1,6 +1,4 @@
-import axios from "axios";
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:3001";
+import { api, API_BASE_URL } from "./api";
 
 export interface MultiImageUpload {
   objectName: string;
@@ -56,52 +54,38 @@ export const MultiImageService = {
       formData.append("images", img.file);
     });
 
-    const response = await axios.post(
-      `${API_BASE_URL}/api/multi-images`,
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
-    );
+    const response = await api.post(`/api/multi-images`, formData);
 
     return response.data;
   },
 
   // Get all image sets
   getAllImageSets: async () => {
-    const response = await axios.get(`${API_BASE_URL}/api/multi-images`);
+    const response = await api.get(`/api/multi-images`);
     return response.data;
   },
 
   // Get specific image set
   getImageSet: async (id: string) => {
-    const response = await axios.get(`${API_BASE_URL}/api/multi-images/${id}`);
+    const response = await api.get(`/api/multi-images/${id}`);
     return response.data;
   },
 
   // Get all images for an object
   getObjectImages: async (id: string) => {
-    const response = await axios.get(
-      `${API_BASE_URL}/api/multi-images/${id}/images`
-    );
+    const response = await api.get(`/api/multi-images/${id}/images`);
     return response.data;
   },
 
   // Delete image set
   deleteImageSet: async (id: string) => {
-    const response = await axios.delete(
-      `${API_BASE_URL}/api/multi-images/${id}`
-    );
+    const response = await api.delete(`/api/multi-images/${id}`);
     return response.data;
   },
 
   // Download images for mobile app
   downloadObjectImages: async (objectName: string) => {
-    const response = await axios.get(
-      `${API_BASE_URL}/api/multi-images/download/${objectName}`
-    );
+    const response = await api.get(`/api/multi-images/download/${objectName}`);
     return response.data;
   },
 };

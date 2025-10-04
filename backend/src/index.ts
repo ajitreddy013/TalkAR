@@ -24,16 +24,23 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        imgSrc: ["'self'", "data:", "blob:", "http://localhost:3000"],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "blob:",
+          "http://localhost:3000",
+          "http://localhost:3001",
+        ],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
       },
     },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:3001",
+    origin: ["http://localhost:3000", "http://localhost:3001"],
     credentials: true,
   })
 );
@@ -41,8 +48,33 @@ app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Serve uploaded files statically
-app.use("/uploads", express.static("uploads"));
+// Serve uploaded files statically with CORS headers
+app.use(
+  "/uploads",
+  (req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET");
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Origin, X-Requested-With, Content-Type, Accept"
+    );
+    next();
+  },
+  express.static("uploads")
+);
+
+// Serve admin-dashboard production build (if present)
+import path from "path";
+const adminBuildPath = path.join(__dirname, "..", "admin-dashboard", "build");
+try {
+  app.use(express.static(adminBuildPath));
+  // For any other routes not handled by API, serve the React app
+  app.get("/", (req, res) => {
+    res.sendFile(path.join(adminBuildPath, "index.html"));
+  });
+} catch (e) {
+  // ignore if build not present in dev environment
+}
 
 // Routes
 app.use("/api/v1/auth", authRoutes);
