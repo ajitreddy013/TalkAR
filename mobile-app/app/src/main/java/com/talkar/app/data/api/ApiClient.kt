@@ -7,10 +7,10 @@ import retrofit2.http.*
 interface ApiService {
     
     @GET("images")
-    suspend fun getImages(): Response<List<ImageRecognition>>
+    suspend fun getImages(): Response<List<BackendImage>>
     
     @GET("images/{id}")
-    suspend fun getImageById(@Path("id") id: String): Response<ImageRecognition>
+    suspend fun getImageById(@Path("id") id: String): Response<BackendImage>
     
     @POST("sync/generate")
     suspend fun generateSyncVideo(@Body request: SyncRequest): Response<SyncResponse>
@@ -23,7 +23,7 @@ interface ApiService {
 }
 
 object ApiClient {
-    private const val BASE_URL = "http://10.208.144.127:3000/api/v1/"
+    private const val BASE_URL = "http://10.17.5.127:3000/api/v1/"
     
     fun create(): ApiService {
         return retrofit2.Retrofit.Builder()

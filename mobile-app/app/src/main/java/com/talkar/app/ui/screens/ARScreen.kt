@@ -7,7 +7,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
-import com.talkar.app.ui.components.SimpleCameraView
+import com.talkar.app.ui.components.MLKitCameraView
+import com.talkar.app.ui.components.AROverlayCameraView
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -99,20 +100,18 @@ fun ARScreen(
             )
         }
     ) { paddingValues ->
-        // Simple Camera Preview with AR Overlay - Bypasses depth estimation issues
-        SimpleCameraView(
+        // AR Overlay Camera with Talking Head Video
+        AROverlayCameraView(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues),
             onImageRecognized = { imageRecognition ->
                 viewModel.recognizeImage(imageRecognition)
             },
-            onAugmentedImageRecognized = { augmentedImage ->
-                viewModel.setRecognizedAugmentedImage(augmentedImage)
-            },
             onError = { errorMessage ->
                 viewModel.setArError(errorMessage)
             },
+            talkingHeadVideo = talkingHeadVideo,
             isImageDetected = recognizedImage != null
         )
     }

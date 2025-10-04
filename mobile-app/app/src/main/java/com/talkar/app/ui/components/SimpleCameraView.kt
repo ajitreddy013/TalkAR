@@ -51,8 +51,8 @@ fun SimpleCameraView(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             try {
-                Log.d("SimpleCameraView", "Initializing simple AR service...")
-                val initialized = arService.initialize()
+                Log.d("SimpleCameraView", "Initializing simple AR service with GL context...")
+                val initialized = arService.initializeWithGLContext()
                 Log.d("SimpleCameraView", "Simple AR service initialized: $initialized")
             } catch (e: Exception) {
                 Log.e("SimpleCameraView", "Failed to initialize simple AR service", e)

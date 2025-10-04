@@ -13,6 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.talkar.app.ui.screens.ARScreen
 import com.talkar.app.ui.theme.TalkARTheme
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
@@ -37,28 +39,40 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Check camera permission
-        hasCameraPermission = ContextCompat.checkSelfPermission(
-            this,
-            Manifest.permission.CAMERA
-        ) == PackageManager.PERMISSION_GRANTED
+        android.util.Log.d("MainActivity", "MainActivity onCreate - starting lightweight initialization")
         
-        android.util.Log.d("MainActivity", "Camera permission status: $hasCameraPermission")
-        
-        if (!hasCameraPermission) {
-            android.util.Log.d("MainActivity", "Requesting camera permission...")
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-        } else {
-            android.util.Log.d("MainActivity", "Camera permission already granted")
-        }
-        
+        // Defer heavy work and set up UI immediately
         setContent {
             TalkARTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    // Lazy initialization of ViewModel
                     val viewModel: SimpleARViewModel = viewModel()
+                    
+                    // Check permissions in background to avoid blocking UI
+                    LaunchedEffect(Unit) {
+                        withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            val permissionStatus = ContextCompat.checkSelfPermission(
+                                this@MainActivity,
+                                Manifest.permission.CAMERA
+                            ) == PackageManager.PERMISSION_GRANTED
+                            
+                            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                hasCameraPermission = permissionStatus
+                                android.util.Log.d("MainActivity", "Camera permission status: $hasCameraPermission")
+                                
+                                if (!hasCameraPermission) {
+                                    android.util.Log.d("MainActivity", "Requesting camera permission...")
+                                    requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                } else {
+                                    android.util.Log.d("MainActivity", "Camera permission already granted")
+                                }
+                            }
+                        }
+                    }
+                    
                     ARScreen(
                         viewModel = viewModel,
                         hasCameraPermission = hasCameraPermission,
