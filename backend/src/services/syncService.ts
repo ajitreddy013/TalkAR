@@ -107,6 +107,9 @@ export const generateSyncVideo = async (
         console.log(
           `Sync video completed for job ${jobId}: ${completedJob.videoUrl}`
         );
+
+        // Return the completed job with video URL
+        return completedJob;
       } else {
         // If the API returns a job ID for async processing
         const processingJob: SyncResponse = {
@@ -143,6 +146,9 @@ export const generateSyncVideo = async (
             console.error("Error polling sync status:", pollError);
           }
         }, 10000); // Poll after 10 seconds
+
+        // Return the processing job
+        return processingJob;
       }
     } catch (apiError: any) {
       console.error("Sync.so API error:", apiError);
@@ -154,8 +160,6 @@ export const generateSyncVideo = async (
       syncJobs.set(jobId, failedJob);
       throw new Error(`Sync.so API failed: ${apiError.message}`);
     }
-
-    return job;
   } catch (error) {
     console.error("Sync service error:", error);
     throw new Error("Failed to generate sync video");

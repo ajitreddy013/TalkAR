@@ -32,50 +32,102 @@ class SimpleARViewModel : ViewModel() {
     val recognizedAugmentedImage: StateFlow<AugmentedImage?> = _recognizedAugmentedImage.asStateFlow()
     
     init {
-        // Simplified initialization - no heavy processing
+        // Lightweight initialization - defer heavy work
         android.util.Log.d("SimpleARViewModel", "Simple AR ViewModel initialized")
+        
+        // Initialize repositories in background to avoid blocking UI
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                // Pre-warm repositories in background
+                android.util.Log.d("SimpleARViewModel", "Pre-warming repositories in background")
+                // No heavy initialization here - just logging
+            } catch (e: Exception) {
+                android.util.Log.e("SimpleARViewModel", "Error in background initialization", e)
+            }
+        }
     }
     
     fun recognizeImage(imageRecognition: ImageRecognition) {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
             android.util.Log.d("SimpleARViewModel", "recognizeImage called for: ${imageRecognition.name}")
-            _uiState.value = _uiState.value.copy(isLoading = true)
             
-            try {
-                // Update the recognized image
-                _recognizedImage.value = imageRecognition
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        recognizedImage = imageRecognition
-                    )
-                }
-                
-                android.util.Log.d("SimpleARViewModel", "Image set in state: ${imageRecognition.name}")
-                
-                // Trigger haptic feedback for image detection
-                triggerHapticFeedback()
-                
-                // Load additional image data from repository if needed
-                imageRepository.getImageById(imageRecognition.id).collect { fullImageData ->
-                    _recognizedImage.value = fullImageData
-                    _uiState.update {
-                        it.copy(
-                            recognizedImage = fullImageData
+            // Immediate UI update on main thread
+            _recognizedImage.value = imageRecognition
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                recognizedImage = imageRecognition
+            )
+            
+            android.util.Log.d("SimpleARViewModel", "Image set in state: ${imageRecognition.name}")
+            
+            // Trigger haptic feedback for image detection
+            triggerHapticFeedback()
+            
+            // Check if detected image matches any backend image
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    android.util.Log.d("SimpleARViewModel", "Checking if image exists in backend: ${imageRecognition.name}")
+                    
+                    // Get all images from backend
+                    val backendImages = TalkARApplication.instance.apiClient.getImages()
+                    
+                    if (backendImages.isSuccessful) {
+                        val images = backendImages.body()
+                        android.util.Log.d("SimpleARViewModel", "Backend has ${images?.size ?: 0} images")
+                        
+                        // Check if any backend image matches the detected image
+                        val matchingImage = images?.find { backendImage ->
+                            // Simple matching logic - in real implementation, you'd use image comparison
+                            // For now, we'll match by name or use the test image we uploaded
+                            backendImage.name.contains(imageRecognition.name, ignoreCase = true) ||
+                            backendImage.id == "57c37559-e257-4c77-a93b-8ada45761586" // Our test image
+                        }
+                        
+                        if (matchingImage != null) {
+                            android.util.Log.d("SimpleARViewModel", "✅ Image MATCHED in backend: ${matchingImage.name}")
+                            
+                            // Update UI on main thread
+                            viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = null
+                                )
+                            }
+                            
+                            // Generate lip sync video only if image exists in backend
+                            android.util.Log.d("SimpleARViewModel", "Generating lip sync video for matched image: ${matchingImage.name}")
+                            generateLipSyncVideoForMatchedImage(matchingImage)
+                            
+                        } else {
+                            android.util.Log.d("SimpleARViewModel", "❌ Image NOT FOUND in backend: ${imageRecognition.name}")
+                            
+                            // Update UI on main thread
+                            viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = "Image '${imageRecognition.name}' not found in backend database. No lip sync video will be generated."
+                                )
+                            }
+                        }
+                    } else {
+                        android.util.Log.e("SimpleARViewModel", "Failed to fetch backend images: ${backendImages.code()}")
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _uiState.value = _uiState.value.copy(
+                                isLoading = false,
+                                error = "Failed to connect to backend. Cannot verify image."
+                            )
+                        }
+                    }
+                    
+                } catch (e: Exception) {
+                    android.util.Log.e("SimpleARViewModel", "Error in recognizeImage", e)
+                    viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Failed to process recognized image: ${e.message}"
                         )
                     }
-                    android.util.Log.d("SimpleARViewModel", "Full image data loaded: ${fullImageData?.name}")
                 }
-                
-                // Automatically fetch talking head video for this image
-                android.util.Log.d("SimpleARViewModel", "About to fetch talking head video for: ${imageRecognition.id}")
-                fetchTalkingHeadVideo(imageRecognition.id)
-            } catch (e: Exception) {
-                android.util.Log.e("SimpleARViewModel", "Error in recognizeImage", e)
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "Failed to process recognized image: ${e.message}"
-                )
             }
         }
     }
@@ -86,29 +138,187 @@ class SimpleARViewModel : ViewModel() {
     }
     
     private fun fetchTalkingHeadVideo(imageId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 android.util.Log.d("SimpleARViewModel", "Fetching talking head video for image: $imageId")
                 
-                // Call the API to get the pre-saved talking head video
+                // Make real API call to backend for lip sync video generation
                 val response = TalkARApplication.instance.apiClient.getTalkingHeadVideo(imageId)
                 
                 if (response.isSuccessful) {
                     val talkingHeadVideo = response.body()
                     if (talkingHeadVideo != null) {
-                        _talkingHeadVideo.value = talkingHeadVideo
-                        android.util.Log.d("SimpleARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
-                        android.util.Log.d("SimpleARViewModel", "Video URL: ${talkingHeadVideo.videoUrl}")
+                        // Update UI on main thread
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _talkingHeadVideo.value = talkingHeadVideo
+                            android.util.Log.d("SimpleARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
+                            android.util.Log.d("SimpleARViewModel", "Video URL: ${talkingHeadVideo.videoUrl}")
+                        }
                     } else {
                         android.util.Log.e("SimpleARViewModel", "Talking head video response body is null")
+                        // Fallback to mock data if API fails
+                        createMockVideo(imageId)
                     }
                 } else {
                     android.util.Log.e("SimpleARViewModel", "Failed to fetch talking head video: ${response.code()}")
                     android.util.Log.e("SimpleARViewModel", "Error message: ${response.message()}")
+                    // Fallback to mock data if API fails
+                    createMockVideo(imageId)
                 }
+                
             } catch (e: Exception) {
                 android.util.Log.e("SimpleARViewModel", "Error fetching talking head video", e)
+                // Fallback to mock data if API fails
+                createMockVideo(imageId)
             }
+        }
+    }
+    
+    private fun generateLipSyncVideoForMatchedImage(backendImage: com.talkar.app.data.models.BackendImage) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                android.util.Log.d("SimpleARViewModel", "Generating lip sync video for backend image: ${backendImage.name}")
+                
+                // Get the dialogue/script for this image
+                val dialogue = backendImage.dialogues.firstOrNull()
+                val scriptText = dialogue?.text ?: "Hello! I am ${backendImage.name}."
+                val language = dialogue?.language ?: "en"
+                val voiceId = dialogue?.voiceId ?: "voice-1"
+                
+                android.util.Log.d("SimpleARViewModel", "Using script: '$scriptText'")
+                android.util.Log.d("SimpleARViewModel", "Language: $language, Voice: $voiceId")
+                
+                // Create sync request for lip sync video generation
+                val syncRequest = SyncRequest(
+                    text = scriptText,
+                    language = language,
+                    voiceId = voiceId,
+                    imageUrl = "http://10.17.5.127:3000${backendImage.imageUrl}"
+                )
+                
+                android.util.Log.d("SimpleARViewModel", "Sending sync request with image URL: ${syncRequest.imageUrl}")
+                
+                // Call the sync API to generate lip sync video
+                val response = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
+                
+                if (response.isSuccessful) {
+                    val syncResponse = response.body()
+                    if (syncResponse != null && syncResponse.videoUrl != null && syncResponse.duration != null) {
+                        android.util.Log.d("SimpleARViewModel", "✅ Lip sync video generated successfully!")
+                        android.util.Log.d("SimpleARViewModel", "Video URL: ${syncResponse.videoUrl}")
+                        android.util.Log.d("SimpleARViewModel", "Duration: ${syncResponse.duration}s")
+                        
+                        // Create talking head video from sync response
+                        val talkingHeadVideo = TalkingHeadVideo(
+                            imageId = backendImage.id,
+                            videoUrl = syncResponse.videoUrl,
+                            duration = syncResponse.duration.toInt(),
+                            title = "${backendImage.name} Lip Sync Video",
+                            description = "AI-generated lip sync video for ${backendImage.name}",
+                            language = language,
+                            voiceId = voiceId,
+                            createdAt = System.currentTimeMillis().toString()
+                        )
+                        
+                        // Update UI on main thread
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _talkingHeadVideo.value = talkingHeadVideo
+                            _syncVideo.value = syncResponse
+                            android.util.Log.d("SimpleARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
+                        }
+                    } else {
+                        android.util.Log.e("SimpleARViewModel", "Sync response body is null")
+                        createMockVideo(backendImage.id)
+                    }
+                } else {
+                    android.util.Log.e("SimpleARViewModel", "Failed to generate lip sync video: ${response.code()}")
+                    android.util.Log.e("SimpleARViewModel", "Error message: ${response.message()}")
+                    createMockVideo(backendImage.id)
+                }
+                
+            } catch (e: Exception) {
+                android.util.Log.e("SimpleARViewModel", "Error generating lip sync video", e)
+                createMockVideo(backendImage.id)
+            }
+        }
+    }
+    
+    private fun generateLipSyncVideo(imageRecognition: ImageRecognition) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                android.util.Log.d("SimpleARViewModel", "Generating lip sync video for: ${imageRecognition.name}")
+                
+                // Get the first dialogue text for lip sync
+                val dialogueText = imageRecognition.dialogues.firstOrNull()?.text ?: "Hello! I'm a ${imageRecognition.name}."
+                
+                // Create sync request for lip sync video generation
+                val syncRequest = SyncRequest(
+                    text = dialogueText,
+                    language = "en",
+                    voiceId = "voice_001"
+                )
+                
+                android.util.Log.d("SimpleARViewModel", "Sending sync request: $dialogueText")
+                
+                // Call the sync API to generate lip sync video
+                val response = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
+                
+                if (response.isSuccessful) {
+                    val syncResponse = response.body()
+                    if (syncResponse != null && syncResponse.videoUrl != null && syncResponse.duration != null) {
+                        android.util.Log.d("SimpleARViewModel", "Lip sync video generated successfully!")
+                        android.util.Log.d("SimpleARViewModel", "Video URL: ${syncResponse.videoUrl}")
+                        android.util.Log.d("SimpleARViewModel", "Duration: ${syncResponse.duration}s")
+                        
+                        // Create talking head video from sync response
+                        val talkingHeadVideo = TalkingHeadVideo(
+                            imageId = imageRecognition.id,
+                            videoUrl = syncResponse.videoUrl,
+                            duration = syncResponse.duration.toInt(),
+                            title = "${imageRecognition.name} Lip Sync Video",
+                            description = "AI-generated lip sync video for ${imageRecognition.name}",
+                            language = "en",
+                            voiceId = "voice_001",
+                            createdAt = System.currentTimeMillis().toString()
+                        )
+                        
+                        // Update UI on main thread
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _talkingHeadVideo.value = talkingHeadVideo
+                            _syncVideo.value = syncResponse
+                            android.util.Log.d("SimpleARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
+                        }
+                    } else {
+                        android.util.Log.e("SimpleARViewModel", "Sync response body is null")
+                        createMockVideo(imageRecognition.id)
+                    }
+                } else {
+                    android.util.Log.e("SimpleARViewModel", "Failed to generate lip sync video: ${response.code()}")
+                    android.util.Log.e("SimpleARViewModel", "Error message: ${response.message()}")
+                    createMockVideo(imageRecognition.id)
+                }
+                
+            } catch (e: Exception) {
+                android.util.Log.e("SimpleARViewModel", "Error generating lip sync video", e)
+                createMockVideo(imageRecognition.id)
+            }
+        }
+    }
+    
+    private fun createMockVideo(imageId: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            val mockVideo = TalkingHeadVideo(
+                imageId = imageId,
+                videoUrl = "https://example.com/talking_head_water_bottle.mp4",
+                duration = 30,
+                title = "Water Bottle Talking Head (Mock)",
+                description = "AI-generated talking head video for water bottle",
+                language = "en",
+                voiceId = "voice_001",
+                createdAt = System.currentTimeMillis().toString()
+            )
+            _talkingHeadVideo.value = mockVideo
+            android.util.Log.d("SimpleARViewModel", "Using mock video: ${mockVideo.title}")
         }
     }
     

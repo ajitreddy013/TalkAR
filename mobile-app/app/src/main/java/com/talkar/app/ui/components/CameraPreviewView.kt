@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.talkar.app.data.models.ImageRecognition
-import com.talkar.app.data.services.ARImageRecognitionService
+import com.talkar.app.data.services.BackendImageARService
 import kotlinx.coroutines.launch
 
 @Composable
@@ -26,8 +26,8 @@ fun CameraPreviewView(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     
-    // Initialize AR service
-    val arService = remember { ARImageRecognitionService(context) }
+    // Initialize Backend AR service for real image detection
+    val arService = remember { BackendImageARService(context) }
     
     // Initialize AR service when component is created
     LaunchedEffect(Unit) {
@@ -44,7 +44,7 @@ fun CameraPreviewView(
     DisposableEffect(Unit) {
         onDispose {
             try {
-                arService.pauseProcessing()
+                arService.pauseTracking()
             } catch (e: Exception) {
                 android.util.Log.e("CameraPreviewView", "Error disposing AR service", e)
             }
@@ -61,7 +61,7 @@ fun CameraPreviewView(
         if (isTracking) {
             android.util.Log.d("CameraPreviewView", "ARCore session resumed, resuming processing")
             try {
-                arService.resumeProcessing()
+                arService.resumeTracking()
             } catch (e: Exception) {
                 android.util.Log.e("CameraPreviewView", "Error resuming processing", e)
             }
@@ -99,7 +99,7 @@ fun CameraPreviewView(
 
 private fun createCameraPreviewView(
     context: Context,
-    arService: ARImageRecognitionService,
+    arService: BackendImageARService,
     onImageRecognized: (com.talkar.app.data.models.ImageRecognition) -> Unit
 ): android.view.View {
     // Create a layout to hold camera preview and overlays
@@ -148,32 +148,14 @@ private fun createCameraPreviewView(
     overlayParams.topMargin = 100
     layout.addView(scanningOverlay, overlayParams)
     
-    // Add test button for debugging
-    val testButton = android.widget.Button(context).apply {
-        text = "🧪 Test Detection"
-        setBackgroundColor(android.graphics.Color.parseColor("#4CAF50"))
-        setTextColor(android.graphics.Color.WHITE)
-        setPadding(20, 15, 20, 15)
-        setOnClickListener {
-            android.util.Log.d("CameraPreviewView", "Test button clicked - simulating image detection")
-            simulateImageDetection(arService, onImageRecognized)
-        }
-    }
-    
-    val buttonParams = android.widget.FrameLayout.LayoutParams(
-        android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-        android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
-    )
-    buttonParams.gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER
-    buttonParams.bottomMargin = 100
-    layout.addView(testButton, buttonParams)
+    // No test button - real image detection only
     
     return layout
 }
 
 private fun initializeCamera(
     textureView: android.view.TextureView, 
-    arService: ARImageRecognitionService,
+    arService: BackendImageARService,
     onImageRecognized: (com.talkar.app.data.models.ImageRecognition) -> Unit
 ) {
     try {
@@ -216,8 +198,8 @@ private fun initializeCamera(
                             try {
                                 session.setRepeatingRequest(captureRequest.build(), null, null)
                                 
-                                // Start ARCore frame processing
-                                startARFrameProcessing(arService, onImageRecognized)
+                                // BackendImageARService handles AR processing internally
+                                android.util.Log.d("CameraPreviewView", "Camera preview started - AR processing handled by BackendImageARService")
                             } catch (e: Exception) {
                                 android.util.Log.e("CameraPreviewView", "Failed to start repeating request", e)
                             }
@@ -246,95 +228,5 @@ private fun initializeCamera(
     }
 }
 
-private fun startARFrameProcessing(
-    arService: ARImageRecognitionService,
-    onImageRecognized: (com.talkar.app.data.models.ImageRecognition) -> Unit
-) {
-    try {
-        android.util.Log.d("CameraPreviewView", "Starting ARCore frame processing...")
-        
-        // Create a coroutine to continuously process ARCore frames
-        kotlinx.coroutines.GlobalScope.launch {
-            var frameCount = 0
-            while (true) {
-                try {
-                    // Get the current ARCore session
-                    val session = arService.getSession()
-                    
-                    // Check if session exists and is ready
-                    if (session == null) {
-                        android.util.Log.d("CameraPreviewView", "No ARCore session available, waiting...")
-                        kotlinx.coroutines.delay(3000L)
-                        continue
-                    }
-                    
-                    // Check if session is tracking
-                    if (!arService.isTracking.value) {
-                        android.util.Log.d("CameraPreviewView", "Session not tracking, waiting...")
-                        kotlinx.coroutines.delay(3000L)
-                        continue
-                    }
-                    
-                    // Try to update the session
-                    try {
-                        val frame = session.update()
-                        
-                        // Process the frame for image recognition
-                        arService.processFrame(frame)
-                        
-                        frameCount++
-                        
-                        // Adaptive delay based on processing load
-                        val delay = if (frameCount % 10 == 0) {
-                            // Every 10th frame, take a longer break to reduce CPU load
-                            200L
-                        } else {
-                            // Normal processing delay
-                            150L
-                        }
-                        kotlinx.coroutines.delay(delay)
-                        
-                    } catch (e: com.google.ar.core.exceptions.SessionPausedException) {
-                        android.util.Log.d("CameraPreviewView", "Session paused, waiting...")
-                        kotlinx.coroutines.delay(1000L)
-                    } catch (e: Exception) {
-                        android.util.Log.e("CameraPreviewView", "Error processing frame", e)
-                        kotlinx.coroutines.delay(1000L)
-                    }
-                    
-                } catch (e: Exception) {
-                    android.util.Log.e("CameraPreviewView", "Error in AR processing loop", e)
-                    kotlinx.coroutines.delay(2000L)
-                }
-            }
-        }
-    } catch (e: Exception) {
-        android.util.Log.e("CameraPreviewView", "Failed to start AR processing", e)
-    }
-}
-
-private fun simulateImageDetection(
-    arService: ARImageRecognitionService,
-    onImageRecognized: (com.talkar.app.data.models.ImageRecognition) -> Unit
-) {
-    try {
-        android.util.Log.d("CameraPreviewView", "Simulating image detection for testing")
-        
-        // Create a mock image recognition result
-        val mockImageRecognition = ImageRecognition(
-            id = "dda5e144-2f31-483e-9526-81a7245d49eb",
-            name = "Sunrich",
-            description = "Hello there! I'm your Sunrich Water Bottle.",
-            imageUrl = "/uploads/c32d2501-4f5d-4668-91dc-ee0910680e1a.jpeg",
-            dialogues = emptyList(),
-            createdAt = System.currentTimeMillis().toString(),
-            updatedAt = System.currentTimeMillis().toString()
-        )
-        
-        android.util.Log.d("CameraPreviewView", "Simulated image recognition: ${mockImageRecognition.name}")
-        onImageRecognized(mockImageRecognition)
-        
-    } catch (e: Exception) {
-        android.util.Log.e("CameraPreviewView", "Error simulating image detection", e)
-    }
-}
+// BackendImageARService handles all AR processing internally
+// No manual frame processing needed
