@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talkar-frontend
+  labels:
+    app: talkar-frontend
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: talkar-frontend
+  template:
+    metadata:
+      labels:
+        app: talkar-frontend
+        tier: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: talkar-frontend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: REACT_APP_API_URL
+              value: "https://api.talkar.com/v1"
+            - name: REACT_APP_FIREBASE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: firebase-api-key
+            - name: REACT_APP_FIREBASE_AUTH_DOMAIN
+              value: "talkar-app.firebaseapp.com"
+            - name: REACT_APP_FIREBASE_PROJECT_ID
+              value: "talkar-app"
+            - name: REACT_APP_FIREBASE_STORAGE_BUCKET
+              value: "talkar-app.appspot.com"
+            - name: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: firebase-sender-id
+            - name: REACT_APP_FIREBASE_APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: firebase-app-id
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: talkar-frontend-service
+  labels:
+    app: talkar-frontend
+spec:
+  selector:
+    app: talkar-frontend
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: talkar-frontend-ingress
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - admin.talkar.com
+      secretName: talkar-frontend-tls
+  rules:
+    - host: admin.talkar.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: talkar-frontend-service
+                port:
+                  number: 3000

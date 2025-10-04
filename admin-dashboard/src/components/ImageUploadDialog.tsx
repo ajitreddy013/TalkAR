@@ -11,8 +11,8 @@ import {
   LinearProgress,
 } from "@mui/material";
 import { useDropzone } from "react-dropzone";
-import { useDispatch } from "react-redux";
 import { createImage } from "../store/slices/imageSlice";
+import { useAppDispatch } from "../store/hooks";
 
 interface ImageUploadDialogProps {
   open: boolean;
@@ -23,7 +23,7 @@ export const ImageUploadDialog: React.FC<ImageUploadDialogProps> = ({
   open,
   onClose,
 }) => {
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -55,7 +55,7 @@ export const ImageUploadDialog: React.FC<ImageUploadDialogProps> = ({
       data.append("name", formData.name);
       data.append("description", formData.description);
 
-      await dispatch(createImage(data));
+      await dispatch(createImage(data)).unwrap();
       handleClose();
     } catch (error) {
       console.error("Upload failed:", error);

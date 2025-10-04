@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
-import { DialogueService } from "../services/dialogueService";
+import { DialogueService } from "../../services/dialogueService";
 
 export interface Dialogue {
   id: string;

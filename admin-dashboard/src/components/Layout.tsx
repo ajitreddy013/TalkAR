@@ -12,25 +12,16 @@ import {
   ListItemText,
   Toolbar,
   Typography,
-  Avatar,
-  Menu,
-  MenuItem,
-  Divider,
 } from "@mui/material";
 import {
   Menu as MenuIcon,
-  Dashboard,
-  Image,
-  Chat,
-  Analytics,
-  Settings,
-  AccountCircle,
-  Logout,
+  Dashboard as DashboardIcon,
+  Image as ImageIcon,
+  Chat as ChatIcon,
+  Analytics as AnalyticsIcon,
+  Settings as SettingsIcon,
 } from "@mui/icons-material";
 import { useNavigate, useLocation } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
-import { RootState } from "../store/store";
-import { logout } from "../store/slices/authSlice";
 
 const drawerWidth = 240;
 
@@ -38,39 +29,27 @@ interface LayoutProps {
   children: React.ReactNode;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
+const menuItems = [
+  { text: "Dashboard", icon: <DashboardIcon />, path: "/" },
+  { text: "Images", icon: <ImageIcon />, path: "/images" },
+  { text: "Scripts", icon: <ChatIcon />, path: "/dialogues" },
+  { text: "Analytics", icon: <AnalyticsIcon />, path: "/analytics" },
+  { text: "Settings", icon: <SettingsIcon />, path: "/settings" },
+];
+
+export default function Layout({ children }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  const dispatch = useDispatch();
-
-  const { user } = useSelector((state: RootState) => state.auth);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
-  const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  const handleNavigation = (path: string) => {
+    navigate(path);
+    setMobileOpen(false);
   };
-
-  const handleProfileMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleLogout = () => {
-    dispatch(logout());
-    navigate("/login");
-  };
-
-  const menuItems = [
-    { text: "Dashboard", icon: <Dashboard />, path: "/" },
-    { text: "Images", icon: <Image />, path: "/images" },
-    { text: "Dialogues", icon: <Chat />, path: "/dialogues" },
-    { text: "Analytics", icon: <Analytics />, path: "/analytics" },
-    { text: "Settings", icon: <Settings />, path: "/settings" },
-  ];
 
   const drawer = (
     <div>
@@ -79,13 +58,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           TalkAR Admin
         </Typography>
       </Toolbar>
-      <Divider />
       <List>
         {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding>
             <ListItemButton
               selected={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
+              onClick={() => handleNavigation(item.path)}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
               <ListItemText primary={item.text} />
@@ -116,26 +94,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {menuItems.find((item) => item.path === location.pathname)?.text ||
-              "TalkAR Admin"}
+          <Typography variant="h6" noWrap component="div">
+            TalkAR Admin Dashboard
           </Typography>
-          <IconButton
-            size="large"
-            edge="end"
-            aria-label="account of current user"
-            aria-controls="primary-search-account-menu"
-            aria-haspopup="true"
-            onClick={handleProfileMenuOpen}
-            color="inherit"
-          >
-            <Avatar sx={{ width: 32, height: 32 }}>
-              {user?.name?.charAt(0).toUpperCase()}
-            </Avatar>
-          </IconButton>
         </Toolbar>
       </AppBar>
-
       <Box
         component="nav"
         sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
@@ -172,7 +135,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           {drawer}
         </Drawer>
       </Box>
-
       <Box
         component="main"
         sx={{
@@ -184,28 +146,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <Toolbar />
         {children}
       </Box>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleProfileMenuClose}
-        onClick={handleProfileMenuClose}
-      >
-        <MenuItem onClick={handleProfileMenuClose}>
-          <ListItemIcon>
-            <AccountCircle fontSize="small" />
-          </ListItemIcon>
-          Profile
-        </MenuItem>
-        <MenuItem onClick={handleLogout}>
-          <ListItemIcon>
-            <Logout fontSize="small" />
-          </ListItemIcon>
-          Logout
-        </MenuItem>
-      </Menu>
     </Box>
   );
-};
-
-export default Layout;
+}

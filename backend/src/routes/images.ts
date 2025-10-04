@@ -1,22 +1,25 @@
-import express from 'express';
-import { Image, Dialogue } from '../models/Image';
-import { uploadImage } from '../services/uploadService';
-import { validateImageUpload } from '../middleware/validation';
+import express from "express";
+import { Image, Dialogue } from "../models/Image";
+import { uploadImage, uploadToS3 } from "../services/uploadService";
+import { validateImageUpload } from "../middleware/validation";
+import path from "path";
 
 const router = express.Router();
 
 // Get all images
-router.get('/', async (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
     const images = await Image.findAll({
       where: { isActive: true },
-      include: [{
-        model: Dialogue,
-        as: 'dialogues'
-      }],
-      order: [['createdAt', 'DESC']]
+      include: [
+        {
+          model: Dialogue,
+          as: "dialogues",
+        },
+      ],
+      order: [["createdAt", "DESC"]],
     });
-    
+
     res.json(images);
   } catch (error) {
     next(error);
@@ -24,160 +27,178 @@ router.get('/', async (req, res, next) => {
 });
 
 // Get image by ID
-router.get('/:id', async (req, res, next) => {
+router.get("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
     const image = await Image.findByPk(id, {
-      include: [{
-        model: Dialogue,
-        as: 'dialogues'
-      }]
+      include: [
+        {
+          model: Dialogue,
+          as: "dialogues",
+        },
+      ],
     });
-    
+
     if (!image) {
-      return res.status(404).json({ error: 'Image not found' });
+      return res.status(404).json({ error: "Image not found" });
     }
-    
-    res.json(image);
+
+    return res.json(image);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 // Create new image
-router.post('/', uploadImage.single('image'), validateImageUpload, async (req, res, next) => {
-  try {
-    const { name, description } = req.body;
-    const imageUrl = req.file?.location;
-    
-    if (!imageUrl) {
-      return res.status(400).json({ error: 'Image upload failed' });
+router.post(
+  "/",
+  uploadImage.single("image"),
+  validateImageUpload,
+  async (req, res, next) => {
+    try {
+      const { name, description } = req.body;
+      let imageUrl: string;
+
+      if (!req.file) {
+        return res.status(400).json({ error: "Image file is required" });
+      }
+
+      // Handle S3 upload for production or local file storage for development
+      if (process.env.NODE_ENV === 'production' && process.env.AWS_S3_BUCKET) {
+        // Upload to S3
+        imageUrl = await uploadToS3(req.file);
+      } else {
+        // Use local file path
+        imageUrl = req.file.path;
+        // Convert to relative path for serving
+        imageUrl = `/uploads/${path.basename(imageUrl)}`;
+      }
+
+      const image = await Image.create({
+        name,
+        description,
+        imageUrl,
+        thumbnailUrl: imageUrl, // In production, generate thumbnail
+        isActive: true,
+      });
+
+      return res.status(201).json(image);
+    } catch (error) {
+      return next(error);
     }
-    
-    const image = await Image.create({
-      name,
-      description,
-      imageUrl,
-      thumbnailUrl: imageUrl // In production, generate thumbnail
-    });
-    
-    res.status(201).json(image);
-  } catch (error) {
-    next(error);
   }
-});
+);
 
 // Update image
-router.put('/:id', async (req, res, next) => {
+router.put("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, description, isActive } = req.body;
-    
+
     const image = await Image.findByPk(id);
     if (!image) {
-      return res.status(404).json({ error: 'Image not found' });
+      return res.status(404).json({ error: "Image not found" });
     }
-    
+
     await image.update({
       name: name || image.name,
       description: description !== undefined ? description : image.description,
-      isActive: isActive !== undefined ? isActive : image.isActive
+      isActive: isActive !== undefined ? isActive : image.isActive,
     });
-    
-    res.json(image);
+
+    return res.json(image);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 // Delete image
-router.delete('/:id', async (req, res, next) => {
+router.delete("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
-    
+
     const image = await Image.findByPk(id);
     if (!image) {
-      return res.status(404).json({ error: 'Image not found' });
+      return res.status(404).json({ error: "Image not found" });
     }
-    
+
     await image.destroy();
-    res.status(204).send();
+    return res.status(204).send();
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 // Add dialogue to image
-router.post('/:id/dialogues', async (req, res, next) => {
+router.post("/:id/dialogues", async (req, res, next) => {
   try {
     const { id } = req.params;
     const { text, language, voiceId, isDefault } = req.body;
-    
+
     const image = await Image.findByPk(id);
     if (!image) {
-      return res.status(404).json({ error: 'Image not found' });
+      return res.status(404).json({ error: "Image not found" });
     }
-    
+
     const dialogue = await Dialogue.create({
       imageId: id,
       text,
       language,
       voiceId,
-      isDefault: isDefault || false
+      isDefault: isDefault || false,
     });
-    
-    res.status(201).json(dialogue);
+
+    return res.status(201).json(dialogue);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 // Update dialogue
-router.put('/:imageId/dialogues/:dialogueId', async (req, res, next) => {
+router.put("/:imageId/dialogues/:dialogueId", async (req, res, next) => {
   try {
     const { imageId, dialogueId } = req.params;
     const { text, language, voiceId, isDefault } = req.body;
-    
+
     const dialogue = await Dialogue.findOne({
-      where: { id: dialogueId, imageId }
+      where: { id: dialogueId, imageId },
     });
-    
+
     if (!dialogue) {
-      return res.status(404).json({ error: 'Dialogue not found' });
+      return res.status(404).json({ error: "Dialogue not found" });
     }
-    
+
     await dialogue.update({
       text: text || dialogue.text,
       language: language || dialogue.language,
       voiceId: voiceId !== undefined ? voiceId : dialogue.voiceId,
-      isDefault: isDefault !== undefined ? isDefault : dialogue.isDefault
+      isDefault: isDefault !== undefined ? isDefault : dialogue.isDefault,
     });
-    
-    res.json(dialogue);
+
+    return res.json(dialogue);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 // Delete dialogue
-router.delete('/:imageId/dialogues/:dialogueId', async (req, res, next) => {
+router.delete("/:imageId/dialogues/:dialogueId", async (req, res, next) => {
   try {
     const { imageId, dialogueId } = req.params;
-    
+
     const dialogue = await Dialogue.findOne({
-      where: { id: dialogueId, imageId }
+      where: { id: dialogueId, imageId },
     });
-    
+
     if (!dialogue) {
-      return res.status(404).json({ error: 'Dialogue not found' });
+      return res.status(404).json({ error: "Dialogue not found" });
     }
-    
+
     await dialogue.destroy();
-    res.status(204).send();
+    return res.status(204).send();
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 export default router;
-
