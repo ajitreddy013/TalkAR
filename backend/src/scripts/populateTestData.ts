@@ -265,6 +265,7 @@ export async function populateTestData() {
           language: script.language,
           voiceId: script.voiceId,
           isDefault: script.isDefault,
+          isActive: true,
         });
       }
 
