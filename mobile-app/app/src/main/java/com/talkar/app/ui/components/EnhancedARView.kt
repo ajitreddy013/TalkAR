@@ -8,6 +8,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -105,14 +108,29 @@ fun SimpleARView(
     var isDetecting by remember { mutableStateOf(false) }
     var detectedImage by remember { mutableStateOf<String?>(null) }
     
-    // Simulate image detection
-    LaunchedEffect(Unit) {
-        while (true) {
+    // Simulate image detection, but only while the composable's lifecycle is at least STARTED
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isLifecycleActive by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            isLifecycleActive = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(isLifecycleActive) {
+        if (!isLifecycleActive) return@LaunchedEffect
+        // Only run the detection loop while the coroutine scope is active and lifecycle is STARTED
+        while (isActive && isLifecycleActive) {
             delay(3000) // Simulate detection every 3 seconds
             isDetecting = true
             detectedImage = "Test Image ${System.currentTimeMillis() % 10}"
             onImageDetected(detectedImage ?: "")
-            
+
             delay(2000) // Show for 2 seconds
             isDetecting = false
             detectedImage = null

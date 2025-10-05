@@ -49,6 +49,10 @@ class SimpleARService(private val context: Context) {
     
     // Cache
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
+
+    // Throttle frequent per-frame success logs to avoid flooding logs (milliseconds)
+    private var lastFrameSuccessLogTime = 0L
+    private val frameSuccessLogInterval = 2_000L // 2 seconds
     
     /**
      * Initialize simple AR service with minimal configuration
@@ -332,7 +336,11 @@ class SimpleARService(private val context: Context) {
                         processSimpleFrame(frame)
                         
                         // If we get here, GL context is ready and we successfully got a frame
-                        Log.d(tag, "GL context is ready and frame processed successfully")
+                        val now = System.currentTimeMillis()
+                        if (now - lastFrameSuccessLogTime >= frameSuccessLogInterval) {
+                            Log.d(tag, "GL context is ready and frame processed successfully")
+                            lastFrameSuccessLogTime = now
+                        }
                         
                     }
                     

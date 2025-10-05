@@ -16,15 +16,38 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        // Expose API configuration to the app via BuildConfig so it can be changed per build variant
-        buildConfigField "String", "API_PROTOCOL", '"http"'
-        buildConfigField "String", "API_HOST", '"10.17.5.127"'
-        buildConfigField "int", "API_PORT", "3000"
-        buildConfigField "String", "API_VERSION", '"v1"'
+        // NOTE: API_* BuildConfig fields are set per-buildType below.
+        // They are intentionally omitted here to force explicit per-variant values.
     }
 
+    // Allow overriding API host/protocol via project properties (e.g., -PAPI_HOST=... or in gradle.properties)
+    def apiProtocolDebug = project.hasProperty('API_PROTOCOL') ? project.API_PROTOCOL : 'http'
+    def apiHostDebug = project.hasProperty('API_HOST') ? project.API_HOST : '10.17.5.127'
+    // Ports should be integers for buildConfigField "int"
+    def apiPortDebug = project.hasProperty('API_PORT') ? project.API_PORT.toInteger() : 3000
+    def apiVersion = project.hasProperty('API_VERSION') ? project.API_VERSION : 'v1'
+
+    // Release (production) defaults should use HTTPS and a production host. CI or local overrides can set API_HOST_RELEASE etc.
+    def apiProtocolRelease = project.hasProperty('API_PROTOCOL_RELEASE') ? project.API_PROTOCOL_RELEASE : 'https'
+    def apiHostRelease = project.hasProperty('API_HOST_RELEASE') ? project.API_HOST_RELEASE : 'api.talkar.app'
+    def apiPortRelease = project.hasProperty('API_PORT_RELEASE') ? project.API_PORT_RELEASE.toInteger() : 443
+
     buildTypes {
+        debug {
+            // Debug uses local/dev defaults but can be overridden via -P or gradle.properties
+            buildConfigField "String", "API_PROTOCOL", "\"${apiProtocolDebug}\""
+            buildConfigField "String", "API_HOST", "\"${apiHostDebug}\""
+            buildConfigField "int", "API_PORT", "${apiPortDebug}"
+            buildConfigField "String", "API_VERSION", "\"${apiVersion}\""
+        }
+
         release {
+            // Production defaults use HTTPS and production host; allow CI overrides
+            buildConfigField "String", "API_PROTOCOL", "\"${apiProtocolRelease}\""
+            buildConfigField "String", "API_HOST", "\"${apiHostRelease}\""
+            buildConfigField "int", "API_PORT", "${apiPortRelease}"
+            buildConfigField "String", "API_VERSION", "\"${apiVersion}\""
+
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
