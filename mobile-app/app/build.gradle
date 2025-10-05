@@ -23,13 +23,14 @@ android {
     // Allow overriding API host/protocol via project properties (e.g., -PAPI_HOST=... or in gradle.properties)
     def apiProtocolDebug = project.hasProperty('API_PROTOCOL') ? project.API_PROTOCOL : 'http'
     def apiHostDebug = project.hasProperty('API_HOST') ? project.API_HOST : '10.17.5.127'
-    def apiPortDebug = project.hasProperty('API_PORT') ? project.API_PORT : '3000'
+    // Ports should be integers for buildConfigField "int"
+    def apiPortDebug = project.hasProperty('API_PORT') ? project.API_PORT.toInteger() : 3000
     def apiVersion = project.hasProperty('API_VERSION') ? project.API_VERSION : 'v1'
 
     // Release (production) defaults should use HTTPS and a production host. CI or local overrides can set API_HOST_RELEASE etc.
     def apiProtocolRelease = project.hasProperty('API_PROTOCOL_RELEASE') ? project.API_PROTOCOL_RELEASE : 'https'
     def apiHostRelease = project.hasProperty('API_HOST_RELEASE') ? project.API_HOST_RELEASE : 'api.talkar.app'
-    def apiPortRelease = project.hasProperty('API_PORT_RELEASE') ? project.API_PORT_RELEASE : '443'
+    def apiPortRelease = project.hasProperty('API_PORT_RELEASE') ? project.API_PORT_RELEASE.toInteger() : 443
 
     buildTypes {
         debug {
