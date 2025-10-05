@@ -14,6 +14,9 @@ import authRoutes from "./routes/auth";
 import multiImageRoutes from "./routes/multiImageRoutes";
 import avatarRoutes from "./routes/avatars";
 import lipSyncRoutes from "./routes/lipSync";
+import scriptRoutes from "./routes/scripts";
+import enhancedLipSyncRoutes from "./routes/enhancedLipSync";
+import analyticsRoutes from "./routes/analytics";
 
 // Load environment variables
 dotenv.config();
@@ -87,6 +90,9 @@ app.use("/api/v1/admin", adminRoutes);
 app.use("/api/multi-images", multiImageRoutes);
 app.use("/api/v1/avatars", avatarRoutes);
 app.use("/api/v1/lipsync", lipSyncRoutes);
+app.use("/api/v1/scripts", scriptRoutes);
+app.use("/api/v1/enhanced-lipsync", enhancedLipSyncRoutes);
+app.use("/api/v1/analytics", analyticsRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
