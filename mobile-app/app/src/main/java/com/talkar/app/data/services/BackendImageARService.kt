@@ -7,6 +7,7 @@ import com.google.ar.core.exceptions.*
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.api.ApiClient
+import com.talkar.app.TalkARApplication
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,8 +39,18 @@ class BackendImageARService(private val context: Context) {
     private var session: Session? = null
     private var imageDatabase: AugmentedImageDatabase? = null
     
-    // Backend API configuration
-    private val apiClient = ApiClient.create()
+    // Backend API client - lazily retrieved from the Application instance to avoid
+    // creating it during service field initialization (which can happen before
+    // the application context is fully ready). Falls back to ApiClient.create()
+    // if the Application instance is not available for some reason.
+    private val apiClient by lazy {
+        try {
+            TalkARApplication.instance.apiClient
+        } catch (e: Exception) {
+            Log.w(tag, "TalkARApplication.instance not available - falling back to ApiClient.create()", e)
+            ApiClient.create()
+        }
+    }
     
     // Tracking state
     private val _trackingState = MutableStateFlow(TrackingState.STOPPED)

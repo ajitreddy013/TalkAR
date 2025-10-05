@@ -23,6 +23,18 @@ const testImages = [
         voiceId: "voice_002",
         isDefault: false,
       },
+      {
+        text: "The important thing is not to stop questioning. Curiosity has its own reason for existing.",
+        language: "en-US",
+        voiceId: "voice_002",
+        isDefault: false,
+      },
+      {
+        text: "Try not to become a person of success, but rather try to become a person of value.",
+        language: "en-US",
+        voiceId: "voice_002",
+        isDefault: false,
+      },
     ],
   },
   {
@@ -39,6 +51,18 @@ const testImages = [
       },
       {
         text: "Nothing in life is to be feared, it is only to be understood. Now is the time to understand more, so that we may fear less.",
+        language: "en-US",
+        voiceId: "voice_001",
+        isDefault: false,
+      },
+      {
+        text: "I was taught that the way of progress was neither swift nor easy. Science is about patience and perseverance.",
+        language: "en-US",
+        voiceId: "voice_001",
+        isDefault: false,
+      },
+      {
+        text: "You cannot hope to build a better world without improving the individuals. To that end, each of us must work for our own improvement.",
         language: "en-US",
         voiceId: "voice_001",
         isDefault: false,
