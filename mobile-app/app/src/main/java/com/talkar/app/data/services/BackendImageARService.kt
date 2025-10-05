@@ -5,6 +5,8 @@ import android.util.Log
 import com.google.ar.core.*
 import com.google.ar.core.exceptions.*
 import com.talkar.app.data.models.ImageRecognition
+import com.talkar.app.data.models.BackendImage
+import com.talkar.app.data.api.ApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,8 +39,7 @@ class BackendImageARService(private val context: Context) {
     private var imageDatabase: AugmentedImageDatabase? = null
     
     // Backend API configuration
-    private val baseUrl = "http://10.17.5.127:3000/api" // Updated to use correct IP
-    private val apiClient = ApiClient(baseUrl)
+    private val apiClient = ApiClient.create()
     
     // Tracking state
     private val _trackingState = MutableStateFlow(TrackingState.STOPPED)
@@ -51,11 +52,8 @@ class BackendImageARService(private val context: Context) {
     val error: StateFlow<String?> = _error.asStateFlow()
     
     // Backend image management
-    private val _availableObjects = MutableStateFlow<List<String>>(emptyList())
-    val availableObjects: StateFlow<List<String>> = _availableObjects.asStateFlow()
-    
-    private val _downloadedImages = MutableStateFlow<Map<String, List<BackendImage>>>(emptyMap())
-    val downloadedImages: StateFlow<Map<String, List<BackendImage>>> = _downloadedImages.asStateFlow()
+    private val _downloadedImages = MutableStateFlow<List<BackendImage>>(emptyList())
+    val downloadedImages: StateFlow<List<BackendImage>> = _downloadedImages.asStateFlow()
     
     private val _downloadProgress = MutableStateFlow(0f)
     val downloadProgress: StateFlow<Float> = _downloadProgress.asStateFlow()
@@ -69,15 +67,7 @@ class BackendImageARService(private val context: Context) {
     
     // Cache
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
-    
-    data class BackendImage(
-        val id: String,
-        val name: String,
-        val imageType: String,
-        val imageUrl: String,
-        val required: Boolean,
-        val bitmap: Bitmap? = null
-    )
+    private val imageBitmaps = ConcurrentHashMap<String, Bitmap>()
     
     /**
      * Initialize service and download images from backend
@@ -121,36 +111,26 @@ class BackendImageARService(private val context: Context) {
         return try {
             Log.d(tag, "Downloading images from backend...")
             
-            // Get available objects from backend
-            val objects = apiClient.getAvailableObjects()
-            if (objects.isEmpty()) {
-                Log.w(tag, "No objects available from backend")
+            // Get images from backend API
+            val response = apiClient.getImages()
+            if (!response.isSuccessful || response.body() == null) {
+                Log.w(tag, "Failed to get images from backend: ${response.code()}")
                 return false
             }
             
-            _availableObjects.value = objects
-            Log.d(tag, "Found ${objects.size} objects: ${objects.joinToString(", ")}")
-            
-            // Download images for each object
-            val allImages = mutableMapOf<String, List<BackendImage>>()
-            
-            for (objectName in objects) {
-                Log.d(tag, "Downloading images for object: $objectName")
-                
-                val images = apiClient.getObjectImages(objectName)
-                if (images.isNotEmpty()) {
-                    // Download image bitmaps
-                    val downloadedImages = downloadImageBitmaps(images)
-                    allImages[objectName] = downloadedImages
-                    
-                    Log.d(tag, "Downloaded ${downloadedImages.size} images for $objectName")
-                } else {
-                    Log.w(tag, "No images found for object: $objectName")
-                }
+            val images = response.body()!!
+            if (images.isEmpty()) {
+                Log.w(tag, "No images available from backend")
+                return false
             }
             
-            _downloadedImages.value = allImages
-            Log.d(tag, "Successfully downloaded images for ${allImages.size} objects")
+            Log.d(tag, "Found ${images.size} images from backend")
+            
+            // Download image bitmaps
+            val downloadedImages = downloadImageBitmaps(images)
+            _downloadedImages.value = downloadedImages
+            
+            Log.d(tag, "Successfully downloaded ${downloadedImages.size} images")
             true
             
         } catch (e: Exception) {
@@ -173,8 +153,9 @@ class BackendImageARService(private val context: Context) {
                 
                 val bitmap = downloadImageBitmap(image.imageUrl)
                 if (bitmap != null) {
-                    val downloadedImage = image.copy(bitmap = bitmap)
-                    downloadedImages.add(downloadedImage)
+                    // Store bitmap in cache
+                    imageBitmaps[image.id] = bitmap
+                    downloadedImages.add(image)
                     Log.d(tag, "Successfully downloaded: ${image.name}")
                 } else {
                     Log.w(tag, "Failed to download: ${image.name}")
@@ -215,27 +196,28 @@ class BackendImageARService(private val context: Context) {
         try {
             imageDatabase = AugmentedImageDatabase(session)
             
-            val allImages = _downloadedImages.value
+            val images = _downloadedImages.value
             var totalAdded = 0
             
-            for ((objectName, images) in allImages) {
-                Log.d(tag, "Adding ${images.size} images to ARCore database for: $objectName")
-                
-                for (image in images) {
-                    if (image.bitmap != null) {
-                        try {
-                            // Validate image quality
-                            if (validateImageQuality(image.bitmap)) {
-                                imageDatabase?.addImage(image.name, image.bitmap)
-                                totalAdded++
-                                Log.d(tag, "Added to ARCore database: ${image.name}")
-                            } else {
-                                Log.w(tag, "Image failed quality validation: ${image.name}")
-                            }
-                        } catch (e: Exception) {
-                            Log.e(tag, "Failed to add image to ARCore database: ${image.name}", e)
+            Log.d(tag, "Adding ${images.size} images to ARCore database")
+            
+            for (image in images) {
+                val bitmap = imageBitmaps[image.id]
+                if (bitmap != null) {
+                    try {
+                        // Validate image quality
+                        if (validateImageQuality(bitmap)) {
+                            imageDatabase?.addImage(image.name, bitmap)
+                            totalAdded++
+                            Log.d(tag, "Added to ARCore database: ${image.name}")
+                        } else {
+                            Log.w(tag, "Image failed quality validation: ${image.name}")
                         }
+                    } catch (e: Exception) {
+                        Log.e(tag, "Failed to add image to ARCore database: ${image.name}", e)
                     }
+                } else {
+                    Log.w(tag, "No bitmap found for image: ${image.name}")
                 }
             }
             
@@ -655,45 +637,10 @@ class BackendImageARService(private val context: Context) {
         return mapOf(
             "trackingState" to _trackingState.value.name,
             "recognitionConfidence" to _recognitionConfidence.value,
-            "availableObjects" to _availableObjects.value,
-            "downloadedImageCount" to _downloadedImages.value.values.flatten().size,
+            "downloadedImageCount" to _downloadedImages.value.size,
             "downloadProgress" to _downloadProgress.value,
             "recognizedImagesCount" to _recognizedImages.value.size
         )
     }
 }
 
-/**
- * Simple API client for backend communication
- */
-class ApiClient(private val baseUrl: String) {
-    
-    suspend fun getAvailableObjects(): List<String> {
-        return try {
-            // Mock implementation - replace with actual HTTP call
-            listOf("TalkAR Logo", "Product A", "Product B")
-        } catch (e: Exception) {
-            Log.e("ApiClient", "Failed to get available objects", e)
-            emptyList()
-        }
-    }
-    
-    suspend fun getObjectImages(objectName: String): List<BackendImageARService.BackendImage> {
-        return try {
-            // Mock implementation - replace with actual HTTP call
-            when (objectName) {
-                "TalkAR Logo" -> listOf(
-                    BackendImageARService.BackendImage("1", "TalkAR Logo Front", "front", "/uploads/logo-front.jpg", true),
-                    BackendImageARService.BackendImage("2", "TalkAR Logo Left", "left_angle", "/uploads/logo-left.jpg", true),
-                    BackendImageARService.BackendImage("3", "TalkAR Logo Right", "right_angle", "/uploads/logo-right.jpg", true),
-                    BackendImageARService.BackendImage("4", "TalkAR Logo Bright", "bright", "/uploads/logo-bright.jpg", true),
-                    BackendImageARService.BackendImage("5", "TalkAR Logo Dim", "dim", "/uploads/logo-dim.jpg", true)
-                )
-                else -> emptyList()
-            }
-        } catch (e: Exception) {
-            Log.e("ApiClient", "Failed to get object images", e)
-            emptyList()
-        }
-    }
-}

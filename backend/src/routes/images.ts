@@ -64,7 +64,7 @@ router.post(
       }
 
       // Handle S3 upload for production or local file storage for development
-      if (process.env.NODE_ENV === 'production' && process.env.AWS_S3_BUCKET) {
+      if (process.env.NODE_ENV === "production" && process.env.AWS_S3_BUCKET) {
         // Upload to S3
         imageUrl = await uploadToS3(req.file);
       } else {
@@ -146,6 +146,7 @@ router.post("/:id/dialogues", async (req, res, next) => {
       language,
       voiceId,
       isDefault: isDefault || false,
+      isActive: true,
     });
 
     return res.status(201).json(dialogue);

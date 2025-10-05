@@ -16,8 +16,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.talkar.app.ui.screens.ARScreen
+import com.talkar.app.ui.screens.Week2ARScreen
 import com.talkar.app.ui.theme.TalkARTheme
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
+import com.talkar.app.ui.viewmodels.EnhancedARViewModel
+import com.talkar.app.data.repository.ImageRepository
+import com.talkar.app.data.api.ApiClient
+import com.talkar.app.data.local.ImageDatabase
 
 class MainActivity : ComponentActivity() {
     
@@ -48,8 +53,16 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // Lazy initialization of ViewModel
-                    val viewModel: SimpleARViewModel = viewModel()
+                    // Lazy initialization of ViewModels
+                    val simpleViewModel: SimpleARViewModel = viewModel()
+                    
+                    // Enhanced AR ViewModel for Week 2
+                    val enhancedViewModel: EnhancedARViewModel = viewModel {
+                        val apiService = ApiClient.create()
+                        val database = ImageDatabase.getDatabase(this@MainActivity)
+                        val repository = ImageRepository(apiService, database)
+                        EnhancedARViewModel(repository)
+                    }
                     
                     // Check permissions in background to avoid blocking UI
                     LaunchedEffect(Unit) {
@@ -73,8 +86,9 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     
-                    ARScreen(
-                        viewModel = viewModel,
+                    // Week 2 AR Screen with Avatar Overlay
+                    Week2ARScreen(
+                        viewModel = enhancedViewModel,
                         hasCameraPermission = hasCameraPermission,
                         onPermissionCheck = {
                             // Re-check permission when requested

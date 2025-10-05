@@ -9,6 +9,7 @@ import android.view.TextureView
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,16 +40,20 @@ fun SimpleRealCameraView(
         }
     }
 
-    // Handle lifecycle events
+    // Camera cleanup reference to be set by the AndroidView factory
+    val cameraCleanupRef = remember { mutableStateOf<(() -> Unit)?>(null) }
+
+    // Handle lifecycle events - ensure camera resources are cleaned up when composable is disposed
     DisposableEffect(Unit) {
         onDispose {
             Log.d("SimpleRealCameraView", "Cleaning up camera resources")
+            cameraCleanupRef.value?.invoke()
         }
     }
 
     AndroidView(
         factory = { ctx ->
-            createRealCameraView(ctx, onImageRecognized, onError)
+            createRealCameraView(ctx, onImageRecognized, onError, cameraCleanupRef)
         },
         modifier = modifier.fillMaxSize()
     )
@@ -59,20 +64,27 @@ fun SimpleRealCameraView(
     }
 }
 
+
+
 private fun createRealCameraView(
     context: Context,
     onImageRecognized: (ImageRecognition) -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    cameraCleanupRef: MutableState<(() -> Unit)?>
 ): android.view.View {
     // Create a layout to hold camera preview
     val layout = android.widget.FrameLayout(context)
     
     // Create TextureView for camera preview
     val textureView = TextureView(context)
+
+    // Holder for camera resources so we can close them later
+    val cameraHolder = CameraHolder()
+
     textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
             Log.d("SimpleRealCameraView", "Surface texture available: ${width}x${height}")
-            initializeCamera(textureView, onImageRecognized, onError)
+            initializeCamera(textureView, onImageRecognized, onError, cameraHolder)
         }
         
         override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
@@ -80,7 +92,9 @@ private fun createRealCameraView(
         }
         
         override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
-            Log.d("SimpleRealCameraView", "Surface texture destroyed")
+            Log.d("SimpleRealCameraView", "Surface texture destroyed - cleaning up camera resources")
+            // Ensure we close camera resources when surface is destroyed
+            cameraHolder.close()
             return true
         }
         
@@ -90,6 +104,16 @@ private fun createRealCameraView(
     }
     
     layout.addView(textureView)
+
+    // Expose cleanup via the composable so it can be invoked on dispose
+    cameraCleanupRef.value = {
+        try {
+            Log.d("SimpleRealCameraView", "Composable requested camera cleanup")
+            cameraHolder.close()
+        } catch (e: Exception) {
+            Log.e("SimpleRealCameraView", "Error during camera cleanup", e)
+        }
+    }
     
     // Add scanning indicator overlay
     val scanningOverlay = android.widget.TextView(context).apply {
@@ -136,7 +160,8 @@ private fun createRealCameraView(
 private fun initializeCamera(
     textureView: TextureView,
     onImageRecognized: (ImageRecognition) -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    cameraHolder: CameraHolder
 ) {
     try {
         val cameraManager = textureView.context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -147,17 +172,22 @@ private fun initializeCamera(
         cameraManager.openCamera(cameraId, java.util.concurrent.Executors.newSingleThreadExecutor(), object : CameraDevice.StateCallback() {
             override fun onOpened(camera: CameraDevice) {
                 Log.d("SimpleRealCameraView", "Camera opened successfully")
-                
+
                 try {
                     // Create capture session
                     val surface = Surface(textureView.surfaceTexture)
                     val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
                     captureRequest.addTarget(surface)
-                    
+
+                    // populate holder
+                    cameraHolder.cameraDevice = camera
+                    cameraHolder.surface = surface
+
                     camera.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
                         override fun onConfigured(session: CameraCaptureSession) {
                             Log.d("SimpleRealCameraView", "Camera session configured")
                             try {
+                                cameraHolder.captureSession = session
                                 session.setRepeatingRequest(captureRequest.build(), null, null)
                                 Log.d("SimpleRealCameraView", "Camera preview started")
                             } catch (e: Exception) {
@@ -165,7 +195,7 @@ private fun initializeCamera(
                                 onError("Failed to start camera preview: ${e.message}")
                             }
                         }
-                        
+
                         override fun onConfigureFailed(session: CameraCaptureSession) {
                             Log.e("SimpleRealCameraView", "Camera session configuration failed")
                             onError("Camera session configuration failed")
@@ -176,11 +206,11 @@ private fun initializeCamera(
                     onError("Failed to create capture session: ${e.message}")
                 }
             }
-            
+
             override fun onDisconnected(camera: CameraDevice) {
                 Log.d("SimpleRealCameraView", "Camera disconnected")
             }
-            
+
             override fun onError(camera: CameraDevice, error: Int) {
                 Log.e("SimpleRealCameraView", "Camera error: $error")
                 onError("Camera error: $error")
