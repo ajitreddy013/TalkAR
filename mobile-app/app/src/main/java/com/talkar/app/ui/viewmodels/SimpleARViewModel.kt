@@ -32,6 +32,12 @@ class SimpleARViewModel : ViewModel() {
     
     private val _recognizedAugmentedImage = MutableStateFlow<AugmentedImage?>(null)
     val recognizedAugmentedImage: StateFlow<AugmentedImage?> = _recognizedAugmentedImage.asStateFlow()
+
+    // Simple debounce/deduplication to avoid repeated detection events flooding logs
+    // and triggering duplicate backend work when AR repeatedly detects the same target.
+    private val detectionCooldownMillis = 2_000L // 2 seconds cooldown per image
+    private val lastDetectionTimestamp = mutableMapOf<String, Long>()
+    private var currentlyProcessingImageId: String? = null
     
     init {
         // Lightweight initialization - defer heavy work
@@ -52,7 +58,32 @@ class SimpleARViewModel : ViewModel() {
     fun recognizeImage(imageRecognition: ImageRecognition) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
             android.util.Log.d("SimpleARViewModel", "recognizeImage called for: ${imageRecognition.name}")
-            
+            // Deduplicate rapid repeated detections for the same image
+            val now = System.currentTimeMillis()
+            val key = imageRecognition.id
+            val last = lastDetectionTimestamp[key] ?: 0L
+            if (now - last < detectionCooldownMillis) {
+                android.util.Log.d(
+                    "SimpleARViewModel",
+                    "Duplicate detection ignored for '${imageRecognition.name}' (id=$key). Time since last: ${now - last}ms"
+                )
+                return@launch
+            }
+
+            // If we are already processing this image (network/generation) avoid starting again
+            if (currentlyProcessingImageId == key) {
+                android.util.Log.d(
+                    "SimpleARViewModel",
+                    "Already processing image '${imageRecognition.name}' (id=$key) - skipping duplicate detection"
+                )
+                // update timestamp to avoid noisy repeats
+                lastDetectionTimestamp[key] = now
+                return@launch
+            }
+
+            // record this detection time
+            lastDetectionTimestamp[key] = now
+
             // Immediate UI update on main thread
             _recognizedImage.value = imageRecognition
             _uiState.value = _uiState.value.copy(
