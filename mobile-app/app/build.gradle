@@ -16,6 +16,11 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // Expose API configuration to the app via BuildConfig so it can be changed per build variant
+        buildConfigField "String", "API_PROTOCOL", '"http"'
+        buildConfigField "String", "API_HOST", '"10.17.5.127"'
+        buildConfigField "int", "API_PORT", "3000"
+        buildConfigField "String", "API_VERSION", '"v1"'
     }
 
     buildTypes {
@@ -36,6 +41,7 @@ android {
     
     buildFeatures {
         compose true
+        buildConfig true
     }
     
     composeOptions {

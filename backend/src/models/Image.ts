@@ -40,6 +40,7 @@ export interface DialogueAttributes {
   text: string;
   language: string;
   voiceId?: string;
+  isActive: boolean;
   isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -57,6 +58,7 @@ export class Dialogue
   public text!: string;
   public language!: string;
   public voiceId?: string;
+  public isActive!: boolean;
   public isDefault!: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -132,6 +134,10 @@ Dialogue.init(
     voiceId: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
     },
     isDefault: {
       type: DataTypes.BOOLEAN,
