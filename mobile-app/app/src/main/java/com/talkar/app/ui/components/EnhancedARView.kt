@@ -125,7 +125,7 @@ fun SimpleARView(
     LaunchedEffect(isLifecycleActive) {
         if (!isLifecycleActive) return@LaunchedEffect
         // Only run the detection loop while the coroutine scope is active and lifecycle is STARTED
-        while (isActive) {
+        while (isActive && isLifecycleActive) {
             delay(3000) // Simulate detection every 3 seconds
             isDetecting = true
             detectedImage = "Test Image ${System.currentTimeMillis() % 10}"
