@@ -75,6 +75,10 @@ Dialogue.init(
       type: "STRING",
       allowNull: true,
     },
+    isActive: {
+      type: "BOOLEAN",
+      defaultValue: true,
+    },
     isDefault: {
       type: "BOOLEAN",
       defaultValue: false,

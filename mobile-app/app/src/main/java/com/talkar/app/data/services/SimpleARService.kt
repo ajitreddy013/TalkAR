@@ -49,6 +49,10 @@ class SimpleARService(private val context: Context) {
     
     // Cache
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
+
+    // Throttle frequent per-frame success logs to avoid flooding logs (milliseconds)
+    private var lastFrameSuccessLogTime = 0L
+    private val frameSuccessLogInterval = 2_000L // 2 seconds
     
     /**
      * Initialize simple AR service with minimal configuration
@@ -321,45 +325,39 @@ class SimpleARService(private val context: Context) {
      */
     private fun startSimpleFrameProcessing() {
         GlobalScope.launch(Dispatchers.IO) {
-            var glContextReady = false
             var glContextWaitTime = 0L
             val maxGlContextWaitTime = 10000L // 10 seconds max wait
             
             while (_isTracking.value) {
                 try {
                     session?.let { session ->
-                        // Wait for GL context to be ready
-                        if (!glContextReady) {
-                            if (glContextWaitTime < maxGlContextWaitTime) {
-                                Log.d(tag, "Waiting for GL context... (${glContextWaitTime}ms)")
-                                delay(500)
-                                glContextWaitTime += 500
-                                return@let
-                            } else {
-                                Log.e(tag, "GL context not ready after ${maxGlContextWaitTime}ms")
-                                _error.value = "ARCore GL context initialization timeout. Please restart the app."
-                                _isTracking.value = false
-                                return@launch
-                            }
-                        }
-                        
-                        // Try to update the session only if GL context is ready
+                        // Attempt to update the session - this will throw MissingGlContextException if GL context isn't ready
                         val frame = session.update()
                         processSimpleFrame(frame)
                         
-                        // Mark GL context as ready if we successfully got a frame
-                        if (!glContextReady) {
-                            glContextReady = true
-                            Log.d(tag, "GL context is now ready!")
+                        // If we get here, GL context is ready and we successfully got a frame
+                        val now = System.currentTimeMillis()
+                        if (now - lastFrameSuccessLogTime >= frameSuccessLogInterval) {
+                            Log.d(tag, "GL context is ready and frame processed successfully")
+                            lastFrameSuccessLogTime = now
                         }
+                        
                     }
                     
                     delay(100) // Slower processing to reduce load
                 } catch (e: com.google.ar.core.exceptions.MissingGlContextException) {
-                    Log.w(tag, "Missing GL context, waiting for initialization...")
-                    glContextReady = false
-                    glContextWaitTime = 0L
-                    delay(1000) // Wait for GL context initialization
+                    Log.w(tag, "Missing GL context, waiting for initialization... (${glContextWaitTime}ms)")
+                    
+                    // Check if we've been waiting too long
+                    if (glContextWaitTime >= maxGlContextWaitTime) {
+                        Log.e(tag, "GL context not ready after ${maxGlContextWaitTime}ms")
+                        _error.value = "ARCore GL context initialization timeout. Please restart the app."
+                        _isTracking.value = false
+                        return@launch
+                    }
+                    
+                    delay(500)
+                    glContextWaitTime += 500
                 } catch (e: com.google.ar.core.exceptions.SessionPausedException) {
                     Log.d(tag, "ARCore session paused, waiting...")
                     delay(1000)

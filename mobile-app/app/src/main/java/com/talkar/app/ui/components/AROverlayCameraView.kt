@@ -20,7 +20,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.TalkingHeadVideo
 import com.talkar.app.data.services.MLKitRecognitionService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
 
 @Composable
@@ -38,6 +41,8 @@ fun AROverlayCameraView(
 
     // Initialize ML Kit service
     val mlKitService = remember { MLKitRecognitionService(context) }
+    // Lifecycle-tied scope so background work is cancelled when composable leaves
+    val coroutineScope = rememberCoroutineScope()
     
     // Initialize camera when component is created
     LaunchedEffect(Unit) {
@@ -53,16 +58,20 @@ fun AROverlayCameraView(
     }
 
     // Handle lifecycle events
+    // Camera cleanup reference to be set by AndroidView factory
+    val cameraCleanupRef = remember { mutableStateOf<(() -> Unit)?>(null) }
+
     DisposableEffect(Unit) {
         onDispose {
             Log.d("AROverlayCameraView", "Cleaning up AR overlay camera resources")
             mlKitService.cleanup()
+            cameraCleanupRef.value?.invoke()
         }
     }
 
     AndroidView(
         factory = { ctx ->
-            createAROverlayCameraView(ctx, mlKitService, onImageRecognized, onError, talkingHeadVideo)
+            createAROverlayCameraView(ctx, mlKitService, onImageRecognized, onError, talkingHeadVideo, coroutineScope, cameraCleanupRef)
         },
         modifier = modifier.fillMaxSize()
     )
@@ -78,17 +87,22 @@ private fun createAROverlayCameraView(
     mlKitService: MLKitRecognitionService,
     onImageRecognized: (ImageRecognition) -> Unit,
     onError: (String) -> Unit,
-    talkingHeadVideo: TalkingHeadVideo?
-): android.view.View {
+    talkingHeadVideo: TalkingHeadVideo?,
+    coroutineScope: CoroutineScope,
+    cameraCleanupRef: MutableState<(() -> Unit)?>
+) : android.view.View {
     // Create a layout to hold camera preview and AR overlay
     val layout = android.widget.FrameLayout(context)
     
     // Create TextureView for camera preview
     val textureView = TextureView(context)
+
+    val cameraHolder = CameraHolder()
+
     textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
             Log.d("AROverlayCameraView", "Surface texture available: ${width}x${height}")
-            initializeCamera(textureView, mlKitService, onImageRecognized, onError)
+            initializeCamera(textureView, mlKitService, onImageRecognized, onError, cameraHolder)
         }
         
         override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
@@ -96,7 +110,8 @@ private fun createAROverlayCameraView(
         }
         
         override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
-            Log.d("AROverlayCameraView", "Surface texture destroyed")
+            Log.d("AROverlayCameraView", "Surface texture destroyed - cleaning up camera resources")
+            cameraHolder.close()
             return true
         }
         
@@ -138,7 +153,7 @@ private fun createAROverlayCameraView(
         setOnClickListener {
             Log.d("AROverlayCameraView", "Manual AR detection triggered")
             // Capture current frame and run recognition
-            captureAndRecognize(textureView, mlKitService, onImageRecognized, onError)
+            captureAndRecognize(textureView, mlKitService, onImageRecognized, onError, coroutineScope)
         }
     }
     
@@ -149,7 +164,17 @@ private fun createAROverlayCameraView(
     buttonParams.gravity = android.view.Gravity.BOTTOM or android.view.Gravity.CENTER
     buttonParams.bottomMargin = 100
     layout.addView(detectButton, buttonParams)
-    
+
+    // expose cleanup to composable
+    cameraCleanupRef.value = {
+        try {
+            Log.d("AROverlayCameraView", "Composable requested camera cleanup")
+            cameraHolder.close()
+        } catch (e: Exception) {
+            Log.e("AROverlayCameraView", "Error during camera cleanup", e)
+        }
+    }
+
     return layout
 }
 
@@ -211,7 +236,8 @@ private fun initializeCamera(
     textureView: TextureView,
     mlKitService: MLKitRecognitionService,
     onImageRecognized: (ImageRecognition) -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    cameraHolder: CameraHolder
 ) {
     try {
         val cameraManager = textureView.context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -222,17 +248,22 @@ private fun initializeCamera(
         cameraManager.openCamera(cameraId, Executors.newSingleThreadExecutor(), object : CameraDevice.StateCallback() {
             override fun onOpened(camera: CameraDevice) {
                 Log.d("AROverlayCameraView", "Camera opened successfully")
-                
+
                 try {
                     // Create capture session
                     val surface = Surface(textureView.surfaceTexture)
                     val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
                     captureRequest.addTarget(surface)
-                    
+
+                    // populate holder
+                    cameraHolder.cameraDevice = camera
+                    cameraHolder.surface = surface
+
                     camera.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
                         override fun onConfigured(session: CameraCaptureSession) {
                             Log.d("AROverlayCameraView", "Camera session configured")
                             try {
+                                cameraHolder.captureSession = session
                                 session.setRepeatingRequest(captureRequest.build(), null, null)
                                 Log.d("AROverlayCameraView", "AR overlay camera preview started")
                             } catch (e: Exception) {
@@ -240,7 +271,7 @@ private fun initializeCamera(
                                 onError("Failed to start camera preview: ${e.message}")
                             }
                         }
-                        
+
                         override fun onConfigureFailed(session: CameraCaptureSession) {
                             Log.e("AROverlayCameraView", "Camera session configuration failed")
                             onError("Camera session configuration failed")
@@ -251,11 +282,11 @@ private fun initializeCamera(
                     onError("Failed to create capture session: ${e.message}")
                 }
             }
-            
+
             override fun onDisconnected(camera: CameraDevice) {
                 Log.d("AROverlayCameraView", "Camera disconnected")
             }
-            
+
             override fun onError(camera: CameraDevice, error: Int) {
                 Log.e("AROverlayCameraView", "Camera error: $error")
                 onError("Camera error: $error")
@@ -272,7 +303,8 @@ private fun captureAndRecognize(
     textureView: TextureView,
     mlKitService: MLKitRecognitionService,
     onImageRecognized: (ImageRecognition) -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    coroutineScope: CoroutineScope
 ) {
     try {
         Log.d("AROverlayCameraView", "Capturing frame for AR recognition")
@@ -282,25 +314,31 @@ private fun captureAndRecognize(
         if (bitmap != null) {
             Log.d("AROverlayCameraView", "Frame captured: ${bitmap.width}x${bitmap.height}")
             
-            // Run ML Kit recognition in background
-            kotlinx.coroutines.GlobalScope.launch {
+            // Run ML Kit recognition in background using lifecycle-tied scope
+            coroutineScope.launch {
                 try {
-                    val recognitionResult = mlKitService.recognizeImage(bitmap)
-                    
+                    val recognitionResult = withContext(Dispatchers.Default) {
+                        mlKitService.recognizeImage(bitmap)
+                    }
+
                     Log.d("AROverlayCameraView", "AR recognition completed")
                     Log.d("AROverlayCameraView", "Primary label: ${recognitionResult.primaryLabel}")
                     Log.d("AROverlayCameraView", "Confidence: ${recognitionResult.confidence}")
                     Log.d("AROverlayCameraView", "Processing time: ${recognitionResult.processingTimeMs}ms")
-                    
-                    // Convert to ImageRecognition model
-                    val imageRecognition = mlKitService.convertToImageRecognition(recognitionResult)
-                    
-                    // Trigger recognition callback
-                    onImageRecognized(imageRecognition)
-                    
+
+                    val imageRecognition = withContext(Dispatchers.Default) {
+                        mlKitService.convertToImageRecognition(recognitionResult)
+                    }
+
+                    withContext(Dispatchers.Main) {
+                        onImageRecognized(imageRecognition)
+                    }
+
                 } catch (e: Exception) {
                     Log.e("AROverlayCameraView", "AR recognition failed", e)
-                    onError("Recognition failed: ${e.message}")
+                    withContext(Dispatchers.Main) {
+                        onError("Recognition failed: ${e.message}")
+                    }
                 }
             }
         } else {

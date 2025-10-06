@@ -7,9 +7,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
-import com.talkar.app.ui.components.MLKitCameraView
 import com.talkar.app.ui.components.AROverlayCameraView
+import com.talkar.app.ui.components.EnhancedARView
+import com.talkar.app.ui.components.SimpleARView
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
+import com.talkar.app.ui.viewmodels.EnhancedARViewModel
+import com.talkar.app.data.models.BackendImage
+import com.talkar.app.data.models.Avatar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,7 +91,7 @@ fun ARScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("TalkAR") },
+                title = { Text("TalkAR - Week 2") },
                 actions = {
                     if (recognizedImage != null) {
                         TextButton(
@@ -100,19 +104,17 @@ fun ARScreen(
             )
         }
     ) { paddingValues ->
-        // AR Overlay Camera with Talking Head Video
-        AROverlayCameraView(
+        // Enhanced AR View with Avatar Overlay
+        EnhancedARView(
             modifier = modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            onImageRecognized = { imageRecognition ->
-                viewModel.recognizeImage(imageRecognition)
+            onImageDetected = { image, avatar ->
+                android.util.Log.d("ARScreen", "Image detected: ${image.name} with avatar: ${avatar?.name}")
             },
-            onError = { errorMessage ->
-                viewModel.setArError(errorMessage)
-            },
-            talkingHeadVideo = talkingHeadVideo,
-            isImageDetected = recognizedImage != null
+            onImageLost = { imageId ->
+                android.util.Log.d("ARScreen", "Image lost: $imageId")
+            }
         )
     }
 }
