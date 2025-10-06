@@ -19,8 +19,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.services.MLKitRecognitionService
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.Executors
+
+
 
 @Composable
 fun MLKitCameraView(
@@ -36,6 +41,8 @@ fun MLKitCameraView(
 
     // Initialize ML Kit service
     val mlKitService = remember { MLKitRecognitionService(context) }
+    // Use a lifecycle-tied scope so work is cancelled when the composable leaves composition
+    val coroutineScope = rememberCoroutineScope()
     
     // Initialize camera when component is created
     LaunchedEffect(Unit) {
@@ -51,16 +58,20 @@ fun MLKitCameraView(
     }
 
     // Handle lifecycle events
+    // Camera cleanup reference to be set by AndroidView factory
+    val cameraCleanupRef = remember { mutableStateOf<(() -> Unit)?>(null) }
+
     DisposableEffect(Unit) {
         onDispose {
             Log.d("MLKitCameraView", "Cleaning up ML Kit camera resources")
             mlKitService.cleanup()
+            cameraCleanupRef.value?.invoke()
         }
     }
 
     AndroidView(
         factory = { ctx ->
-            createMLKitCameraView(ctx, mlKitService, onImageRecognized, onError)
+            createMLKitCameraView(ctx, mlKitService, onImageRecognized, onError, coroutineScope, cameraCleanupRef)
         },
         modifier = modifier.fillMaxSize()
     )
@@ -75,17 +86,22 @@ private fun createMLKitCameraView(
     context: Context,
     mlKitService: MLKitRecognitionService,
     onImageRecognized: (ImageRecognition) -> Unit,
-    onError: (String) -> Unit
-): android.view.View {
+    onError: (String) -> Unit,
+    coroutineScope: CoroutineScope,
+    cameraCleanupRef: MutableState<(() -> Unit)?>
+) : android.view.View {
     // Create a layout to hold camera preview
     val layout = android.widget.FrameLayout(context)
     
     // Create TextureView for camera preview
     val textureView = TextureView(context)
+
+    val cameraHolder = CameraHolder()
+
     textureView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
             Log.d("MLKitCameraView", "Surface texture available: ${width}x${height}")
-            initializeCamera(textureView, mlKitService, onImageRecognized, onError)
+            initializeCamera(textureView, mlKitService, onImageRecognized, onError, cameraHolder)
         }
         
         override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
@@ -93,7 +109,8 @@ private fun createMLKitCameraView(
         }
         
         override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
-            Log.d("MLKitCameraView", "Surface texture destroyed")
+            Log.d("MLKitCameraView", "Surface texture destroyed - cleaning up camera resources")
+            cameraHolder.close()
             return true
         }
         
@@ -132,7 +149,7 @@ private fun createMLKitCameraView(
         setOnClickListener {
             Log.d("MLKitCameraView", "Manual ML Kit detection triggered")
             // Capture current frame and run recognition
-            captureAndRecognize(textureView, mlKitService, onImageRecognized, onError)
+            captureAndRecognize(textureView, mlKitService, onImageRecognized, onError, coroutineScope)
         }
     }
     
@@ -144,6 +161,16 @@ private fun createMLKitCameraView(
     buttonParams.bottomMargin = 100
     layout.addView(detectButton, buttonParams)
     
+    // expose cleanup to composable
+    cameraCleanupRef.value = {
+        try {
+            Log.d("MLKitCameraView", "Composable requested camera cleanup")
+            cameraHolder.close()
+        } catch (e: Exception) {
+            Log.e("MLKitCameraView", "Error during camera cleanup", e)
+        }
+    }
+
     return layout
 }
 
@@ -151,7 +178,8 @@ private fun initializeCamera(
     textureView: TextureView,
     mlKitService: MLKitRecognitionService,
     onImageRecognized: (ImageRecognition) -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    cameraHolder: CameraHolder
 ) {
     try {
         val cameraManager = textureView.context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -162,17 +190,22 @@ private fun initializeCamera(
         cameraManager.openCamera(cameraId, Executors.newSingleThreadExecutor(), object : CameraDevice.StateCallback() {
             override fun onOpened(camera: CameraDevice) {
                 Log.d("MLKitCameraView", "Camera opened successfully")
-                
+
                 try {
                     // Create capture session
                     val surface = Surface(textureView.surfaceTexture)
                     val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
                     captureRequest.addTarget(surface)
-                    
+
+                    // populate holder
+                    cameraHolder.cameraDevice = camera
+                    cameraHolder.surface = surface
+
                     camera.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
                         override fun onConfigured(session: CameraCaptureSession) {
                             Log.d("MLKitCameraView", "Camera session configured")
                             try {
+                                cameraHolder.captureSession = session
                                 session.setRepeatingRequest(captureRequest.build(), null, null)
                                 Log.d("MLKitCameraView", "ML Kit camera preview started")
                             } catch (e: Exception) {
@@ -180,7 +213,7 @@ private fun initializeCamera(
                                 onError("Failed to start camera preview: ${e.message}")
                             }
                         }
-                        
+
                         override fun onConfigureFailed(session: CameraCaptureSession) {
                             Log.e("MLKitCameraView", "Camera session configuration failed")
                             onError("Camera session configuration failed")
@@ -191,11 +224,11 @@ private fun initializeCamera(
                     onError("Failed to create capture session: ${e.message}")
                 }
             }
-            
+
             override fun onDisconnected(camera: CameraDevice) {
                 Log.d("MLKitCameraView", "Camera disconnected")
             }
-            
+
             override fun onError(camera: CameraDevice, error: Int) {
                 Log.e("MLKitCameraView", "Camera error: $error")
                 onError("Camera error: $error")
@@ -212,7 +245,8 @@ private fun captureAndRecognize(
     textureView: TextureView,
     mlKitService: MLKitRecognitionService,
     onImageRecognized: (ImageRecognition) -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    coroutineScope: CoroutineScope
 ) {
     try {
         Log.d("MLKitCameraView", "Capturing frame for ML Kit recognition")
@@ -222,25 +256,33 @@ private fun captureAndRecognize(
         if (bitmap != null) {
             Log.d("MLKitCameraView", "Frame captured: ${bitmap.width}x${bitmap.height}")
             
-            // Run ML Kit recognition in background
-            kotlinx.coroutines.GlobalScope.launch {
+            // Run ML Kit recognition in background using lifecycle-tied scope
+            coroutineScope.launch {
                 try {
-                    val recognitionResult = mlKitService.recognizeImage(bitmap)
-                    
+                    val recognitionResult = withContext(Dispatchers.Default) {
+                        mlKitService.recognizeImage(bitmap)
+                    }
+
                     Log.d("MLKitCameraView", "ML Kit recognition completed")
                     Log.d("MLKitCameraView", "Primary label: ${recognitionResult.primaryLabel}")
                     Log.d("MLKitCameraView", "Confidence: ${recognitionResult.confidence}")
                     Log.d("MLKitCameraView", "Processing time: ${recognitionResult.processingTimeMs}ms")
-                    
-                    // Convert to ImageRecognition model
-                    val imageRecognition = mlKitService.convertToImageRecognition(recognitionResult)
-                    
-                    // Trigger recognition callback
-                    onImageRecognized(imageRecognition)
-                    
+
+                    // Convert to ImageRecognition model on background dispatcher
+                    val imageRecognition = withContext(Dispatchers.Default) {
+                        mlKitService.convertToImageRecognition(recognitionResult)
+                    }
+
+                    // Post result back on main thread
+                    withContext(Dispatchers.Main) {
+                        onImageRecognized(imageRecognition)
+                    }
+
                 } catch (e: Exception) {
                     Log.e("MLKitCameraView", "ML Kit recognition failed", e)
-                    onError("Recognition failed: ${e.message}")
+                    withContext(Dispatchers.Main) {
+                        onError("Recognition failed: ${e.message}")
+                    }
                 }
             }
         } else {
