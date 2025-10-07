@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  security-events: write
+  actions: read
+  contents: read
+
 jobs:
   # Backend Tests
   backend-tests:
@@ -35,6 +40,23 @@ jobs:
           node-version: "18"
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 1
+          done
+
+      - name: Create PostgreSQL role 'root' if missing
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='root'" | grep -q 1 || \
+          psql -h localhost -U postgres -c "CREATE ROLE root WITH LOGIN SUPERUSER PASSWORD 'postgres';"
 
       - name: Install dependencies
         working-directory: ./backend
@@ -126,15 +148,22 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "11"
+          java-version: "17"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+
+      - name: Ensure Gradle cache directories exist
+        run: |
+          mkdir -p $HOME/.gradle
+          mkdir -p mobile-app/.gradle
+          mkdir -p mobile-app/app/build
 
       - name: Cache Gradle dependencies
         uses: actions/cache@v3
         with:
           path: |
+            ~/.gradle
             mobile-app/.gradle
             mobile-app/app/build
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
@@ -174,7 +203,7 @@ jobs:
           output: "trivy-results.sarif"
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: "trivy-results.sarif"
