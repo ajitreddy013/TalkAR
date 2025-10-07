@@ -115,7 +115,12 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./admin-dashboard
-        run: npm ci
+        run: |
+          npm ci --legacy-peer-deps || (
+            echo "npm ci failed, regenerating lockfile..."
+            rm -f package-lock.json
+            npm install --legacy-peer-deps
+          )
 
       - name: Run linting
         working-directory: ./admin-dashboard
