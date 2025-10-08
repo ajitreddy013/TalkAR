@@ -331,6 +331,16 @@ coverage/
 test-results/
 junit.xml
 
+# E2E/Test artifacts (do not commit)
+reports/
+artifacts/
+test-output/
+screenshots/
+videos/
+.traces/
+playwright-report/
+.playwright/
+
 # ===========================================
 # Documentation
 # ===========================================

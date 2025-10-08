@@ -31,6 +31,16 @@ pids/
 coverage/
 .nyc_output/
 
+# E2E/Test artifacts (do not commit)
+reports/
+artifacts/
+test-output/
+screenshots/
+videos/
+.traces/
+playwright-report/
+.playwright/
+
 # TypeScript cache
 *.tsbuildinfo
 
@@ -48,6 +58,9 @@ coverage/
 # Uploads
 uploads/
 temp/
+
+# Local sqlite database files in repo root or backend folder
+database.sqlite
 
 # AWS credentials
 .aws/

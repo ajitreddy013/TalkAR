@@ -1,0 +1,49 @@
+{
+  "name": "@testsprite/testsprite-mcp",
+  "version": "1.0.0",
+  "description": "TestSprite MCP server for testing and validation",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "testsprite-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "express": "^4.18.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "testing",
+    "validation",
+    "testsprite",
+    "ai-testing"
+  ],
+  "author": "TestSprite Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/testsprite/testsprite-mcp.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
