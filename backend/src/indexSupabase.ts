@@ -9,9 +9,9 @@ import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
 import { defineAssociations } from "./models/associations";
 import imageRoutes from "./routes/images";
-import syncRoutes from "./routes/sync";
+import syncRoutes from "./routes/syncSupabase";
 import adminRoutes from "./routes/admin";
-import authRoutes from "./routes/auth";
+import authRoutes from "./routes/authSupabase";
 import multiImageRoutes from "./routes/multiImageRoutes";
 import avatarRoutes from "./routes/avatars";
 import lipSyncRoutes from "./routes/lipSync";
@@ -101,6 +101,7 @@ app.get("/health", (req, res) => {
     status: "OK",
     timestamp: new Date().toISOString(),
     version: "1.0.0",
+    supabase: true,
   });
 });
 

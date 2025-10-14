@@ -28,13 +28,13 @@ router.get("/getScriptForImage/:imageId", async (req, res, next) => {
     }
 
     const dialogues = (image as any).dialogues || [];
-    
+
     if (dialogues.length === 0) {
       return res.status(404).json({ error: "No scripts found for this image" });
     }
 
     // Select script based on index or random selection
-    let selectedScript;
+    let selectedScript: any;
     if (scriptIndex && !isNaN(Number(scriptIndex))) {
       const index = Number(scriptIndex);
       selectedScript = dialogues[index] || dialogues[0];
@@ -70,11 +70,17 @@ router.get("/getScriptForImage/:imageId", async (req, res, next) => {
       },
       avatar: (avatarMapping as any)?.avatar || null,
       availableScripts: dialogues.length,
-      currentScriptIndex: dialogues.findIndex((d: any) => d.id === selectedScript.id),
+      currentScriptIndex: dialogues.findIndex(
+        (d: any) => d.id === selectedScript.id
+      ),
     };
 
     // Log the script selection for analytics
-    console.log(`[ANALYTICS] Script selected for image ${image.name}: "${selectedScript.text.substring(0, 50)}..."`);
+    console.log(
+      `[ANALYTICS] Script selected for image ${
+        image.name
+      }: "${selectedScript.text.substring(0, 50)}..."`
+    );
 
     return res.json(response);
   } catch (error) {
@@ -108,13 +114,14 @@ router.get("/getAllScriptsForImage/:imageId", async (req, res, next) => {
         name: image.name,
         description: image.description,
       },
-      scripts: (image as any).dialogues?.map((dialogue: any) => ({
-        id: dialogue.id,
-        text: dialogue.text,
-        language: dialogue.language,
-        voiceId: dialogue.voiceId,
-        isDefault: dialogue.isDefault,
-      })) || [],
+      scripts:
+        (image as any).dialogues?.map((dialogue: any) => ({
+          id: dialogue.id,
+          text: dialogue.text,
+          language: dialogue.language,
+          voiceId: dialogue.voiceId,
+          isDefault: dialogue.isDefault,
+        })) || [],
       totalScripts: (image as any).dialogues?.length || 0,
     };
 
@@ -125,59 +132,66 @@ router.get("/getAllScriptsForImage/:imageId", async (req, res, next) => {
 });
 
 // Get next script in sequence
-router.get("/getNextScript/:imageId/:currentScriptId", async (req, res, next) => {
-  try {
-    const { imageId, currentScriptId } = req.params;
+router.get(
+  "/getNextScript/:imageId/:currentScriptId",
+  async (req, res, next) => {
+    try {
+      const { imageId, currentScriptId } = req.params;
 
-    const image = await Image.findByPk(imageId, {
-      include: [
-        {
-          model: Dialogue,
-          as: "dialogues",
-          where: { isActive: true },
-          required: false,
+      const image = await Image.findByPk(imageId, {
+        include: [
+          {
+            model: Dialogue,
+            as: "dialogues",
+            where: { isActive: true },
+            required: false,
+          },
+        ],
+      });
+
+      if (!image) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+
+      const dialogues = (image as any).dialogues || [];
+      const currentIndex = dialogues.findIndex(
+        (d: any) => d.id === currentScriptId
+      );
+
+      if (currentIndex === -1) {
+        return res.status(404).json({ error: "Current script not found" });
+      }
+
+      // Get next script (cycle back to first if at end)
+      const nextIndex = (currentIndex + 1) % dialogues.length;
+      const nextScript = dialogues[nextIndex];
+
+      const response = {
+        image: {
+          id: image.id,
+          name: image.name,
         },
-      ],
-    });
+        script: {
+          id: nextScript.id,
+          text: nextScript.text,
+          language: nextScript.language,
+          voiceId: nextScript.voiceId,
+          isDefault: nextScript.isDefault,
+        },
+        currentIndex: nextIndex,
+        totalScripts: dialogues.length,
+      };
 
-    if (!image) {
-      return res.status(404).json({ error: "Image not found" });
+      // Log script progression
+      console.log(
+        `[ANALYTICS] Script progression for ${image.name}: ${currentIndex} -> ${nextIndex}`
+      );
+
+      return res.json(response);
+    } catch (error) {
+      return next(error);
     }
-
-    const dialogues = (image as any).dialogues || [];
-    const currentIndex = dialogues.findIndex((d: any) => d.id === currentScriptId);
-    
-    if (currentIndex === -1) {
-      return res.status(404).json({ error: "Current script not found" });
-    }
-
-    // Get next script (cycle back to first if at end)
-    const nextIndex = (currentIndex + 1) % dialogues.length;
-    const nextScript = dialogues[nextIndex];
-
-    const response = {
-      image: {
-        id: image.id,
-        name: image.name,
-      },
-      script: {
-        id: nextScript.id,
-        text: nextScript.text,
-        language: nextScript.language,
-        voiceId: nextScript.voiceId,
-        isDefault: nextScript.isDefault,
-      },
-      currentIndex: nextIndex,
-      totalScripts: dialogues.length,
-    };
-
-    // Log script progression
-    console.log(`[ANALYTICS] Script progression for ${image.name}: ${currentIndex} -> ${nextIndex}`);
-
-    return res.json(response);
-  } catch (error) {
-    return next(error);
   }
-});
+);
 
 export default router;
