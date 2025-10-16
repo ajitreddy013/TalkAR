@@ -32,8 +32,8 @@ async function testFrontendSupabase() {
   };
 
   try {
-    // Import the Supabase service
-    const { supabaseService } = require('./src/services/supabase');
+    // Import the Supabase service functions
+    const supabaseService = require('./src/services/supabase');
 
     // Test 1: Authentication
     console.log('🔐 Test 1: Testing Authentication...');

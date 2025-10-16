@@ -1,0 +1,199 @@
+{
+  "passed": 12,
+  "failed": 6,
+  "warnings": 14,
+  "details": [
+    {
+      "test": "File: Supabase config file",
+      "passed": true,
+      "message": "Found",
+      "isWarning": false
+    },
+    {
+      "test": "File: Supabase service file",
+      "passed": true,
+      "message": "Found",
+      "isWarning": false
+    },
+    {
+      "test": "File: Auth service file",
+      "passed": true,
+      "message": "Found",
+      "isWarning": false
+    },
+    {
+      "test": "File: Auth middleware file",
+      "passed": true,
+      "message": "Found",
+      "isWarning": false
+    },
+    {
+      "test": "File: Environment example file",
+      "passed": true,
+      "message": "Found",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Supabase URL placeholder",
+      "passed": false,
+      "message": "Supabase URL placeholder found",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Supabase anon key placeholder",
+      "passed": false,
+      "message": "Supabase anon key placeholder found",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Supabase service key placeholder",
+      "passed": false,
+      "message": "Supabase service key placeholder found",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Supabase client initialization",
+      "passed": true,
+      "message": "Supabase client initialization found",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Database operations",
+      "passed": true,
+      "message": "Database query methods found",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Authentication methods",
+      "passed": false,
+      "message": "Missing auth methods",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Route admin.ts imports",
+      "passed": true,
+      "message": "Supabase/auth imports found",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Route analytics.ts imports",
+      "passed": false,
+      "message": "Standard route structure",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Route auth.ts imports",
+      "passed": true,
+      "message": "Supabase/auth imports found",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Route authSupabase.ts imports",
+      "passed": true,
+      "message": "Supabase/auth imports found",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Route avatars.ts imports",
+      "passed": false,
+      "message": "Standard route structure",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Route enhancedLipSync.ts imports",
+      "passed": false,
+      "message": "Standard route structure",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Route images.ts imports",
+      "passed": false,
+      "message": "Standard route structure",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Route lipSync.ts imports",
+      "passed": false,
+      "message": "Standard route structure",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Route multiImageRoutes.ts imports",
+      "passed": false,
+      "message": "Standard route structure",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Route scripts.ts imports",
+      "passed": false,
+      "message": "Standard route structure",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Route sync.ts imports",
+      "passed": false,
+      "message": "Standard route structure",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Route syncSupabase.ts imports",
+      "passed": true,
+      "message": "Supabase/auth imports found",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Auth middleware",
+      "passed": false,
+      "message": "Standard middleware structure",
+      "isWarning": true
+    },
+    {
+      "test": "File: Database types file",
+      "passed": false,
+      "message": "Missing: ./src/types/database.ts",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Database type definitions",
+      "passed": false,
+      "message": "Error reading file: ENOENT: no such file or directory, open './src/types/database.ts'",
+      "isWarning": false
+    },
+    {
+      "test": "File: Supabase test file",
+      "passed": false,
+      "message": "Missing: ./src/tests/supabase.test.ts",
+      "isWarning": false
+    },
+    {
+      "test": "File: Auth test file",
+      "passed": false,
+      "message": "Missing: ./src/tests/auth.test.ts",
+      "isWarning": false
+    },
+    {
+      "test": "File: Integration test file",
+      "passed": false,
+      "message": "Missing: ./src/tests/integration.test.ts",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Supabase dependencies",
+      "passed": true,
+      "message": "Supabase client dependency found",
+      "isWarning": false
+    },
+    {
+      "test": "Content: Security headers",
+      "passed": false,
+      "message": "Standard configuration",
+      "isWarning": true
+    },
+    {
+      "test": "Content: Real environment variables",
+      "passed": false,
+      "message": "Still using placeholder values",
+      "isWarning": true
+    }
+  ]
+}

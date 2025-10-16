@@ -1,7 +1,7 @@
 version: "3.8"
 
 services:
-  # PostgreSQL Database
+  # PostgreSQL Database (for local development fallback)
   postgres:
     image: postgres:15
     environment:
@@ -12,6 +12,28 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Supabase (for local development)
+  supabase:
+    image: supabase/supabase:latest
+    ports:
+      - "54321:5432"  # Supabase PostgreSQL
+      - "8000:8000"   # Supabase API
+      - "8001:8001"   # Supabase Studio
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - JWT_SECRET=your-super-secret-jwt-key-for-supabase
+      - ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhbGthcmRldiIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNjI3MjA2NTI0LCJleHAiOjE5NDI3ODI1MjR9.X8LqGK5hKuaKX3Iz2L0QkYI9H7_xJm3fX8x3fGKrQ_8
+      - SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhbGthcmRldiIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE2MjcyMDY1MjQsImV4cCI6MTk0Mjc4MjUyNH0.7z5J2xLZhF5nX8q3Y9H1kL2M3N4O5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2
+    volumes:
+      - supabase_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 30s
@@ -31,6 +53,9 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=password
       - JWT_SECRET=your-super-secret-jwt-key
+      - SUPABASE_URL=http://supabase:8000
+      - SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhbGthcmRldiIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNjI3MjA2NTI0LCJleHAiOjE5NDI3ODI1MjR9.X8LqGK5hKuaKX3Iz2L0QkYI9H7_xJm3fX8x3fGKrQ_8
+      - SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhbGthcmRldiIsInJvbGUiOiJzZXJ2aWNlX3JvbGUiLCJpYXQiOjE2MjcyMDY1MjQsImV4cCI6MTk0Mjc4MjUyNH0.7z5J2xLZhF5nX5q3Y9H1kL2M3N4O5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2
       - AWS_ACCESS_KEY_ID=your-aws-access-key
       - AWS_SECRET_ACCESS_KEY=your-aws-secret-key
       - AWS_REGION=us-east-1
@@ -40,6 +65,8 @@ services:
       - CORS_ORIGIN=http://localhost:3001
     depends_on:
       postgres:
+        condition: service_healthy
+      supabase:
         condition: service_healthy
     volumes:
       - ./backend:/app
@@ -52,11 +79,26 @@ services:
       - "3001:3000"
     environment:
       - REACT_APP_API_URL=http://localhost:3000/api/v1
+      - REACT_APP_SUPABASE_URL=http://localhost:8000
+      - REACT_APP_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhbGthcmRldiIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNjI3MjA2NTI0LCJleHAiOjE5NDI3ODI1MjR9.X8LqGK5hKuaKX3Iz2L0QkYI9H7_xJm3fX8x3fGKrQ_8
     depends_on:
       - backend
+      - supabase
     volumes:
       - ./admin-dashboard:/app
       - /app/node_modules
 
+  # Supabase Studio (Web Interface)
+  supabase-studio:
+    image: supabase/studio:latest
+    ports:
+      - "3002:3000"
+    environment:
+      - STUDIO_PG_META_URL=http://supabase:8000
+      - POSTGRES_PASSWORD=postgres
+    depends_on:
+      - supabase
+
 volumes:
   postgres_data:
+  supabase_data:
