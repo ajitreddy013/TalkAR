@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import { ScriptService } from './scriptService';
+import { analyticsService } from './analyticsService';
 
 // Enhanced lip-sync service for Week 3
 export interface LipSyncRequest {
@@ -255,6 +257,187 @@ export class EnhancedLipSyncService {
       processingVideos: processing.length,
       failedVideos: failed.length,
       averageProcessingTime: Math.round(avgProcessingTime),
+    };
+  }
+}
+
+/**
+ * Generate lip-sync video for a specific image using dynamic script mapping
+ * Integrates with ScriptService for dynamic script selection
+ */
+static async generateLipSyncVideoForImage(
+  imageId: string, 
+  chunkIndex?: number,
+  userId?: string,
+  sessionId?: string,
+  deviceInfo?: { userAgent: string; ip: string }
+): Promise<{
+  success: boolean;
+  videoId?: string;
+  videoUrl?: string;
+  scriptChunk?: any;
+  error?: string;
+  analyticsId?: string;
+}> {
+  try {
+    console.log(`[LIPSYNC] Generating video for image ${imageId}, chunk ${chunkIndex}`);
+  
+    // Step 1: Get dynamic script chunk for the image
+    const scriptResult = await ScriptService.getScriptForImage(imageId, chunkIndex);
+    
+    if (!scriptResult.success || !scriptResult.scriptChunk) {
+      return {
+        success: false,
+        error: scriptResult.message || "No script available for this image",
+      };
+    }
+  
+    const scriptChunk = scriptResult.scriptChunk;
+  
+    // Step 2: Log analytics for image trigger
+    const analyticsId = await analyticsService.logImageTrigger({
+      imageId,
+      scriptId: scriptChunk.id,
+      userAgent: deviceInfo?.userAgent || "",
+      ip: deviceInfo?.ip || "",
+      userId,
+      sessionId,
+      cacheHit: false, // Will be updated if we find cached video
+    });
+  
+    // Step 3: Check if we already have a video for this script
+    const existingVideos = await this.getVideosForImage(imageId);
+    const matchingVideo = existingVideos.find(v => 
+      v.scriptId === scriptChunk.id && v.status === 'completed' && v.expiresAt > new Date()
+    );
+  
+    if (matchingVideo) {
+      console.log(`[LIPSYNC] Found cached video for script ${scriptChunk.id}`);
+      
+      // Update analytics with cache hit
+      await analyticsService.updateImageTrigger(analyticsId, { cacheHit: true });
+  
+      return {
+        success: true,
+        videoId: matchingVideo.videoId,
+        videoUrl: matchingVideo.videoUrl,
+        scriptChunk,
+        analyticsId,
+      };
+    }
+  
+    // Step 4: Generate new lip-sync video
+    const lipSyncRequest: LipSyncRequest = {
+      text: scriptChunk.text,
+      voiceId: scriptChunk.voiceId || 'voice_001',
+      language: scriptChunk.language || 'en',
+      imageId: imageId,
+      scriptId: scriptChunk.id,
+    };
+  
+    const result = await this.generateLipSyncVideo(lipSyncRequest);
+  
+    if (result.success && result.videoId) {
+      return {
+        success: true,
+        videoId: result.videoId,
+        videoUrl: result.status === 'completed' ? result.videoUrl : undefined,
+        scriptChunk,
+        analyticsId,
+      };
+    } else {
+      return {
+        success: false,
+        error: result.message || "Failed to generate lip-sync video",
+        analyticsId,
+      };
+    }
+  
+  } catch (error) {
+    console.error(`[LIPSYNC] Error generating video for image:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error occurred",
+    };
+  }
+}
+
+/**
+ * Log avatar playback events for analytics
+ */
+static async logAvatarPlayback(
+  videoId: string,
+  event: 'start' | 'pause' | 'resume' | 'complete' | 'error',
+  metadata?: any
+): Promise<void> {
+  try {
+    const storage = videoStorage.get(videoId);
+    if (!storage) {
+      console.warn(`[LIPSYNC] Video not found for playback logging: ${videoId}`);
+      return;
+    }
+
+    await analyticsService.logAvatarPlayback({
+      videoId,
+      imageId: storage.imageId,
+      scriptId: storage.scriptId,
+      event,
+      metadata,
+    });
+
+    console.log(`[LIPSYNC] Logged ${event} event for video ${videoId}`);
+  } catch (error) {
+    console.error(`[LIPSYNC] Error logging avatar playback:`, error);
+  }
+}
+
+/**
+ * Get enhanced analytics including script usage and playback patterns
+ */
+static async getEnhancedAnalytics(imageId?: string): Promise<{
+  videoStats: {
+    totalVideos: number;
+    completedVideos: number;
+    processingVideos: number;
+    failedVideos: number;
+    averageProcessingTime: number;
+  };
+  scriptUsage?: any[];
+  playbackStats?: any;
+}> {
+  try {
+    const videoStats = await this.getAnalytics();
+    
+    let scriptUsage = [];
+    let playbackStats = null;
+
+    if (imageId) {
+      // Get script usage for specific image
+      scriptUsage = await analyticsService.getScriptUsageForImage(imageId);
+      
+      // Get playback stats for videos of this image
+      const videos = await this.getVideosForImage(imageId);
+      const videoIds = videos.map(v => v.videoId);
+      playbackStats = await analyticsService.getPlaybackStatsForVideos(videoIds);
+    } else {
+      // Get overall script usage
+      scriptUsage = await analyticsService.getOverallScriptUsage();
+      
+      // Get overall playback stats
+      playbackStats = await analyticsService.getOverallPlaybackStats();
+    }
+
+    return {
+      videoStats,
+      scriptUsage,
+      playbackStats,
+    };
+  } catch (error) {
+    console.error(`[LIPSYNC] Error getting enhanced analytics:`, error);
+    return {
+      videoStats: await this.getAnalytics(),
+      scriptUsage: [],
+      playbackStats: null,
     };
   }
 }

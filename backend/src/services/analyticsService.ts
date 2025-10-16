@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { supabaseAdmin } from '../config/supabase';
 
 // Analytics and logging service for Week 3
 export interface ImageTriggerEvent {
@@ -11,6 +12,10 @@ export interface ImageTriggerEvent {
   timestamp: Date;
   sessionId: string;
   deviceId?: string;
+  userAgent?: string;
+  ipAddress?: string;
+  recognitionConfidence?: number;
+  processingTime?: number;
 }
 
 export interface AvatarPlayEvent {
@@ -24,6 +29,35 @@ export interface AvatarPlayEvent {
   sessionId: string;
   deviceId?: string;
   status: 'started' | 'completed' | 'interrupted';
+  videoQuality?: 'low' | 'medium' | 'high';
+  bufferingEvents?: number;
+  errorCount?: number;
+}
+
+export interface ScriptAnalytics {
+  scriptId: string;
+  usageCount: number;
+  averageDuration: number;
+  completionRate: number;
+  userEngagement: number;
+  lastUsed: Date;
+  performance: {
+    averageConfidence: number;
+    recognitionAccuracy: number;
+    processingSpeed: number;
+  };
+}
+
+export interface ImageAnalytics {
+  imageId: string;
+  imageName: string;
+  totalTriggers: number;
+  uniqueSessions: number;
+  averageConfidence: number;
+  mostUsedScript: string;
+  peakUsageTime: Date;
+  usageByHour: number[]; // 24 hours
+  usageByDay: number[]; // 7 days
 }
 
 export interface PerformanceMetrics {
@@ -49,6 +83,27 @@ const performanceMetrics = {
 
 export class AnalyticsService {
   /**
+   * Persist analytics event to database (best effort, non-blocking)
+   */
+  static async persistAnalyticsEvent(eventType: string, payload: any, options?: { id?: string; sessionId?: string; deviceId?: string; userId?: string; }): Promise<void> {
+    try {
+      const insertPayload = {
+        id: options?.id,
+        user_id: options?.userId,
+        event_type: eventType,
+        event_data: payload,
+        session_id: options?.sessionId,
+        device_id: options?.deviceId,
+      };
+      const { error } = await supabaseAdmin.from('analytics_events').insert(insertPayload);
+      if (error) {
+        console.warn('[ANALYTICS] Persist error:', error.message);
+      }
+    } catch (err: any) {
+      console.warn('[ANALYTICS] Persist exception:', err?.message || err);
+    }
+  }
+  /**
    * Log image trigger event
    */
   static logImageTrigger(data: {
@@ -59,6 +114,10 @@ export class AnalyticsService {
     voiceId: string;
     sessionId?: string;
     deviceId?: string;
+    userAgent?: string;
+    ipAddress?: string;
+    recognitionConfidence?: number;
+    processingTime?: number;
   }): string {
     const eventId = uuidv4();
     const event: ImageTriggerEvent = {
@@ -71,12 +130,38 @@ export class AnalyticsService {
       timestamp: new Date(),
       sessionId: data.sessionId || 'unknown',
       deviceId: data.deviceId,
+      userAgent: data.userAgent,
+      ipAddress: data.ipAddress,
+      recognitionConfidence: data.recognitionConfidence,
+      processingTime: data.processingTime,
     };
 
     imageTriggerEvents.set(eventId, event);
     performanceMetrics.totalRequests++;
 
     console.log(`[ANALYTICS] Image triggered: ${data.imageName} (${data.imageId}) - Script: "${data.scriptText.substring(0, 50)}..."`);
+    
+    if (data.recognitionConfidence) {
+      console.log(`[ANALYTICS] Recognition confidence: ${(data.recognitionConfidence * 100).toFixed(1)}%`);
+    }
+    
+    if (data.processingTime) {
+      console.log(`[ANALYTICS] Processing time: ${data.processingTime}ms`);
+    }
+
+    // Best-effort persistence
+    void AnalyticsService.persistAnalyticsEvent('image_trigger', {
+      imageId: data.imageId,
+      imageName: data.imageName,
+      scriptId: data.scriptId,
+      scriptText: data.scriptText,
+      voiceId: data.voiceId,
+      userAgent: data.userAgent,
+      ipAddress: data.ipAddress,
+      recognitionConfidence: data.recognitionConfidence,
+      processingTime: data.processingTime,
+      timestamp: event.timestamp.toISOString(),
+    }, { id: eventId, sessionId: event.sessionId, deviceId: event.deviceId });
 
     return eventId;
   }
@@ -107,6 +192,14 @@ export class AnalyticsService {
 
     console.log(`[ANALYTICS] Avatar play started: Video ${data.videoId} for image ${data.imageId}`);
 
+    // Best-effort persistence
+    void AnalyticsService.persistAnalyticsEvent('avatar_play_start', {
+      imageId: data.imageId,
+      scriptId: data.scriptId,
+      videoId: data.videoId,
+      startTime: event.startTime.toISOString(),
+    }, { id: eventId, sessionId: event.sessionId, deviceId: event.deviceId });
+
     return eventId;
   }
 
@@ -127,6 +220,17 @@ export class AnalyticsService {
     avatarPlayEvents.set(eventId, event);
 
     console.log(`[ANALYTICS] Avatar play ended: ${eventId} - Duration: ${event.duration}ms, Status: ${status}`);
+
+    // Best-effort persistence
+    void AnalyticsService.persistAnalyticsEvent('avatar_play_end', {
+      imageId: event.imageId,
+      scriptId: event.scriptId,
+      videoId: event.videoId,
+      startTime: event.startTime.toISOString(),
+      endTime: event.endTime?.toISOString(),
+      duration: event.duration,
+      status: event.status,
+    }, { id: eventId, sessionId: event.sessionId, deviceId: event.deviceId });
   }
 
   /**
@@ -144,6 +248,13 @@ export class AnalyticsService {
     if (performanceMetrics.responseTimes.length > 1000) {
       performanceMetrics.responseTimes = performanceMetrics.responseTimes.slice(-1000);
     }
+
+    // Best-effort persistence
+    void AnalyticsService.persistAnalyticsEvent('response_time', {
+      responseTime,
+      success,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   /**
@@ -156,6 +267,12 @@ export class AnalyticsService {
     if (performanceMetrics.videoProcessingTimes.length > 1000) {
       performanceMetrics.videoProcessingTimes = performanceMetrics.videoProcessingTimes.slice(-1000);
     }
+
+    // Best-effort persistence
+    void AnalyticsService.persistAnalyticsEvent('video_processing_time', {
+      processingTime,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   /**
