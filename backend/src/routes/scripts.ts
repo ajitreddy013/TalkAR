@@ -2,49 +2,39 @@ import express from "express";
 import { Image, Dialogue } from "../models/Image";
 import { Avatar } from "../models/Avatar";
 import { ImageAvatarMapping } from "../models/ImageAvatarMapping";
+import { ScriptService } from "../services/scriptService";
+import { AnalyticsService } from "../services/analyticsService";
 
 const router = express.Router();
 
-// Get script for detected image
+// Get dynamic script chunk for detected image - Enhanced version
 router.get("/getScriptForImage/:imageId", async (req, res, next) => {
   try {
     const { imageId } = req.params;
-    const { scriptIndex } = req.query;
+    const { scriptIndex, chunkIndex } = req.query;
+    
+    // Get user agent and IP for analytics
+    const userAgent = req.get("User-Agent");
+    const ipAddress = req.ip || req.connection.remoteAddress;
 
-    // Find the image with its dialogues
-    const image = await Image.findByPk(imageId, {
-      include: [
-        {
-          model: Dialogue,
-          as: "dialogues",
-          where: { isActive: true },
-          required: false,
-        },
-      ],
-    });
+    // Use enhanced ScriptService for dynamic script mapping
+    const result = await ScriptService.getScriptForImage(
+      imageId,
+      chunkIndex ? parseInt(chunkIndex as string, 10) : undefined,
+      userAgent,
+      ipAddress
+    );
 
-    if (!image) {
-      return res.status(404).json({ error: "Image not found" });
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.message || "Failed to retrieve script",
+        availableScripts: result.availableScripts,
+        totalChunks: result.totalChunks,
+      });
     }
 
-    const dialogues = (image as any).dialogues || [];
-
-    if (dialogues.length === 0) {
-      return res.status(404).json({ error: "No scripts found for this image" });
-    }
-
-    // Select script based on index or random selection
-    let selectedScript: any;
-    if (scriptIndex && !isNaN(Number(scriptIndex))) {
-      const index = Number(scriptIndex);
-      selectedScript = dialogues[index] || dialogues[0];
-    } else {
-      // Random selection for variety
-      const randomIndex = Math.floor(Math.random() * dialogues.length);
-      selectedScript = dialogues[randomIndex];
-    }
-
-    // Get associated avatar
+    // Get associated avatar for the image
     const avatarMapping = await ImageAvatarMapping.findOne({
       where: { imageId, isActive: true },
       include: [
@@ -55,35 +45,38 @@ router.get("/getScriptForImage/:imageId", async (req, res, next) => {
       ],
     });
 
-    const response = {
-      image: {
-        id: image.id,
-        name: image.name,
-        description: image.description,
-      },
-      script: {
-        id: selectedScript.id,
-        text: selectedScript.text,
-        language: selectedScript.language,
-        voiceId: selectedScript.voiceId,
-        isDefault: selectedScript.isDefault,
-      },
-      avatar: (avatarMapping as any)?.avatar || null,
-      availableScripts: dialogues.length,
-      currentScriptIndex: dialogues.findIndex(
-        (d: any) => d.id === selectedScript.id
-      ),
-    };
+    // Log analytics data if available
+    if (result.analytics && result.script) {
+      // Fetch image name for better analytics labeling
+      const imageRecord = await Image.findByPk(imageId);
 
-    // Log the script selection for analytics
-    console.log(
-      `[ANALYTICS] Script selected for image ${
-        image.name
-      }: "${selectedScript.text.substring(0, 50)}..."`
-    );
+      AnalyticsService.logImageTrigger({
+        imageId: result.analytics.imageId,
+        imageName: imageRecord?.name || imageId,
+        scriptId: result.analytics.scriptId,
+        scriptText: result.script.text,
+        voiceId: result.script.voiceId || "unknown",
+        userAgent,
+        ipAddress,
+      });
+    }
+
+    const response = {
+      success: true,
+      image: {
+        id: imageId,
+        // Additional image details can be fetched if needed
+      },
+      script: result.script,
+      avatar: (avatarMapping as any)?.avatar || null,
+      availableScripts: result.availableScripts,
+      totalChunks: result.totalChunks,
+      message: result.message,
+    };
 
     return res.json(response);
   } catch (error) {
+    console.error("Error in getScriptForImage endpoint:", error);
     return next(error);
   }
 });
@@ -193,5 +186,97 @@ router.get(
     }
   }
 );
+
+/**
+ * POST /api/v1/scripts/image/:imageId/chunks
+ * Create multiple script chunks for an image
+ */
+router.post("/image/:imageId/chunks", async (req, res, next) => {
+  try {
+    const { imageId } = req.params;
+    const { scripts } = req.body;
+
+    if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Scripts array is required and cannot be empty",
+      });
+    }
+
+    // Validate script structure
+    const validScripts = scripts.every((script) => 
+      script.text && 
+      script.language && 
+      typeof script.orderIndex === "number"
+    );
+
+    if (!validScripts) {
+      return res.status(400).json({
+        success: false,
+        message: "Each script must have text, language, and orderIndex",
+      });
+    }
+
+    const result = await ScriptService.createScriptChunks(imageId, scripts);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.message || "Failed to create script chunks",
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      createdScripts: result.createdScripts,
+      message: result.message,
+    });
+  } catch (error) {
+    console.error("Error in createScriptChunks endpoint:", error);
+    next(error);
+  }
+});
+
+/**
+ * GET /api/v1/scripts/analytics/triggers
+ * Get script trigger analytics
+ */
+router.get("/analytics/triggers", async (req, res, next) => {
+  try {
+    const { startDate, endDate, limit = 100 } = req.query;
+
+    const analytics = await analyticsService.getImageTriggerAnalytics({
+      startDate: startDate ? new Date(startDate as string) : undefined,
+      endDate: endDate ? new Date(endDate as string) : undefined,
+      limit: parseInt(limit as string, 10),
+    });
+
+    res.json({
+      success: true,
+      analytics,
+    });
+  } catch (error) {
+    console.error("Error in analytics endpoint:", error);
+    next(error);
+  }
+});
+
+/**
+ * GET /api/v1/scripts/stats
+ * Get script usage statistics
+ */
+router.get("/stats", async (req, res, next) => {
+  try {
+    const stats = await analyticsService.getScriptStatistics();
+
+    res.json({
+      success: true,
+      stats,
+    });
+  } catch (error) {
+    console.error("Error in stats endpoint:", error);
+    next(error);
+  }
+});
 
 export default router;

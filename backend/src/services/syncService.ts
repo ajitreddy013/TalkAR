@@ -82,34 +82,43 @@ export const generateSyncVideo = async (
       // Simulate API call delay
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Mock successful response
-      const mockResponse = {
-        data: {
-          jobId: jobId,
-          status: "completed",
-          videoUrl: `https://assets.sync.so/docs/example-talking-head.mp4`,
-          outputUrl: `https://assets.sync.so/docs/example-talking-head.mp4`,
-          duration: 15,
-        },
+      // Mock successful response - return pending status initially
+    const mockResponse = {
+      data: {
+        jobId: jobId,
+        status: "pending",
+        videoUrl: `https://assets.sync.so/docs/example-talking-head.mp4`,
+        outputUrl: `https://assets.sync.so/docs/example-talking-head.mp4`,
+        duration: 15,
+      },
+    };
+
+    const response = mockResponse;
+
+    // Handle the response from sync.so API
+    if (response.data.status === "completed" || response.data.videoUrl) {
+      // For testing purposes, return pending status initially
+      // In production, this would be handled by actual API response
+      const pendingJob: SyncResponse = {
+        jobId,
+        status: "pending",
       };
-
-      const response = mockResponse;
-
-      // Handle the response from sync.so API
-      if (response.data.status === "completed" || response.data.videoUrl) {
+      syncJobs.set(jobId, pendingJob);
+      
+      // Simulate async completion after delay (for testing)
+      setTimeout(() => {
         const completedJob: SyncResponse = {
           jobId,
           status: "completed",
           videoUrl: response.data.videoUrl || response.data.outputUrl,
-          duration: response.data.duration || 10, // Default duration
+          duration: response.data.duration || 10,
         };
         syncJobs.set(jobId, completedJob);
-        console.log(
-          `Sync video completed for job ${jobId}: ${completedJob.videoUrl}`
-        );
+        // Console log removed to prevent test warnings
+      }, 3000); // 3 second delay for testing
 
-        // Return the completed job with video URL
-        return completedJob;
+      // Return the pending job initially
+      return pendingJob;
       } else {
         // If the API returns a job ID for async processing
         const processingJob: SyncResponse = {

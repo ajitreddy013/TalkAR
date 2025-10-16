@@ -112,4 +112,131 @@ router.post("/cleanup", async (req, res, next) => {
   }
 });
 
+/**
+ * POST /api/v1/enhanced-lipsync/generate-for-image
+ * Generate lip-sync video for an image with dynamic script mapping
+ */
+router.post("/generate-for-image", async (req, res, next) => {
+  try {
+    const { imageId, chunkIndex, userId, sessionId } = req.body;
+    const userAgent = req.headers["user-agent"] || "";
+    const ip = req.ip || req.connection.remoteAddress || "";
+
+    if (!imageId) {
+      return res.status(400).json({
+        success: false,
+        error: "imageId is required",
+      });
+    }
+
+    console.log(`[ENHANCED-LIPSYNC] Generating video for image: ${imageId}, chunk: ${chunkIndex}`);
+
+    const result = await EnhancedLipSyncService.generateLipSyncVideoForImage(
+      imageId,
+      chunkIndex,
+      userId,
+      sessionId,
+      { userAgent, ip }
+    );
+
+    if (result.success) {
+      res.json({
+        success: true,
+        videoId: result.videoId,
+        videoUrl: result.videoUrl,
+        scriptChunk: result.scriptChunk,
+        analyticsId: result.analyticsId,
+        message: result.videoUrl ? "Video ready" : "Video generation in progress",
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error,
+        analyticsId: result.analyticsId,
+      });
+    }
+  } catch (error) {
+    console.error("Error in enhanced lip-sync generation:", error);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/enhanced-lipsync/playback/:videoId
+ * Log avatar playback events for analytics
+ */
+router.post("/playback/:videoId", async (req, res, next) => {
+  try {
+    const { videoId } = req.params;
+    const { event, metadata } = req.body;
+
+    if (!["start", "pause", "resume", "complete", "error"].includes(event)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid event type. Must be: start, pause, resume, complete, or error",
+      });
+    }
+
+    await EnhancedLipSyncService.logAvatarPlayback(videoId, event, metadata);
+
+    res.json({
+      success: true,
+      message: `Logged ${event} event for video ${videoId}`,
+    });
+  } catch (error) {
+    console.error("Error logging playback event:", error);
+    next(error);
+  }
+});
+
+/**
+ * GET /api/v1/enhanced-lipsync/enhanced-analytics
+ * Get enhanced analytics data including script usage and playback patterns
+ */
+router.get("/enhanced-analytics", async (req, res, next) => {
+  try {
+    const { imageId } = req.query;
+
+    const analytics = await EnhancedLipSyncService.getEnhancedAnalytics(imageId as string);
+
+    res.json({
+      success: true,
+      analytics,
+    });
+  } catch (error) {
+    console.error("Error getting enhanced analytics:", error);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/v1/enhanced-lipsync/image/:imageId/pre-generate
+ * Pre-generate lip-sync videos for all scripts of an image
+ */
+router.post("/image/:imageId/pre-generate", async (req, res, next) => {
+  try {
+    const { imageId } = req.params;
+
+    console.log(`[ENHANCED-LIPSYNC] Pre-generating all videos for image: ${imageId}`);
+
+    const result = await EnhancedLipSyncService.generateAllScriptsForImage(imageId);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        generatedVideos: result.generatedVideos,
+        message: `Pre-generated ${result.generatedVideos.length} videos for image ${imageId}`,
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: "Failed to pre-generate videos",
+      });
+    }
+  } catch (error) {
+    console.error("Error pre-generating videos:", error);
+    next(error);
+  }
+});
+
 export default router;

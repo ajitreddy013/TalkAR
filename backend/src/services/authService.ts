@@ -108,11 +108,15 @@ export const loginUser = async (
     );
 
     if (!user) {
-      throw new Error("Invalid credentials");
+      const error = new Error("Invalid credentials") as any;
+      error.name = "UnauthorizedError";
+      throw error;
     }
 
     if (!user.isActive) {
-      throw new Error("Account is deactivated");
+      const error = new Error("Account is deactivated") as any;
+      error.name = "UnauthorizedError";
+      throw error;
     }
 
     // Verify password
@@ -121,7 +125,9 @@ export const loginUser = async (
       user.password
     );
     if (!isValidPassword) {
-      throw new Error("Invalid credentials");
+      const error = new Error("Invalid credentials") as any;
+      error.name = "UnauthorizedError";
+      throw error;
     }
 
     // Generate JWT token
@@ -143,9 +149,14 @@ export const loginUser = async (
         role: user.role,
       },
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Login error:", error);
-    throw new Error("Failed to login");
+    if (error.name === "UnauthorizedError") {
+      throw error;
+    }
+    const genericError = new Error("Failed to login") as any;
+    genericError.name = "UnauthorizedError";
+    throw genericError;
   }
 };
 

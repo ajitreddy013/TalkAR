@@ -35,7 +35,10 @@ router.get("/status/:jobId", async (req, res, next) => {
     const status = await getSyncStatus(jobId);
 
     return res.json(status);
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message === "Job not found") {
+      return res.status(404).json({ error: "Job not found" });
+    }
     return next(error);
   }
 });
