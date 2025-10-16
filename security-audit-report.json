@@ -1,0 +1,113 @@
+{
+  "summary": {
+    "totalIssues": 11,
+    "highIssues": 7,
+    "mediumIssues": 4,
+    "lowIssues": 0,
+    "riskLevel": "HIGH"
+  },
+  "issues": [
+    {
+      "severity": "high",
+      "category": "Hardcoded Secret",
+      "message": "Found potential hardcoded secret: Password = 'oldpassword123'",
+      "file": "backend/src/tests/auth.test.ts",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.316Z"
+    },
+    {
+      "severity": "high",
+      "category": "Hardcoded Secret",
+      "message": "Found potential hardcoded secret: Password = 'newpassword123'",
+      "file": "backend/src/tests/auth.test.ts",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.317Z"
+    },
+    {
+      "severity": "high",
+      "category": "Hardcoded Secret",
+      "message": "Found potential hardcoded secret: Password = 'wrongpassword'",
+      "file": "backend/src/tests/auth.test.ts",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.317Z"
+    },
+    {
+      "severity": "high",
+      "category": "Hardcoded Secret",
+      "message": "Found potential hardcoded secret: Password = 'newpassword123'",
+      "file": "backend/src/tests/auth.test.ts",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.317Z"
+    },
+    {
+      "severity": "high",
+      "category": "Hardcoded Secret",
+      "message": "Found potential hardcoded secret: password = 'securepassword123'",
+      "file": "backend/src/tests/supabase.test.ts",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.317Z"
+    },
+    {
+      "severity": "high",
+      "category": "Hardcoded Secret",
+      "message": "Found potential hardcoded secret: password = 'short'",
+      "file": "backend/src/tests/supabase.test.ts",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.317Z"
+    },
+    {
+      "severity": "medium",
+      "category": "Environment Configuration",
+      "message": "Environment file contains default/example values",
+      "file": "admin-dashboard/.env.example",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.320Z"
+    },
+    {
+      "severity": "medium",
+      "category": "Docker Security",
+      "message": "Dockerfile does not specify non-root user",
+      "file": "backend/Dockerfile",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.320Z"
+    },
+    {
+      "severity": "medium",
+      "category": "Docker Security",
+      "message": "Dockerfile does not specify non-root user",
+      "file": "admin-dashboard/Dockerfile",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.320Z"
+    },
+    {
+      "severity": "high",
+      "category": "Supabase Configuration",
+      "message": "Default Supabase keys detected - generate new keys for production",
+      "file": "docker-compose.yml",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.321Z"
+    },
+    {
+      "severity": "medium",
+      "category": "Supabase Configuration",
+      "message": "Localhost Supabase URL - configure production URL",
+      "file": "docker-compose.yml",
+      "line": null,
+      "timestamp": "2025-10-16T19:50:42.321Z"
+    }
+  ],
+  "timestamp": "2025-10-16T19:50:42.322Z",
+  "recommendations": [
+    "Address all high severity security issues before production deployment",
+    "Replace all hardcoded secrets with environment variables",
+    "Use strong JWT secrets (minimum 32 characters)",
+    "Generate new Supabase keys for production",
+    "Update outdated dependencies",
+    "Review and tighten CORS configurations",
+    "Implement proper input validation and sanitization",
+    "Implement Content Security Policy (CSP) headers",
+    "Use HTTPS in production",
+    "Implement rate limiting for API endpoints",
+    "Set up security monitoring and alerting"
+  ]
+}
