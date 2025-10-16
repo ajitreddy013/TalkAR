@@ -26,6 +26,7 @@ import {
 } from "../store/slices/imageSlice";
 import type { Image as ImageModel } from "../store/slices/imageSlice";
 import { MultiImageUploadDialog } from "../components/MultiImageUploadDialog";
+import type { ImageSet } from "../services/multiImageService";
 
 export default function Images() {
   const dispatch = useAppDispatch();
@@ -148,7 +149,7 @@ export default function Images() {
     }
   };
 
-  const handleMultiImageSave = async (imageSet: any) => {
+  const handleMultiImageSave = async (imageSet: ImageSet): Promise<void> => {
     try {
       console.log("Multi-image save completed, refreshing images...");
       // Refresh the images list to show the new uploads
