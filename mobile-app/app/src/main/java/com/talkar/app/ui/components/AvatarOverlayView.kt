@@ -9,18 +9,24 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -32,31 +38,38 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.Avatar
+import com.talkar.app.data.models.Dialogue
 import kotlinx.coroutines.delay
 
 /**
- * Avatar Overlay View for AR
- * Displays a static avatar overlay on detected images
+ * Avatar Overlay View for AR with Interactive Controls
+ * Displays avatar overlay with tap interaction and script display
  */
 @Composable
 fun AvatarOverlayView(
     isVisible: Boolean,
     avatar: Avatar?,
     image: BackendImage?,
+    dialogue: Dialogue? = null,
+    isPlaying: Boolean = false,
+    onAvatarTapped: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (!isVisible || avatar == null || image == null) {
         return
     }
 
+    var showScript by remember { mutableStateOf(false) }
+
     Card(
         modifier = modifier
-            .size(200.dp)
+            .size(220.dp)
             .clip(RoundedCornerShape(16.dp))
+            .clickable { onAvatarTapped() }
             .background(MaterialTheme.colorScheme.surface)
             .border(
                 2.dp,
-                MaterialTheme.colorScheme.primary,
+                if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
                 RoundedCornerShape(16.dp)
             ),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
@@ -64,45 +77,62 @@ fun AvatarOverlayView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Avatar Image
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(avatar.avatarImageUrl)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = "Avatar",
-                modifier = Modifier
-                    .size(80.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-            )
+            // Avatar Image with Play/Pause Indicator
+            Box(contentAlignment = Alignment.Center) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(avatar.avatarImageUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Avatar",
+                    modifier = Modifier
+                        .size(70.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                )
+                
+                // Play/Pause indicator overlay
+                Surface(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .align(Alignment.BottomEnd),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    shadowElevation = 4.dp
+                ) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // Avatar Name
             Text(
                 text = avatar.name,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
-
             // Image Name
             Text(
                 text = image.name,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // Status Indicator
             Row(
@@ -111,16 +141,74 @@ fun AvatarOverlayView(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(6.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
+                        .background(
+                            if (isPlaying) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.outline
+                        )
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
-                    text = "AR Active",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
+                    text = if (isPlaying) "Playing" else "Paused",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isPlaying) 
+                        MaterialTheme.colorScheme.primary 
+                    else 
+                        MaterialTheme.colorScheme.outline
                 )
+            }
+            
+            // Script button (if dialogue exists)
+            if (dialogue != null) {
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                OutlinedButton(
+                    onClick = { showScript = !showScript },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = if (showScript) Icons.Filled.KeyboardArrowUp else Icons.Filled.TextSnippet,
+                        contentDescription = "Toggle Script",
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (showScript) "Hide Script" else "Show Script",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+            
+            // Animated Script Display
+            AnimatedVisibility(
+                visible = showScript && dialogue != null,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically()
+            ) {
+                dialogue?.let {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    ) {
+                        Text(
+                            text = it.text,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(8.dp),
+                            maxLines = 3,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }
@@ -184,39 +272,64 @@ fun AvatarPlaceholder(
 }
 
 /**
- * Avatar Overlay with Animation
+ * Avatar Overlay with Smooth Animations
+ * Features: Fade in/out, scale, and bounce effects
  */
 @Composable
 fun AnimatedAvatarOverlay(
     isVisible: Boolean,
     avatar: Avatar?,
     image: BackendImage?,
+    dialogue: Dialogue? = null,
+    isPlaying: Boolean = false,
+    onAvatarTapped: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var animationScale by remember { mutableStateOf(0f) }
-    var isAnimating by remember { mutableStateOf(false) }
+    // Smooth scale animation with spring physics
+    val scale by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0.3f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "scale"
+    )
+    
+    // Smooth alpha animation
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = 300,
+            easing = FastOutSlowInEasing
+        ),
+        label = "alpha"
+    )
+    
+    // Subtle rotation for dynamic feel
+    val rotation by animateFloatAsState(
+        targetValue = if (isVisible) 0f else -10f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "rotation"
+    )
 
-    LaunchedEffect(isVisible) {
-        if (isVisible) {
-            isAnimating = true
-            animationScale = 0f
-            repeat(10) {
-                animationScale += 0.1f
-                delay(50)
-            }
-            isAnimating = false
-        } else {
-            animationScale = 0f
-            isAnimating = false
-        }
-    }
-
-    if (isVisible && animationScale > 0f) {
+    if (isVisible || alpha > 0.01f) {
         AvatarOverlayView(
             isVisible = true,
             avatar = avatar,
             image = image,
+            dialogue = dialogue,
+            isPlaying = isPlaying,
+            onAvatarTapped = onAvatarTapped,
             modifier = modifier
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    this.alpha = alpha
+                    rotationZ = rotation
+                }
         )
     }
 }

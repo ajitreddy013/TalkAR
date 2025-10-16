@@ -9,17 +9,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import com.talkar.app.ui.components.SimpleARView
 import com.talkar.app.ui.components.AnimatedAvatarOverlay
-import com.talkar.app.ui.components.AvatarPlaceholder
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.Avatar
 
 /**
- * Week 2 AR Screen with Static Avatar Overlay
+ * Week 4 AR Screen - UI & User Experience
+ * Features:
+ * - Touch interaction (tap to play/pause)
+ * - Script display button
+ * - Smooth animations (appear/disappear)
+ * - Responsive avatar overlay
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Week2ARScreen(
+fun Week4ARScreen(
     viewModel: EnhancedARViewModel,
     hasCameraPermission: Boolean = false,
     onPermissionCheck: (() -> Unit)? = null,
@@ -45,7 +49,7 @@ fun Week2ARScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("TalkAR - Week 2: Avatar Overlay") },
+                title = { Text("TalkAR - Week 4: UI & UX") },
                 actions = {
                     Button(
                         onClick = { viewModel.simulateImageDetection() }
@@ -65,26 +69,24 @@ fun Week2ARScreen(
             SimpleARView(
                 modifier = Modifier.fillMaxSize(),
                 onImageDetected = { imageName ->
-                    android.util.Log.d("Week2ARScreen", "Image detected: $imageName")
+                    android.util.Log.d("Week4ARScreen", "Image detected: $imageName")
                 }
             )
             
-            // Avatar Overlay with Animations
-            if (isAvatarVisible && currentAvatar != null && currentImage != null) {
-                AnimatedAvatarOverlay(
-                    isVisible = isAvatarVisible,
-                    avatar = currentAvatar,
-                    image = currentImage,
-                    dialogue = currentDialogue,
-                    isPlaying = isVideoPlaying,
-                    onAvatarTapped = { viewModel.onAvatarTapped() },
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(16.dp)
-                )
-            }
+            // Animated Avatar Overlay with Touch Interaction
+            AnimatedAvatarOverlay(
+                isVisible = isAvatarVisible,
+                avatar = currentAvatar,
+                image = currentImage,
+                dialogue = currentDialogue,
+                isPlaying = isVideoPlaying,
+                onAvatarTapped = { viewModel.onAvatarTapped() },
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(16.dp)
+            )
             
-            // Status Indicator
+            // Status Card
             Card(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -120,17 +122,23 @@ fun Week2ARScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Text(
-                            text = if (isVideoPlaying) "▶️ Playing" else "⏸️ Paused",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isVideoPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            fontWeight = MaterialTheme.typography.bodySmall.fontWeight
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isVideoPlaying) "▶️ Playing" else "⏸️ Paused",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isVideoPlaying) 
+                                    MaterialTheme.colorScheme.primary 
+                                else 
+                                    MaterialTheme.colorScheme.outline
+                            )
+                        }
                     }
                 }
             }
             
-            // Instructions
+            // Feature Highlights Card
             Card(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -143,29 +151,34 @@ fun Week2ARScreen(
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "📱 Week 2 Instructions",
+                        text = "✨ Week 4 Features",
                         style = MaterialTheme.typography.titleSmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "• Tap 'Test Detection' to simulate image detection",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "✅ Tap avatar to play/pause lip-sync",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "• Tap avatar to play/pause lip-sync",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "✅ Show/hide script text button",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "• Click 'Show Script' to view dialogue text",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "✅ Smooth appear/disappear animations",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "• Avatar animates smoothly on appear/disappear",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "✅ Responsive overlay with status indicators",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "• Avatar disappears when image is lost",
-                        style = MaterialTheme.typography.bodySmall
+                        text = "⏸️ Auto-pause when image lost",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -207,14 +220,14 @@ private fun PermissionRequestScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "TalkAR needs camera access to scan images and show AR overlays. Please grant camera permission to continue.",
+                    text = "TalkAR needs camera access to scan images and show AR overlays with interactive controls.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = {
-                        android.util.Log.d("Week2ARScreen", "Manual permission check requested")
+                        android.util.Log.d("Week4ARScreen", "Manual permission check requested")
                         onPermissionCheck?.invoke()
                     }
                 ) {

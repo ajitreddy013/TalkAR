@@ -2,6 +2,8 @@ package com.talkar.app.ui.components
 
 import android.content.Context
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -95,8 +97,27 @@ private fun positionOverlayOnImage(
 fun ARVideoOverlay(
     videoUrl: String,
     isVisible: Boolean,
+    isPlaying: Boolean = false,
+    onPlayPause: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
+    
+    // Control video playback
+    LaunchedEffect(isPlaying, videoViewRef) {
+        videoViewRef?.let { videoView ->
+            if (isPlaying) {
+                if (!videoView.isPlaying) {
+                    videoView.start()
+                }
+            } else {
+                if (videoView.isPlaying) {
+                    videoView.pause()
+                }
+            }
+        }
+    }
+    
     if (isVisible) {
         Card(
             modifier = modifier,
@@ -127,9 +148,15 @@ fun ARVideoOverlay(
                             setVideoPath(videoUrl)
                             setOnPreparedListener { mediaPlayer ->
                                 mediaPlayer.isLooping = true
-                                mediaPlayer.start()
+                                videoViewRef = this
+                                if (isPlaying) {
+                                    mediaPlayer.start()
+                                }
                             }
                         }
+                    },
+                    update = { videoView ->
+                        videoViewRef = videoView
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -143,23 +170,39 @@ fun ARVideoOverlay(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
-                        onClick = { /* Play video */ },
+                        onClick = onPlayPause,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
-                        Text("Play", color = Color.White)
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (isPlaying) "Pause" else "Play", color = Color.White)
                     }
                     
                     OutlinedButton(
-                        onClick = { /* Pause video */ },
+                        onClick = { 
+                            videoViewRef?.seekTo(0)
+                            if (isPlaying) {
+                                videoViewRef?.start()
+                            }
+                        },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = Color.White
                         )
                     ) {
-                        Text("Pause")
+                        Icon(
+                            imageVector = Icons.Filled.Replay,
+                            contentDescription = "Restart"
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Restart")
                     }
                 }
             }
