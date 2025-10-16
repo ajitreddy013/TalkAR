@@ -7,6 +7,7 @@ import { sequelize } from "./config/database";
 import { testSupabaseConnection } from "./config/supabase";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
+import LoggingMiddleware from "./middleware/logging";
 import { defineAssociations } from "./models/associations";
 import imageRoutes from "./routes/images";
 import syncRoutes from "./routes/syncSupabase";
@@ -52,6 +53,8 @@ app.use(
   })
 );
 app.use(morgan("combined"));
+// Enhanced logging and performance metrics
+app.use(LoggingMiddleware.logRequests);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 

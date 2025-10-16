@@ -42,6 +42,9 @@ export interface DialogueAttributes {
   voiceId?: string;
   isActive: boolean;
   isDefault: boolean;
+  orderIndex: number; // For script sequence
+  chunkSize: number; // Number of lines in this chunk
+  estimatedDuration?: number; // Estimated seconds to speak
   createdAt: Date;
   updatedAt: Date;
 }
@@ -60,6 +63,9 @@ export class Dialogue
   public voiceId?: string;
   public isActive!: boolean;
   public isDefault!: boolean;
+  public orderIndex!: number;
+  public chunkSize!: number;
+  public estimatedDuration?: number;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -143,6 +149,20 @@ Dialogue.init(
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    orderIndex: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    chunkSize: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
+    },
+    estimatedDuration: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
     createdAt: {
       type: DataTypes.DATE,
       allowNull: false,
@@ -156,6 +176,14 @@ Dialogue.init(
     sequelize,
     tableName: "dialogues",
     timestamps: true,
+    indexes: [
+      {
+        fields: ["imageId", "orderIndex"],
+      },
+      {
+        fields: ["imageId", "isActive", "isDefault"],
+      },
+    ],
   }
 );
 
