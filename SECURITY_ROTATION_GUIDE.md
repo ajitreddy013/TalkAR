@@ -6,16 +6,9 @@ This guide helps you rotate leaked keys and optionally scrub Git history.
 
 In Supabase Dashboard (Project Settings → API):
 
-- Regenerate Anon Key
-- Regenerate Service Role Key
-- If applicable, update JWT secret in Auth settings (or use the one below)
+**WARNING:** Supabase secret keys (anon, service_role) must ONLY be used in backend/server code. Never expose these keys in frontend, mobile, or client-side code. The service_role key is highly privileged—never expose to clients. If you use Supabase in the frontend, use only the anon key and restrict its permissions in Supabase Dashboard.
 
 Update your local `.env` and deployment secrets with new values:
-
-- SUPABASE_URL=https://<your-project-ref>.supabase.co
-- SUPABASE_ANON_KEY=<new-anon-key>
-- SUPABASE_SERVICE_ROLE_KEY=<new-service-role-key>
-- SUPABASE_JWT_SECRET=<new-jwt-secret>
 
 ## 2) Rotate AWS Credentials (if applicable)
 

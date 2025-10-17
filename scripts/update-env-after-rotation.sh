@@ -14,6 +14,12 @@ echo ""
 echo "Current .env location: $ENV_FILE"
 echo ""
 
+echo "⚠️  WARNING: Supabase secret keys (anon, service_role) must ONLY be used in backend/server code."
+echo "   Never expose these keys in frontend, mobile, or client-side code."
+echo "   service_role key is highly privileged—never expose to clients."
+echo "   If you use Supabase in the frontend, use only the anon key and restrict its permissions in Supabase Dashboard."
+echo ""
+
 if [ ! -f "$ENV_FILE" ]; then
     echo "❌ Error: .env file not found!"
     echo "Creating new .env from .env.example..."
