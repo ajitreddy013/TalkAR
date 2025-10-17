@@ -109,8 +109,8 @@ class ARImageRecognitionService(private val context: Context) {
                 try {
                     Log.d(tag, "Creating test images for AR recognition on background thread")
                     
-                    // Create test images on background thread with delays to prevent overwhelming
-                    createTestImage("test_image")
+                    // Create Sunrich test image for AR detection
+                    createTestImage("Sunrich")
                     delay(500) // Small delay between images
                     
                     createTestImage("test_image_2")
