@@ -83,7 +83,7 @@ private fun CompactPerformanceView(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Icon(
-                imageVector = Icons.Filled.Speed,
+                imageVector = Icons.Filled.Videocam,
                 contentDescription = "FPS",
                 tint = Color.White,
                 modifier = Modifier.size(14.dp)
@@ -104,7 +104,7 @@ private fun CompactPerformanceView(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Icon(
-                imageVector = Icons.Filled.Memory,
+                imageVector = Icons.Filled.SdCard,
                 contentDescription = "Memory",
                 tint = Color.White,
                 modifier = Modifier.size(14.dp)
@@ -141,7 +141,7 @@ private fun ExpandedPerformanceView(
                 style = MaterialTheme.typography.titleSmall
             )
             Icon(
-                imageVector = Icons.Filled.ExpandLess,
+                imageVector = Icons.Filled.KeyboardArrowUp,
                 contentDescription = "Collapse",
                 tint = Color.White,
                 modifier = Modifier.size(18.dp)
