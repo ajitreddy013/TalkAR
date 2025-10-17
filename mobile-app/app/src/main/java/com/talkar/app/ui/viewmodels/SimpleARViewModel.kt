@@ -277,6 +277,9 @@ class SimpleARViewModel : ViewModel() {
                             try {
                                 videoCacheManager.cacheVideo(syncResponse.videoUrl, backendImage.id)
                                 android.util.Log.d("SimpleARViewModel", "Video cached successfully")
+                                
+                                // Preload next script's video if available
+                                preloadNextScriptVideo(backendImage)
                             } catch (e: Exception) {
                                 android.util.Log.w("SimpleARViewModel", "Failed to cache video: ${e.message}")
                             }
@@ -410,6 +413,45 @@ class SimpleARViewModel : ViewModel() {
         }
     }
     
+    /**
+     * Preload next script's video in background
+     * Fetches the next dialogue and generates/caches its lip-sync video
+     */
+    private suspend fun preloadNextScriptVideo(backendImage: com.talkar.app.data.models.BackendImage) {
+        try {
+            if (backendImage.dialogues.size > 1) {
+                // Get the next dialogue (assuming sequential order)
+                val nextDialogue = backendImage.dialogues.getOrNull(1)
+                if (nextDialogue != null) {
+                    android.util.Log.d("SimpleARViewModel", "Preloading next script video...")
+                    
+                    // Create sync request for next dialogue
+                    val syncRequest = SyncRequest(
+                        text = nextDialogue.text,
+                        language = nextDialogue.language,
+                        voiceId = nextDialogue.voiceId,
+                        imageUrl = ApiConfig.getFullImageUrl(backendImage.imageUrl)
+                    )
+                    
+                    // Generate video (this will be async on backend)
+                    val response = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
+                    
+                    if (response.isSuccessful) {
+                        val syncResponse = response.body()
+                        if (syncResponse != null && syncResponse.videoUrl != null) {
+                            android.util.Log.d("SimpleARViewModel", "Preloading video URL: ${syncResponse.videoUrl}")
+                            // Cache the preloaded video
+                            videoCacheManager.preloadVideo(syncResponse.videoUrl, backendImage.id)
+                            android.util.Log.d("SimpleARViewModel", "✅ Next script video preloaded and cached")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("SimpleARViewModel", "Failed to preload next video: ${e.message}")
+        }
+    }
+    
     fun setRecognizedAugmentedImage(augmentedImage: AugmentedImage) {
         _recognizedAugmentedImage.value = augmentedImage
     }
@@ -466,6 +508,48 @@ class SimpleARViewModel : ViewModel() {
             error = null,
             arError = null
         )
+    }
+    
+    /**
+     * Preload videos for popular/frequently detected images
+     * Call this on app startup or after loading images
+     */
+    fun preloadPopularVideos() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                android.util.Log.d("SimpleARViewModel", "Preloading videos for popular images...")
+                
+                // Get all images from backend
+                val response = TalkARApplication.instance.apiClient.getImages()
+                
+                if (response.isSuccessful) {
+                    val images = response.body()?.take(2) // Preload first 2 images
+                    
+                    images?.forEach { backendImage ->
+                        val firstDialogue = backendImage.dialogues.firstOrNull()
+                        if (firstDialogue != null) {
+                            val syncRequest = SyncRequest(
+                                text = firstDialogue.text,
+                                language = firstDialogue.language,
+                                voiceId = firstDialogue.voiceId,
+                                imageUrl = ApiConfig.getFullImageUrl(backendImage.imageUrl)
+                            )
+                            
+                            val syncResponse = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
+                            if (syncResponse.isSuccessful && syncResponse.body()?.videoUrl != null) {
+                                val videoUrl = syncResponse.body()!!.videoUrl!!
+                                videoCacheManager.preloadVideo(videoUrl, backendImage.id)
+                                android.util.Log.d("SimpleARViewModel", "Preloaded video for: ${backendImage.name}")
+                            }
+                        }
+                    }
+                    
+                    android.util.Log.d("SimpleARViewModel", "✅ Popular videos preloaded")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("SimpleARViewModel", "Failed to preload popular videos: ${e.message}")
+            }
+        }
     }
 }
 
