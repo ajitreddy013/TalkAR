@@ -30,6 +30,9 @@ class SimpleARViewModel : ViewModel() {
     private val _talkingHeadVideo = MutableStateFlow<TalkingHeadVideo?>(null)
     val talkingHeadVideo: StateFlow<TalkingHeadVideo?> = _talkingHeadVideo.asStateFlow()
     
+    private val _currentVideoUrl = MutableStateFlow<String?>(null)
+    val currentVideoUrl: StateFlow<String?> = _currentVideoUrl.asStateFlow()
+    
     private val _recognizedAugmentedImage = MutableStateFlow<AugmentedImage?>(null)
     val recognizedAugmentedImage: StateFlow<AugmentedImage?> = _recognizedAugmentedImage.asStateFlow()
 
@@ -273,7 +276,9 @@ class SimpleARViewModel : ViewModel() {
                         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                             _talkingHeadVideo.value = talkingHeadVideo
                             _syncVideo.value = syncResponse
+                            _currentVideoUrl.value = syncResponse.videoUrl
                             android.util.Log.d("SimpleARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
+                            android.util.Log.d("SimpleARViewModel", "Video URL set for playback: ${syncResponse.videoUrl}")
                         }
                     } else {
                         android.util.Log.e("SimpleARViewModel", "Sync response body is null")
@@ -367,6 +372,7 @@ class SimpleARViewModel : ViewModel() {
                 createdAt = System.currentTimeMillis().toString()
             )
             _talkingHeadVideo.value = mockVideo
+            _currentVideoUrl.value = mockVideo.videoUrl
             android.util.Log.d("SimpleARViewModel", "Using mock video: ${mockVideo.title}")
         }
     }

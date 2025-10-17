@@ -52,6 +52,7 @@ fun AvatarOverlayView(
     image: BackendImage?,
     dialogue: Dialogue? = null,
     isPlaying: Boolean = false,
+    videoUrl: String? = null,
     onAvatarTapped: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -83,18 +84,30 @@ fun AvatarOverlayView(
         ) {
             // Avatar Image with Play/Pause Indicator
             Box(contentAlignment = Alignment.Center) {
-                AsyncImage(
-                    model = ImageRequest.Builder(LocalContext.current)
-                        .data(avatar.avatarImageUrl)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = "Avatar",
-                    modifier = Modifier
-                        .size(70.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer)
-                )
-                
+                // Video player if video URL is available
+                if (videoUrl != null) {
+                    CompactVideoPlayer(
+                        videoUrl = videoUrl,
+                        isPlaying = isPlaying,
+                        modifier = Modifier
+                            .size(70.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                    )
+                } else {
+                    // Fallback to avatar image
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(avatar.avatarImageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Avatar",
+                        modifier = Modifier
+                            .size(70.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                    )
+                }
                 // Play/Pause indicator overlay
                 Surface(
                     modifier = Modifier
@@ -105,8 +118,8 @@ fun AvatarOverlayView(
                     shadowElevation = 4.dp
                 ) {
                     Icon(
-                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.PlayArrow,
+                        contentDescription = if (isPlaying) "Playing" else "Paused",
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.padding(6.dp)
                     )
@@ -173,7 +186,7 @@ fun AvatarOverlayView(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Icon(
-                        imageVector = if (showScript) Icons.Filled.KeyboardArrowUp else Icons.Filled.TextSnippet,
+                        imageVector = if (showScript) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
                         contentDescription = "Toggle Script",
                         modifier = Modifier.size(16.dp)
                     )
@@ -282,6 +295,7 @@ fun AnimatedAvatarOverlay(
     image: BackendImage?,
     dialogue: Dialogue? = null,
     isPlaying: Boolean = false,
+    videoUrl: String? = null,
     onAvatarTapped: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -322,6 +336,7 @@ fun AnimatedAvatarOverlay(
             image = image,
             dialogue = dialogue,
             isPlaying = isPlaying,
+            videoUrl = videoUrl,
             onAvatarTapped = onAvatarTapped,
             modifier = modifier
                 .graphicsLayer {
