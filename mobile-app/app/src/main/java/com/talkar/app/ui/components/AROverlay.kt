@@ -177,7 +177,7 @@ fun ARVideoOverlay(
                         )
                     ) {
                         Icon(
-                            imageVector = if (isPlaying) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                            imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.PlayArrow,
                             contentDescription = if (isPlaying) "Pause" else "Play",
                             tint = Color.White
                         )
@@ -198,7 +198,7 @@ fun ARVideoOverlay(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Replay,
+                            imageVector = Icons.Filled.Refresh,
                             contentDescription = "Restart"
                         )
                         Spacer(modifier = Modifier.width(4.dp))
