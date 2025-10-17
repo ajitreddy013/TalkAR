@@ -90,7 +90,7 @@ fun SyncVideoPlayer(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
-                        imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        imageVector = Icons.Filled.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play"
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -109,7 +109,7 @@ fun SyncVideoPlayer(
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Replay,
+                        imageVector = Icons.Filled.Refresh,
                         contentDescription = "Restart"
                     )
                     Spacer(modifier = Modifier.width(4.dp))
