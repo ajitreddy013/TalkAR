@@ -53,10 +53,20 @@ fun AvatarOverlayView(
     dialogue: Dialogue? = null,
     isPlaying: Boolean = false,
     videoUrl: String? = null,
+    isLoadingVideo: Boolean = false,
     onAvatarTapped: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (!isVisible || avatar == null || image == null) {
+        return
+    }
+    
+    // Show loading placeholder if video is being fetched
+    if (isLoadingVideo) {
+        LoadingPlaceholder(
+            modifier = modifier,
+            showLoadingText = true
+        )
         return
     }
 
@@ -82,7 +92,7 @@ fun AvatarOverlayView(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Avatar Image with Play/Pause Indicator
+            // Avatar Image/Video with Play/Pause Indicator
             Box(contentAlignment = Alignment.Center) {
                 // Video player if video URL is available
                 if (videoUrl != null) {
@@ -93,6 +103,11 @@ fun AvatarOverlayView(
                             .size(70.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer)
+                    )
+                } else if (isLoadingVideo) {
+                    // Show compact loading placeholder while waiting for video
+                    CompactLoadingPlaceholder(
+                        modifier = Modifier.size(70.dp)
                     )
                 } else {
                     // Fallback to avatar image
@@ -296,6 +311,7 @@ fun AnimatedAvatarOverlay(
     dialogue: Dialogue? = null,
     isPlaying: Boolean = false,
     videoUrl: String? = null,
+    isLoadingVideo: Boolean = false,
     onAvatarTapped: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -337,6 +353,7 @@ fun AnimatedAvatarOverlay(
             dialogue = dialogue,
             isPlaying = isPlaying,
             videoUrl = videoUrl,
+            isLoadingVideo = isLoadingVideo,
             onAvatarTapped = onAvatarTapped,
             modifier = modifier
                 .graphicsLayer {
