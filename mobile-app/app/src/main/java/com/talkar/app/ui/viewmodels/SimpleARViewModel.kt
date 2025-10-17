@@ -33,6 +33,9 @@ class SimpleARViewModel : ViewModel() {
     private val _currentVideoUrl = MutableStateFlow<String?>(null)
     val currentVideoUrl: StateFlow<String?> = _currentVideoUrl.asStateFlow()
     
+    private val _isLoadingVideo = MutableStateFlow(false)
+    val isLoadingVideo: StateFlow<Boolean> = _isLoadingVideo.asStateFlow()
+    
     private val _recognizedAugmentedImage = MutableStateFlow<AugmentedImage?>(null)
     val recognizedAugmentedImage: StateFlow<AugmentedImage?> = _recognizedAugmentedImage.asStateFlow()
 
@@ -141,9 +144,10 @@ class SimpleARViewModel : ViewModel() {
                             // Update UI on main thread
                             viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                                 _uiState.value = _uiState.value.copy(
-                                    isLoading = false,
+                                    isLoading = true,
                                     error = null
                                 )
+                                _isLoadingVideo.value = true
                             }
                             
                             // Generate lip sync video only if image exists in backend
@@ -277,6 +281,8 @@ class SimpleARViewModel : ViewModel() {
                             _talkingHeadVideo.value = talkingHeadVideo
                             _syncVideo.value = syncResponse
                             _currentVideoUrl.value = syncResponse.videoUrl
+                            _isLoadingVideo.value = false
+                            _uiState.value = _uiState.value.copy(isLoading = false)
                             android.util.Log.d("SimpleARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
                             android.util.Log.d("SimpleARViewModel", "Video URL set for playback: ${syncResponse.videoUrl}")
                         }
