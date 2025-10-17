@@ -104,7 +104,7 @@ class VideoCacheManager(private val context: Context) {
             cacheIndex[videoUrl] = cached
             
             // Enforce cache limits
-            enforceCache Limits()
+            enforceCacheLimits()
             
             return@withContext outputFile.absolutePath
             
