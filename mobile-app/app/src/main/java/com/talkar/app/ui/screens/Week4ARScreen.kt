@@ -36,6 +36,7 @@ fun Week4ARScreen(
     val isTracking by viewModel.isTracking.collectAsState()
     val detectionStatus by viewModel.detectionStatus.collectAsState()
     val isVideoPlaying by viewModel.isVideoPlaying.collectAsState()
+    val currentVideoUrl by viewModel.currentVideoUrl.collectAsState()
     
     // Show permission request UI if camera permission is not granted
     if (!hasCameraPermission) {
@@ -80,6 +81,7 @@ fun Week4ARScreen(
                 image = currentImage,
                 dialogue = currentDialogue,
                 isPlaying = isVideoPlaying,
+                videoUrl = currentVideoUrl,
                 onAvatarTapped = { viewModel.onAvatarTapped() },
                 modifier = Modifier
                     .align(Alignment.Center)

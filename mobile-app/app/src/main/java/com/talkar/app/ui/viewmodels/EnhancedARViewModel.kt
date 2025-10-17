@@ -45,6 +45,9 @@ class EnhancedARViewModel(
     private val _isVideoPlaying = MutableStateFlow(false)
     val isVideoPlaying: StateFlow<Boolean> = _isVideoPlaying.asStateFlow()
     
+    private val _currentVideoUrl = MutableStateFlow<String?>(null)
+    val currentVideoUrl: StateFlow<String?> = _currentVideoUrl.asStateFlow()
+    
     // Bug fix: Avatar disappearing incorrectly
     // Track image loss with debounce to prevent flickering
     private var imageLossJob: Job? = null
@@ -148,10 +151,11 @@ class EnhancedARViewModel(
     /**
      * Set current image and avatar
      */
-    fun setCurrentImageAndAvatar(image: BackendImage, avatar: Avatar) {
+    fun setCurrentImageAndAvatar(image: BackendImage, avatar: Avatar, videoUrl: String? = null) {
         Log.d(TAG, "Setting current image: ${image.name} with avatar: ${avatar.name}")
         _currentImage.value = image
         _currentAvatar.value = avatar
+        _currentVideoUrl.value = videoUrl
         
         // Set first dialogue if available
         // Note: BackendImage doesn't have dialogues field in the current model
