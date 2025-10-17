@@ -1,5 +1,7 @@
 package com.talkar.app.ui.viewmodels
 
+import com.talkar.app.ui.viewmodels
+import com.talkar.app.utils.HapticFeedbackUtil
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.talkar.app.TalkARApplication
@@ -189,8 +191,13 @@ class SimpleARViewModel : ViewModel() {
     }
     
     private fun triggerHapticFeedback() {
-        // This would trigger haptic feedback when an image is detected
+        // Trigger haptic feedback when an image is detected
         android.util.Log.d("SimpleARViewModel", "Image detected - triggering haptic feedback")
+        try {
+            HapticFeedbackUtil.onImageDetected(TalkARApplication.instance.applicationContext)
+        } catch (e: Exception) {
+            android.util.Log.w("SimpleARViewModel", "Failed to trigger haptic feedback: ${e.message}")
+        }
     }
     
     private fun fetchTalkingHeadVideo(imageId: String) {
