@@ -1,6 +1,8 @@
 package com.talkar.app.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -9,7 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.talkar.app.ui.components.AnimatedAvatarOverlay
 import com.talkar.app.ui.components.PerformanceOverlay
-import com.talkar.app.ui.components.SimpleARView
+import com.talkar.app.ui.components.WorkingCameraView
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.performance.PerformanceMonitor
 import com.talkar.app.testing.RecognitionAccuracyTracker
@@ -77,9 +79,9 @@ fun Week5TestingScreen(
                     IconButton(onClick = { showTestingControls = !showTestingControls }) {
                         Icon(
                             imageVector = if (showTestingControls) 
-                                androidx.compose.material.icons.Icons.Filled.VisibilityOff 
+                                Icons.Filled.KeyboardArrowDown
                             else 
-                                androidx.compose.material.icons.Icons.Filled.Visibility,
+                                Icons.Filled.KeyboardArrowUp,
                             contentDescription = "Toggle Controls"
                         )
                     }
@@ -90,7 +92,7 @@ fun Week5TestingScreen(
                         accuracyTracker.logReport()
                     }) {
                         Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Filled.Assessment,
+                            imageVector = Icons.Filled.Info,
                             contentDescription = "Log Report"
                         )
                     }
@@ -103,19 +105,23 @@ fun Week5TestingScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // AR Camera View
-            SimpleARView(
+            // AR Camera View with real camera preview
+            WorkingCameraView(
                 modifier = Modifier.fillMaxSize(),
-                onImageDetected = { imageName ->
-                    android.util.Log.d("Week5TestingScreen", "Image detected: $imageName")
+                isImageDetected = isAvatarVisible,
+                onImageRecognized = { imageRecognition ->
+                    android.util.Log.d("Week5TestingScreen", "Image detected: ${imageRecognition.name}")
                     
                     // Track recognition accuracy
                     accuracyTracker.recordRecognition(
-                        imageName = imageName,
+                        imageName = imageRecognition.name,
                         success = true,
                         confidence = 0.85f,
                         recognitionTimeMs = 150L
                     )
+                },
+                onError = { error ->
+                    android.util.Log.e("Week5TestingScreen", "Camera Error: $error")
                 }
             )
             
