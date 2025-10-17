@@ -21,14 +21,16 @@
 Update repository secrets at: https://github.com/ajitreddy013/TalkAR/settings/secrets/actions
 
 **Add/Update these secrets:**
+
 ```
-***REMOVED***
-***REMOVED***
-***REMOVED***
-***REMOVED***
+SUPABASE_URL=your-supabase-url-here
+SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+SUPABASE_JWT_SECRET=your-jwt-secret-here
 ```
 
 **Steps:**
+
 1. Go to repository Settings → Secrets and variables → Actions
 2. Click "New repository secret" for each
 3. Or update existing secrets with new values
@@ -40,6 +42,7 @@ Update repository secrets at: https://github.com/ajitreddy013/TalkAR/settings/se
 **Choose your platform and follow the instructions:**
 
 #### Option A: Vercel
+
 ```bash
 # Install Vercel CLI if not already installed
 npm i -g vercel
@@ -48,23 +51,19 @@ npm i -g vercel
 vercel login
 
 # Add environment variables to production
+
+# Example (do not paste secrets in code):
 vercel env add SUPABASE_URL production
-# Paste: https://adktqahcctnqzdzlzrvx.supabase.co
-
 vercel env add SUPABASE_ANON_KEY production
-# Paste: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFka3RxYWhjY3RucXpkemx6cnZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NTgyMjUsImV4cCI6MjA3NjIzNDIyNX0.5qa2lZGv8ThK8hpQsNSvRBuNYBlxaiRNloCVN87Aa1o
-
 vercel env add SUPABASE_SERVICE_ROLE_KEY production
-# Paste: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFka3RxYWhjY3RucXpkemx6cnZ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDY1ODIyNSwiZXhwIjoyMDc2MjM0MjI1fQ.qva847McD9GGn0V_XC2asxjv92VvdSsc6TAmEt476Qw
-
 vercel env add SUPABASE_JWT_SECRET production
-# Paste: r+H14IKrL1NP+dS+T7dg9peuwYZxIqRr2nDJpS5R9xx9gdzAQoybXR07sKzld0uGfQaTirisOCECBk2o/EUgzA==
 
 # Trigger redeployment
 vercel --prod
 ```
 
 **Or via Vercel Dashboard:**
+
 1. Go to: https://vercel.com/dashboard
 2. Select your project
 3. Settings → Environment Variables
@@ -73,6 +72,7 @@ vercel --prod
 ---
 
 #### Option B: Netlify
+
 ```bash
 # Install Netlify CLI if not already installed
 npm i -g netlify-cli
@@ -84,9 +84,11 @@ netlify login
 netlify link
 
 # Add environment variables
-netlify env:set SUPABASE_URL "https://adktqahcctnqzdzlzrvx.supabase.co"
-netlify env:set SUPABASE_ANON_KEY "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFka3RxYWhjY3RucXpkemx6cnZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NTgyMjUsImV4cCI6MjA3NjIzNDIyNX0.5qa2lZGv8ThK8hpQsNSvRBuNYBlxaiRNloCVN87Aa1o"
-netlify env:set SUPABASE_SERVICE_ROLE_KEY "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFka3RxYWhjY3RucXpkemx6cnZ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDY1ODIyNSwiZXhwIjoyMDc2MjM0MjI1fQ.qva847McD9GGn0V_XC2asxjv92VvdSsc6TAmEt476Qw"
+
+# Example (do not paste secrets in code):
+netlify env:set SUPABASE_URL "your-supabase-url-here"
+netlify env:set SUPABASE_ANON_KEY "your-anon-key-here"
+netlify env:set SUPABASE_SERVICE_ROLE_KEY "your-service-role-key-here"
 
 # Trigger rebuild
 netlify build
@@ -94,6 +96,7 @@ netlify deploy --prod
 ```
 
 **Or via Netlify Dashboard:**
+
 1. Go to: https://app.netlify.com/
 2. Select your site
 3. Site settings → Environment variables
@@ -104,6 +107,7 @@ netlify deploy --prod
 #### Option C: AWS (EC2, ECS, Lambda)
 
 **For EC2/ECS:**
+
 ```bash
 # SSH into your server
 ssh user@your-server-ip
@@ -124,9 +128,10 @@ pm2 restart backend
 ```
 
 **For Lambda/Fargate:**
+
 1. Update environment variables in AWS Console
 2. Go to Lambda/ECS service → Configuration → Environment variables
-3. Update SUPABASE_* variables
+3. Update SUPABASE\_\* variables
 4. Redeploy function/task
 
 ---
@@ -134,10 +139,11 @@ pm2 restart backend
 #### Option D: Google Cloud Platform
 
 **For Cloud Run:**
+
 ```bash
 # Update service with new env vars
 gcloud run services update backend \
-  --set-env-vars="***REMOVED***,***REMOVED***,***REMOVED***"
+  --set-env-vars="SUPABASE_URL=your-supabase-url-here,SUPABASE_ANON_KEY=your-anon-key-here,SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here"
 ```
 
 ---
@@ -145,10 +151,11 @@ gcloud run services update backend \
 #### Option E: Digital Ocean App Platform
 
 **Via Dashboard:**
+
 1. Go to: https://cloud.digitalocean.com/apps
 2. Select your app
 3. Settings → App-Level Environment Variables
-4. Edit and update SUPABASE_* variables
+4. Edit and update SUPABASE\_\* variables
 5. Save and trigger redeployment
 
 ---
@@ -163,9 +170,11 @@ npm i -g heroku
 heroku login
 
 # Set config vars
-heroku config:set SUPABASE_URL="https://adktqahcctnqzdzlzrvx.supabase.co" -a your-app-name
-heroku config:set SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFka3RxYWhjY3RucXpkemx6cnZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NTgyMjUsImV4cCI6MjA3NjIzNDIyNX0.5qa2lZGv8ThK8hpQsNSvRBuNYBlxaiRNloCVN87Aa1o" -a your-app-name
-heroku config:set SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFka3RxYWhjY3RucXpkemx6cnZ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDY1ODIyNSwiZXhwIjoyMDc2MjM0MjI1fQ.qva847McD9GGn0V_XC2asxjv92VvdSsc6TAmEt476Qw" -a your-app-name
+
+# Example (do not paste secrets in code):
+heroku config:set SUPABASE_URL="your-supabase-url-here" -a your-app-name
+heroku config:set SUPABASE_ANON_KEY="your-anon-key-here" -a your-app-name
+heroku config:set SUPABASE_SERVICE_ROLE_KEY="your-service-role-key-here" -a your-app-name
 
 # Restart app
 heroku restart -a your-app-name
@@ -207,6 +216,7 @@ docker-compose logs admin-dashboard
 The mobile app should communicate with your backend API, which uses the service_role key. The mobile app itself should **NEVER** contain Supabase keys directly.
 
 **If you need to update mobile config:**
+
 ```bash
 cd mobile-app
 
@@ -225,6 +235,7 @@ cd mobile-app
 ## 🔒 Security Best Practices
 
 ### ✅ DO:
+
 - Use `SUPABASE_SERVICE_ROLE_KEY` only in backend/server code
 - Use `SUPABASE_ANON_KEY` in frontend (with RLS policies enabled)
 - Store keys in environment variables, never in code
@@ -232,6 +243,7 @@ cd mobile-app
 - Restrict ANON key permissions in Supabase Dashboard → Authentication → Policies
 
 ### ❌ DON'T:
+
 - Never commit keys to git
 - Never expose `SERVICE_ROLE_KEY` to client-side code (frontend, mobile)
 - Never log keys in application logs
@@ -281,6 +293,7 @@ curl 'https://adktqahcctnqzdzlzrvx.supabase.co/rest/v1/' \
 ## 📞 Support
 
 If you encounter issues:
+
 - Check Supabase Dashboard → Logs for connection errors
 - Verify environment variables are set correctly
 - Ensure services restarted after updating env vars
@@ -289,6 +302,7 @@ If you encounter issues:
 ---
 
 **Next Steps After Deployment Update:**
+
 1. Proceed to: "Redeploy all applications" in todo list
 2. Then: "Scrub leaked keys from Git history"
 3. Finally: "Enable GitHub secret scanning"
