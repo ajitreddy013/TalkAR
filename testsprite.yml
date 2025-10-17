@@ -1,0 +1,45 @@
+
+# TestSprite project configuration for TalkAR
+project: TalkAR
+apiKey: ${TESTSPRITE_API_KEY:demo-key}
+
+environments:
+	local:
+		FRONTEND_URL: http://localhost:3000
+		BACKEND_URL: http://localhost:3001
+		SUPABASE_URL: ${SUPABASE_URL:}
+		SUPABASE_KEY: ${SUPABASE_ANON_KEY:}
+
+suites:
+	- id: backend-api
+		name: Backend API tests
+		type: api
+		description: "Run Jest/Supertest API tests against the local backend"
+		command: "npm --prefix backend run test:api"
+		working_dir: ./backend
+		timeout: 120000
+
+	- id: frontend-e2e
+		name: Frontend E2E (Playwright)
+		type: e2e
+		description: "Start admin-dashboard and run Playwright end-to-end tests"
+		command: "npm --prefix admin-dashboard run test:e2e"
+		working_dir: ./admin-dashboard
+		timeout: 300000
+
+	- id: mobile-smoke
+		name: Mobile smoke tests
+		type: mobile
+		description: "Run a quick smoke test on mobile (emulator or cloud)"
+		command: "./scripts/run-mobile-smoke.sh"
+		working_dir: ./
+		timeout: 300000
+
+artifacts:
+	- path: backend/test-results/**/*.xml
+		type: junit
+	- path: admin-dashboard/test-results/**
+		type: html
+
+notifications:
+	slack_webhook: ${TESTSPRITE_SLACK_WEBHOOK:}
