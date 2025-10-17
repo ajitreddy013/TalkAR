@@ -3,9 +3,11 @@ package com.talkar.app.ui.viewmodels
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.talkar.app.TalkARApplication
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.repository.ImageRepository
+import com.talkar.app.utils.HapticFeedbackUtil
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -100,6 +102,13 @@ class EnhancedARViewModel(
     fun onImageDetected() {
         Log.d(TAG, "Image detected")
         
+        // Trigger haptic feedback
+        try {
+            HapticFeedbackUtil.onImageDetected(TalkARApplication.instance.applicationContext)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to trigger haptic feedback: ${e.message}")
+        }
+        
         // Cancel any pending image loss
         imageLossJob?.cancel()
         imageLossJob = null
@@ -177,10 +186,24 @@ class EnhancedARViewModel(
      */
     fun onAvatarTapped() {
         Log.d(TAG, "Avatar tapped - toggling playback")
+        
+        // Trigger haptic feedback
+        try {
+            HapticFeedbackUtil.onAvatarTapped(TalkARApplication.instance.applicationContext)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to trigger haptic feedback: ${e.message}")
+        }
+        
         _isVideoPlaying.value = !_isVideoPlaying.value
         
         if (_isVideoPlaying.value) {
             Log.d(TAG, "Video playing")
+            // Trigger playback start haptic
+            try {
+                HapticFeedbackUtil.onVideoPlaybackStart(TalkARApplication.instance.applicationContext)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to trigger playback haptic: ${e.message}")
+            }
         } else {
             Log.d(TAG, "Video paused")
         }
