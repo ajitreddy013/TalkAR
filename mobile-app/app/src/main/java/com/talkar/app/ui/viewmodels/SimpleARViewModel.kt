@@ -19,6 +19,7 @@ class SimpleARViewModel : ViewModel() {
     
     private val imageRepository = TalkARApplication.instance.imageRepository
     private val syncRepository = TalkARApplication.instance.syncRepository
+    private val videoCacheManager = TalkARApplication.instance.videoCacheManager
     
     private val _uiState = MutableStateFlow(SimpleARUiState())
     val uiState: StateFlow<SimpleARUiState> = _uiState.asStateFlow()
@@ -271,6 +272,16 @@ class SimpleARViewModel : ViewModel() {
                         android.util.Log.d("SimpleARViewModel", "Video URL: ${syncResponse.videoUrl}")
                         android.util.Log.d("SimpleARViewModel", "Duration: ${syncResponse.duration}s")
                         
+                        // Cache the video in background
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            try {
+                                videoCacheManager.cacheVideo(syncResponse.videoUrl, backendImage.id)
+                                android.util.Log.d("SimpleARViewModel", "Video cached successfully")
+                            } catch (e: Exception) {
+                                android.util.Log.w("SimpleARViewModel", "Failed to cache video: ${e.message}")
+                            }
+                        }
+                        
                         // Create talking head video from sync response
                         val talkingHeadVideo = TalkingHeadVideo(
                             imageId = backendImage.id,
@@ -285,13 +296,22 @@ class SimpleARViewModel : ViewModel() {
                         
                         // Update UI on main thread
                         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            // Check if video is cached, use cached version if available
+                            val cachedPath = videoCacheManager.getCachedVideoPath(syncResponse.videoUrl)
+                            val videoUrl = if (cachedPath != null) {
+                                android.util.Log.d("SimpleARViewModel", "Using cached video: $cachedPath")
+                                "file://$cachedPath"
+                            } else {
+                                syncResponse.videoUrl
+                            }
+                            
                             _talkingHeadVideo.value = talkingHeadVideo
                             _syncVideo.value = syncResponse
-                            _currentVideoUrl.value = syncResponse.videoUrl
+                            _currentVideoUrl.value = videoUrl
                             _isLoadingVideo.value = false
                             _uiState.value = _uiState.value.copy(isLoading = false)
                             android.util.Log.d("SimpleARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
-                            android.util.Log.d("SimpleARViewModel", "Video URL set for playback: ${syncResponse.videoUrl}")
+                            android.util.Log.d("SimpleARViewModel", "Video URL set for playback: $videoUrl")
                         }
                     } else {
                         android.util.Log.e("SimpleARViewModel", "Sync response body is null")
