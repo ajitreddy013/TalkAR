@@ -6,6 +6,7 @@ import com.talkar.app.data.repository.SyncRepository
 import com.talkar.app.data.api.ApiClient
 import com.talkar.app.data.local.ImageDatabase
 import com.talkar.app.data.services.ARImageRecognitionService
+import com.talkar.app.data.cache.VideoCacheManager
 
 class TalkARApplication : Application() {
     
@@ -29,6 +30,10 @@ class TalkARApplication : Application() {
     
     val arImageRecognitionService by lazy {
         ARImageRecognitionService(this)
+    }
+    
+    val videoCacheManager by lazy {
+        VideoCacheManager(this)
     }
     
     override fun onCreate() {
