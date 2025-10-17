@@ -19,6 +19,8 @@ import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlin.coroutines.coroutineContext
 
 /**
  * Enhanced AR View with Avatar Overlay Support
@@ -125,7 +127,7 @@ fun SimpleARView(
     LaunchedEffect(isLifecycleActive) {
         if (!isLifecycleActive) return@LaunchedEffect
         // Only run the detection loop while the coroutine scope is active and lifecycle is STARTED
-        while (isActive && isLifecycleActive) {
+        while (coroutineContext.isActive && isLifecycleActive) {
             delay(3000) // Simulate detection every 3 seconds
             isDetecting = true
             detectedImage = "Test Image ${System.currentTimeMillis() % 10}"
