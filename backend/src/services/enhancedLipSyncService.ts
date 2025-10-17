@@ -259,26 +259,25 @@ export class EnhancedLipSyncService {
       averageProcessingTime: Math.round(avgProcessingTime),
     };
   }
-}
 
-/**
- * Generate lip-sync video for a specific image using dynamic script mapping
- * Integrates with ScriptService for dynamic script selection
- */
-static async generateLipSyncVideoForImage(
-  imageId: string, 
-  chunkIndex?: number,
-  userId?: string,
-  sessionId?: string,
-  deviceInfo?: { userAgent: string; ip: string }
-): Promise<{
-  success: boolean;
-  videoId?: string;
-  videoUrl?: string;
-  scriptChunk?: any;
-  error?: string;
-  analyticsId?: string;
-}> {
+  /**
+   * Generate lip-sync video for a specific image using dynamic script mapping
+   * Integrates with ScriptService for dynamic script selection
+   */
+  static async generateLipSyncVideoForImage(
+    imageId: string, 
+    chunkIndex?: number,
+    userId?: string,
+    sessionId?: string,
+    deviceInfo?: { userAgent: string; ip: string }
+  ): Promise<{
+    success: boolean;
+    videoId?: string;
+    videoUrl?: string;
+    scriptChunk?: any;
+    error?: string;
+    analyticsId?: string;
+  }> {
   try {
     console.log(`[LIPSYNC] Generating video for image ${imageId}, chunk ${chunkIndex}`);
   
@@ -439,6 +438,7 @@ static async getEnhancedAnalytics(imageId?: string): Promise<{
       scriptUsage: [],
       playbackStats: null,
     };
+  }
   }
 }
 
