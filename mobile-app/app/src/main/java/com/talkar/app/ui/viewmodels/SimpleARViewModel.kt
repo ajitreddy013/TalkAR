@@ -2,6 +2,7 @@ package com.talkar.app.ui.viewmodels
 
 import com.talkar.app.ui.viewmodels
 import com.talkar.app.utils.HapticFeedbackUtil
+import com.talkar.app.performance.PerformanceMetrics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.talkar.app.TalkARApplication
@@ -66,6 +67,7 @@ class SimpleARViewModel : ViewModel() {
     
     fun recognizeImage(imageRecognition: ImageRecognition) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            val detectionStartTime = PerformanceMetrics.startTiming()
             android.util.Log.d("SimpleARViewModel", "recognizeImage called for: ${imageRecognition.name}")
             // Deduplicate rapid repeated detections for the same image
             val now = System.currentTimeMillis()
@@ -104,6 +106,9 @@ class SimpleARViewModel : ViewModel() {
             
             // Trigger haptic feedback for image detection
             triggerHapticFeedback()
+            
+            // Record image detection latency
+            PerformanceMetrics.recordImageDetectionLatency(detectionStartTime)
             
             // Check if detected image matches any backend image
             viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -240,6 +245,7 @@ class SimpleARViewModel : ViewModel() {
     
     private fun generateLipSyncVideoForMatchedImage(backendImage: com.talkar.app.data.models.BackendImage) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val apiStartTime = PerformanceMetrics.startTiming()
             try {
                 android.util.Log.d("SimpleARViewModel", "Generating lip sync video for backend image: ${backendImage.name}")
                 
@@ -265,7 +271,11 @@ class SimpleARViewModel : ViewModel() {
                 // Call the sync API to generate lip sync video
                 val response = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
                 
+                // Record API call latency
+                PerformanceMetrics.recordApiCallLatency(apiStartTime, "/sync/generate")
+                
                 if (response.isSuccessful) {
+                    val videoLoadStartTime = PerformanceMetrics.startTiming()
                     val syncResponse = response.body()
                     if (syncResponse != null && syncResponse.videoUrl != null && syncResponse.duration != null) {
                         android.util.Log.d("SimpleARViewModel", "✅ Lip sync video generated successfully!")
@@ -303,10 +313,15 @@ class SimpleARViewModel : ViewModel() {
                             val cachedPath = videoCacheManager.getCachedVideoPath(syncResponse.videoUrl)
                             val videoUrl = if (cachedPath != null) {
                                 android.util.Log.d("SimpleARViewModel", "Using cached video: $cachedPath")
+                                PerformanceMetrics.recordCacheHit("video")
                                 "file://$cachedPath"
                             } else {
+                                PerformanceMetrics.recordCacheMiss("video")
                                 syncResponse.videoUrl
                             }
+                            
+                            // Record video load latency
+                            PerformanceMetrics.recordVideoLoadLatency(videoLoadStartTime, videoUrl)
                             
                             _talkingHeadVideo.value = talkingHeadVideo
                             _syncVideo.value = syncResponse
