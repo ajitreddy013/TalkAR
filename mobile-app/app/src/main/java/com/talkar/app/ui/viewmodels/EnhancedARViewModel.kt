@@ -272,8 +272,9 @@ class EnhancedARViewModel(
                 val mockImage = BackendImage(
                     id = "test-image-1",
                     name = "Test Product",
-                    imageUrl = "https://example.com/test.jpg",
                     description = "Test product for AR",
+                    imageUrl = "https://example.com/test.jpg",
+                    thumbnailUrl = "https://example.com/test-thumb.jpg",
                     isActive = true,
                     createdAt = System.currentTimeMillis().toString(),
                     updatedAt = System.currentTimeMillis().toString()
@@ -282,12 +283,11 @@ class EnhancedARViewModel(
                 val mockAvatar = Avatar(
                     id = "test-avatar-1",
                     name = "Demo Avatar",
+                    description = "Demo avatar for testing",
                     avatarImageUrl = "https://example.com/avatar.jpg",
+                    avatarVideoUrl = null,
                     voiceId = "voice_001",
-                    language = "en",
-                    isActive = true,
-                    createdAt = System.currentTimeMillis().toString(),
-                    updatedAt = System.currentTimeMillis().toString()
+                    isActive = true
                 )
                 
                 setCurrentImageAndAvatar(mockImage, mockAvatar)

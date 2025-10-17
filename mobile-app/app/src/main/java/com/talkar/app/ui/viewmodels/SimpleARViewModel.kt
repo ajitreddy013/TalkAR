@@ -1,6 +1,5 @@
 package com.talkar.app.ui.viewmodels
 
-import com.talkar.app.ui.viewmodels
 import com.talkar.app.utils.HapticFeedbackUtil
 import com.talkar.app.performance.PerformanceMetrics
 import androidx.lifecycle.ViewModel
