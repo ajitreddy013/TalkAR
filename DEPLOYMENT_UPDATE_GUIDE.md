@@ -278,13 +278,13 @@ curl https://your-backend-domain.com/api/v1/health
 # Open in browser and verify Supabase connection
 
 # Test old key is revoked (should fail)
-curl 'https://[REDACTED_SUPABASE_URL]/rest/v1/' \
+curl 'https://your-supabase-project-ref.supabase.co/rest/v1/' \
   -H "apikey: OLD_KEY_HERE"
 # Expected: 401 Unauthorized
 
 # Test new key works
-curl 'https://[REDACTED_SUPABASE_URL]/rest/v1/' \
-  -H "apikey: [REDACTED_SUPABASE_ANON_KEY]"
+curl 'https://your-supabase-project-ref.supabase.co/rest/v1/' \
+  -H "apikey: YOUR_NEW_ANON_KEY"
 # Expected: 200 OK
 ```
 
