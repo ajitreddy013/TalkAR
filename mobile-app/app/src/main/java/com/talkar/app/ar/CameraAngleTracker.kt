@@ -3,16 +3,24 @@ package com.talkar.app.ar
 import android.util.Log
 import com.google.ar.core.AugmentedImage
 import com.google.ar.core.Pose
+import com.google.ar.core.TrackingState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.*
 
 /**
- * Camera Angle Tracker for AR Overlays
+ * Camera Angle Tracker for AR Overlays with Smooth Movement
+ * 
  * Tracks camera angle changes and provides scale/rotation values for overlays
+ * with enhanced smoothing and stability features.
  */
 class CameraAngleTracker {
+    
+    private val TAG = "CameraAngleTracker"
+    
+    // Pose tracker for smooth camera movement
+    private val poseTracker = PoseTracker(smoothingFactor = 0.4f)
     
     private val TAG = "CameraAngleTracker"
     
@@ -28,30 +36,41 @@ class CameraAngleTracker {
     
     /**
      * Update overlay transform based on augmented image pose
+     * Now with smooth tracking and confidence-based fading
      */
     fun updateTransform(augmentedImage: AugmentedImage) {
         try {
             val pose = augmentedImage.centerPose
+            val trackingState = augmentedImage.trackingState
+            
+            // Calculate tracking confidence based on tracking method
+            val trackingConfidence = when (augmentedImage.trackingMethod) {
+                AugmentedImage.TrackingMethod.FULL_TRACKING -> 1.0f
+                AugmentedImage.TrackingMethod.LAST_KNOWN_POSE -> 0.5f
+                AugmentedImage.TrackingMethod.NOT_TRACKING -> 0.1f
+                else -> 0.5f
+            }
+            
+            // Use pose tracker for smooth updates
+            val smoothedPose = poseTracker.updatePose(pose, trackingState, trackingConfidence)
+            
+            // Use pose tracker for smooth updates
+            val smoothedPose = poseTracker.updatePose(pose, trackingState, trackingConfidence)
             
             // Calculate distance for scale adjustment
-            val distance = calculateDistance(pose)
+            val distance = calculateDistance(smoothedPose)
             val scale = calculateScale(distance)
             _overlayScale.value = scale
             
             // Calculate rotation from pose quaternion
-            val rotation = calculateRotation(pose)
+            val rotation = calculateRotation(smoothedPose)
             _overlayRotation.value = rotation
             
-            // Calculate alpha based on tracking method
-            val alpha = when (augmentedImage.trackingMethod) {
-                AugmentedImage.TrackingMethod.FULL_TRACKING -> 1.0f
-                AugmentedImage.TrackingMethod.LAST_KNOWN_POSE -> 0.7f
-                AugmentedImage.TrackingMethod.NOT_TRACKING -> 0.3f
-                else -> 1.0f
-            }
+            // Calculate alpha based on tracking confidence (smooth fading)
+            val alpha = ConfidenceFader.calculateAlpha(trackingConfidence)
             _overlayAlpha.value = alpha
             
-            Log.d(TAG, "Transform updated - Distance: $distance, Scale: $scale, Rotation: $rotation, Alpha: $alpha")
+            Log.d(TAG, "Transform updated (smooth) - Distance: $distance, Scale: $scale, Rotation: $rotation, Alpha: $alpha, Confidence: $trackingConfidence")
             
         } catch (e: Exception) {
             Log.e(TAG, "Error updating transform", e)
