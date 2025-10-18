@@ -134,7 +134,7 @@ fun AvatarOverlayView(
                 ) {
                     Icon(
                         imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.PlayArrow,
-                        contentDescription = if (isPlaying) "Playing" else "Paused",
+                        contentDescription = if (isPlaying) "Playing" else "Play",
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.padding(6.dp)
                     )
