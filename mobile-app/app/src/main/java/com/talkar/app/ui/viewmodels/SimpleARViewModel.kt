@@ -5,6 +5,11 @@ import com.talkar.app.performance.PerformanceMetrics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.talkar.app.TalkARApplication
+import com.talkar.app.ar.AvatarManager
+import com.talkar.app.data.models.AvatarModel3D
+import com.talkar.app.data.models.AvatarType
+import com.talkar.app.data.models.Gender
+import com.talkar.app.data.models.IdleAnimation
 import android.content.pm.ApplicationInfo
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.SyncRequest
@@ -20,6 +25,13 @@ class SimpleARViewModel : ViewModel() {
     private val imageRepository = TalkARApplication.instance.imageRepository
     private val syncRepository = TalkARApplication.instance.syncRepository
     private val videoCacheManager = TalkARApplication.instance.videoCacheManager
+    
+    // 3D Avatar Manager (lazy initialization)
+    private var _avatarManager: AvatarManager? = null
+    
+    // Avatar loading state
+    private val _avatarLoadingState = MutableStateFlow<AvatarLoadState>(AvatarLoadState.Idle)
+    val avatarLoadingState: StateFlow<AvatarLoadState> = _avatarLoadingState.asStateFlow()
     
     private val _uiState = MutableStateFlow(SimpleARUiState())
     val uiState: StateFlow<SimpleARUiState> = _uiState.asStateFlow()
@@ -57,11 +69,118 @@ class SimpleARViewModel : ViewModel() {
             try {
                 // Pre-warm repositories in background
                 android.util.Log.d("SimpleARViewModel", "Pre-warming repositories in background")
-                // No heavy initialization here - just logging
+                
+                // Initialize default avatar configurations
+                initializeDefaultAvatars()
+                
             } catch (e: Exception) {
                 android.util.Log.e("SimpleARViewModel", "Error in background initialization", e)
             }
         }
+    }
+    
+    /**
+     * Initialize AvatarManager (called when AR scene is ready)
+     */
+    fun initializeAvatarManager(context: android.content.Context) {
+        if (_avatarManager == null) {
+            _avatarManager = AvatarManager(context)
+            android.util.Log.d("SimpleARViewModel", "AvatarManager initialized")
+            
+            // Register default avatars
+            registerDefaultAvatars()
+        }
+    }
+    
+    /**
+     * Get AvatarManager instance
+     */
+    fun getAvatarManager(): AvatarManager? {
+        return _avatarManager
+    }
+    
+    /**
+     * Initialize default avatar configurations
+     */
+    private suspend fun initializeDefaultAvatars() {
+        android.util.Log.d("SimpleARViewModel", "Initializing default avatar configurations...")
+        // Avatars will be registered when AvatarManager is created
+    }
+    
+    /**
+     * Register default avatars in the manager
+     */
+    private fun registerDefaultAvatars() {
+        val avatarManager = _avatarManager ?: return
+        
+        // Define sample avatar configurations
+        val avatars = listOf(
+            // Generic male presenter
+            AvatarModel3D(
+                id = "avatar_generic_male_1",
+                name = "Generic Male Presenter",
+                description = "Professional male presenter avatar",
+                modelUrl = null, // Will be loaded from res/raw when models are added
+                scale = 0.3f, // Scale down for AR scene
+                idleAnimation = IdleAnimation.BREATHING_AND_BLINKING,
+                avatarType = AvatarType.GENERIC,
+                gender = Gender.MALE,
+                isActive = true
+            ),
+            
+            // Generic female presenter
+            AvatarModel3D(
+                id = "avatar_generic_female_1",
+                name = "Generic Female Presenter",
+                description = "Professional female presenter avatar",
+                modelUrl = null,
+                scale = 0.3f,
+                idleAnimation = IdleAnimation.BREATHING_AND_BLINKING,
+                avatarType = AvatarType.GENERIC,
+                gender = Gender.FEMALE,
+                isActive = true
+            ),
+            
+            // Celebrity-style male avatar (e.g., SRK-style)
+            AvatarModel3D(
+                id = "avatar_celebrity_male_srk",
+                name = "Celebrity Male Avatar (SRK Style)",
+                description = "Celebrity-style male avatar inspired by Bollywood",
+                modelUrl = null,
+                scale = 0.3f,
+                idleAnimation = IdleAnimation.BREATHING_AND_BLINKING,
+                avatarType = AvatarType.CELEBRITY,
+                gender = Gender.MALE,
+                isActive = true
+            )
+        )
+        
+        avatarManager.registerAvatars(avatars)
+        android.util.Log.d("SimpleARViewModel", "Registered ${avatars.size} default avatars")
+    }
+    
+    /**
+     * Map detected image to appropriate avatar
+     */
+    private fun mapImageToAvatar(imageId: String, imageName: String) {
+        val avatarManager = _avatarManager ?: return
+        
+        // Map based on image name/type
+        val avatarId = when {
+            imageName.contains("srk", ignoreCase = true) || 
+            imageName.contains("celebrity", ignoreCase = true) -> {
+                "avatar_celebrity_male_srk"
+            }
+            imageName.contains("female", ignoreCase = true) -> {
+                "avatar_generic_female_1"
+            }
+            else -> {
+                "avatar_generic_male_1"
+            }
+        }
+        
+        avatarManager.mapImageToAvatar(imageId, avatarId)
+        android.util.Log.d("SimpleARViewModel", "Mapped image '$imageName' to avatar '$avatarId'")
     }
     
     fun recognizeImage(imageRecognition: ImageRecognition) {
@@ -148,6 +267,9 @@ class SimpleARViewModel : ViewModel() {
                         if (matchingImage != null) {
                             android.util.Log.d("SimpleARViewModel", "✅ Image MATCHED in backend: ${matchingImage.name}")
                             
+                            // Map image to avatar for 3D rendering
+                            mapImageToAvatar(matchingImage.id, matchingImage.name)
+                            
                             // Update UI on main thread
                             viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                                 _uiState.value = _uiState.value.copy(
@@ -155,6 +277,7 @@ class SimpleARViewModel : ViewModel() {
                                     error = null
                                 )
                                 _isLoadingVideo.value = true
+                                _avatarLoadingState.value = AvatarLoadState.LoadingAvatar(matchingImage.id)
                             }
                             
                             // Generate lip sync video only if image exists in backend
@@ -576,3 +699,13 @@ data class SimpleARUiState(
     val error: String? = null,
     val arError: String? = null
 )
+
+/**
+ * Avatar loading states for 3D avatar rendering
+ */
+sealed class AvatarLoadState {
+    object Idle : AvatarLoadState()
+    data class LoadingAvatar(val imageId: String) : AvatarLoadState()
+    data class AvatarLoaded(val imageId: String, val avatarId: String) : AvatarLoadState()
+    data class AvatarError(val imageId: String, val error: String) : AvatarLoadState()
+}
