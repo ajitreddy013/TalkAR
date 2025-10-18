@@ -5,6 +5,10 @@ export interface ImageAvatarMappingAttributes {
   id: string;
   imageId: string;
   avatarId: string;
+  script?: string; // Custom script for this specific mapping
+  audioUrl?: string; // Generated audio URL from Sync API
+  videoUrl?: string; // Generated lip-sync video URL
+  visemeDataUrl?: string; // URL to viseme/phoneme timing data JSON
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -26,6 +30,10 @@ export class ImageAvatarMapping
   public id!: string;
   public imageId!: string;
   public avatarId!: string;
+  public script?: string;
+  public audioUrl?: string;
+  public videoUrl?: string;
+  public visemeDataUrl?: string;
   public isActive!: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -54,6 +62,26 @@ ImageAvatarMapping.init(
         model: "avatars",
         key: "id",
       },
+    },
+    script: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: "Custom script text for this image-avatar combination",
+    },
+    audioUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: "Generated audio URL from Sync API",
+    },
+    videoUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: "Generated lip-sync video URL",
+    },
+    visemeDataUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: "URL to viseme/phoneme timing data (JSON)",
     },
     isActive: {
       type: DataTypes.BOOLEAN,
