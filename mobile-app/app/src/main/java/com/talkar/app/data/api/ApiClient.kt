@@ -35,6 +35,25 @@ interface ApiService {
     @GET("avatars/complete/{imageId}")
     suspend fun getCompleteImageData(@Path("imageId") imageId: String): Response<CompleteImageData>
     
+    // Update avatar mapping with script and generated media URLs
+    @PUT("avatars/mapping/{mappingId}")
+    suspend fun updateAvatarMapping(
+        @Path("mappingId") mappingId: String,
+        @Body request: UpdateMappingRequest
+    ): Response<MappingUpdateResponse>
+    
+    // Get all avatar-image mappings
+    @GET("avatars/mappings")
+    suspend fun getAllMappings(): Response<List<ImageAvatarMappingWithDetails>>
+    
+    // Map avatar to image with script
+    @POST("avatars/{avatarId}/map/{imageId}")
+    suspend fun mapAvatarToImage(
+        @Path("avatarId") avatarId: String,
+        @Path("imageId") imageId: String,
+        @Body request: MapAvatarRequest
+    ): Response<MappingUpdateResponse>
+    
     // Lip-sync endpoints
     @POST("lipsync/generate")
     suspend fun generateLipSyncVideo(@Body request: LipSyncRequest): Response<LipSyncResponse>
@@ -68,6 +87,10 @@ data class CompleteImageData(
 
 data class ImageAvatarMapping(
     val id: String,
+    val script: String? = null,
+    val audioUrl: String? = null,
+    val videoUrl: String? = null,
+    val visemeDataUrl: String? = null,
     val isActive: Boolean
 )
 
@@ -101,5 +124,41 @@ data class TalkingHeadRequest(
     val imageId: String,
     val text: String,
     val voiceId: String? = null
+)
+
+// Update mapping request
+data class UpdateMappingRequest(
+    val script: String? = null,
+    val audioUrl: String? = null,
+    val videoUrl: String? = null,
+    val visemeDataUrl: String? = null
+)
+
+// Map avatar request
+data class MapAvatarRequest(
+    val script: String? = null,
+    val audioUrl: String? = null,
+    val videoUrl: String? = null,
+    val visemeDataUrl: String? = null
+)
+
+// Mapping update response
+data class MappingUpdateResponse(
+    val message: String,
+    val mapping: ImageAvatarMapping
+)
+
+// Image-avatar mapping with full details
+data class ImageAvatarMappingWithDetails(
+    val id: String,
+    val imageId: String,
+    val avatarId: String,
+    val script: String? = null,
+    val audioUrl: String? = null,
+    val videoUrl: String? = null,
+    val visemeDataUrl: String? = null,
+    val isActive: Boolean,
+    val avatar: Avatar? = null,
+    val image: BackendImage? = null
 )
 

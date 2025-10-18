@@ -1,5 +1,7 @@
 import express from "express";
 import { Image, Dialogue } from "../models/Image";
+import { Avatar } from "../models/Avatar";
+import { ImageAvatarMapping } from "../models/ImageAvatarMapping";
 import { uploadImage, uploadToS3 } from "../services/uploadService";
 import { validateImageUpload } from "../middleware/validation";
 import path from "path";
@@ -30,6 +32,8 @@ router.get("/", async (req, res, next) => {
 router.get("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
+    const includeAvatar = req.query.includeAvatar === "true";
+
     const image = await Image.findByPk(id, {
       include: [
         {
@@ -41,6 +45,49 @@ router.get("/:id", async (req, res, next) => {
 
     if (!image) {
       return res.status(404).json({ error: "Image not found" });
+    }
+
+    // Include avatar mapping if requested
+    if (includeAvatar) {
+      const mapping = await ImageAvatarMapping.findOne({
+        where: { imageId: id, isActive: true },
+        include: [
+          {
+            model: Avatar,
+            as: "avatar",
+            where: { isActive: true },
+            required: false,
+          },
+        ],
+      });
+
+      const avatar = mapping ? await Avatar.findByPk(mapping.avatarId) : null;
+
+      return res.json({
+        ...image.toJSON(),
+        avatarMapping: mapping
+          ? {
+              id: mapping.id,
+              avatarId: mapping.avatarId,
+              script: mapping.script,
+              audioUrl: mapping.audioUrl,
+              videoUrl: mapping.videoUrl,
+              visemeDataUrl: mapping.visemeDataUrl,
+              avatar: avatar
+                ? {
+                    id: avatar.id,
+                    name: avatar.name,
+                    description: avatar.description,
+                    avatarImageUrl: avatar.avatarImageUrl,
+                    avatarVideoUrl: avatar.avatarVideoUrl,
+                    avatar3DModelUrl: avatar.avatar3DModelUrl,
+                    voiceId: avatar.voiceId,
+                    idleAnimationType: avatar.idleAnimationType,
+                  }
+                : null,
+            }
+          : null,
+      });
     }
 
     return res.json(image);
@@ -147,6 +194,8 @@ router.post("/:id/dialogues", async (req, res, next) => {
       voiceId,
       isDefault: isDefault || false,
       isActive: true,
+      orderIndex: 0,
+      chunkSize: 1,
     });
 
     return res.status(201).json(dialogue);
