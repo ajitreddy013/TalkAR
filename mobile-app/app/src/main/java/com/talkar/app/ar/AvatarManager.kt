@@ -41,6 +41,12 @@ class AvatarManager(context: Context) {
     // Active avatar nodes in the scene
     private val activeAvatarNodes = mutableMapOf<String, AvatarNode>()
     
+    // Pose tracking and stability components
+    private val poseTrackers = mutableMapOf<String, PoseTracker>()
+    private val depthController = DepthController()
+    private val anchorStabilizer = AnchorStabilizer()
+    private val transitionManager = TransitionManager()
+    
     // Loading states
     private val _loadingState = MutableStateFlow<AvatarLoadingState>(AvatarLoadingState.Idle)
     val loadingState: StateFlow<AvatarLoadingState> = _loadingState.asStateFlow()
@@ -270,6 +276,13 @@ class AvatarManager(context: Context) {
     ): AvatarNode {
         val anchorNode = AnchorNode(anchor)
         
+        // Calculate Z-offset to keep avatar above poster
+        val distance = depthController.calculateDistance(anchor.pose)
+        val zOffset = depthController.calculateZOffset(avatar.scale, distance)
+        
+        // Apply Z-offset to anchor pose
+        val offsetPose = depthController.applyZOffset(anchor.pose, zOffset)
+        
         val avatarNode = AvatarNode(avatar).apply {
             setParent(anchorNode)
             this.renderable = renderable
@@ -281,11 +294,11 @@ class AvatarManager(context: Context) {
                 avatar.scale
             )
             
-            // Apply position offset
+            // Apply position offset (including Z-offset)
             localPosition = com.google.ar.sceneform.math.Vector3(
                 avatar.positionOffset.x,
                 avatar.positionOffset.y,
-                avatar.positionOffset.z
+                avatar.positionOffset.z + zOffset
             )
             
             // Apply rotation offset
@@ -333,7 +346,52 @@ class AvatarManager(context: Context) {
             node.setParent(null)
             node.renderable = null
             activeAvatarNodes.remove(imageId)
+            
+            // Remove pose tracker
+            poseTrackers.remove(imageId)
+            
             Log.d(TAG, "Removed avatar for image: $imageId")
+        }
+    }
+    
+    /**
+     * Update avatar pose with tracking data
+     * Should be called every frame for smooth tracking
+     */
+    fun updateAvatarPose(
+        imageId: String,
+        rawPose: com.google.ar.core.Pose,
+        trackingState: com.google.ar.core.TrackingState,
+        trackingConfidence: Float = 1.0f
+    ) {
+        val avatarNode = activeAvatarNodes[imageId] ?: return
+        
+        // Get or create pose tracker for this avatar
+        val poseTracker = poseTrackers.getOrPut(imageId) {
+            PoseTracker()
+        }
+        
+        // Update pose with smoothing
+        val smoothedPose = poseTracker.updatePose(rawPose, trackingState, trackingConfidence)
+        
+        // Calculate Z-offset
+        val distance = depthController.calculateDistance(smoothedPose)
+        val zOffset = depthController.calculateZOffset(avatarNode.avatarModel.scale, distance)
+        
+        // Apply Z-offset
+        val finalPose = depthController.applyZOffset(smoothedPose, zOffset)
+        
+        // Update avatar node position (if using custom positioning)
+        // Note: In Sceneform, the anchor handles positioning automatically
+        // This is for additional adjustments
+        
+        // Update opacity based on tracking confidence
+        val alpha = transitionManager.updateTransition(trackingConfidence, 0.016f)
+        avatarNode.updateOpacity(alpha)
+        
+        // Log stability
+        if (poseTracker.isStable.value) {
+            android.util.Log.d(TAG, "Avatar $imageId is stable (confidence: $trackingConfidence)")
         }
     }
     
@@ -375,6 +433,20 @@ class AvatarNode(val avatarModel: AvatarModel3D) : Node() {
     private val TAG = "AvatarNode"
     private var breathingJob: Job? = null
     private var blinkingJob: Job? = null
+    private var currentOpacity = 1.0f
+    
+    /**
+     * Update opacity for confidence-based fading
+     */
+    fun updateOpacity(opacity: Float) {
+        currentOpacity = opacity.coerceIn(0f, 1f)
+        
+        // Update renderable material alpha
+        renderable?.let { r ->
+            r.material.setFloat3("baseColorFactor", 1f, 1f, 1f)
+            r.material.setFloat("metallicFactor", currentOpacity)
+        }
+    }
     
     /**
      * Start breathing animation (subtle scale oscillation)
