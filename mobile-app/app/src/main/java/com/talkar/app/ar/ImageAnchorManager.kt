@@ -9,6 +9,7 @@ import android.util.Log
 import com.google.ar.core.Anchor
 import com.google.ar.core.AugmentedImage
 import com.talkar.app.data.models.BackendImage
+import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.AvatarModel3D
 import kotlinx.coroutines.*
 
@@ -83,7 +84,7 @@ class ImageAnchorManager(
      */
     fun handleDetectedImages(
         augmentedImage: AugmentedImage,
-        avatar: AvatarModel3D?,
+        avatar: Avatar?,
         backendImage: BackendImage?
     ) {
         try {
@@ -109,11 +110,11 @@ class ImageAnchorManager(
                     avatarManager.loadAvatarForImage(
                         imageId = imageId,
                         anchor = anchor,
-                        onLoaded = { avatarNode: com.talkar.app.ar.AvatarNode ->
+                        onLoaded = { avatarNode ->
                             Log.d(TAG, "✅ 3D Avatar loaded for: $imageName")
                             avatarNodes[imageId] = "AvatarNode-$imageId"
                         },
-                        onError = { error: Exception ->
+                        onError = { error ->
                             Log.e(TAG, "Failed to load 3D avatar for $imageName: ${error.message}")
                         }
                     )

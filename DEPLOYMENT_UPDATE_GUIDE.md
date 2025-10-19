@@ -278,13 +278,22 @@ curl https://your-backend-domain.com/api/v1/health
 # Open in browser and verify Supabase connection
 
 # Test old key is revoked (should fail)
+<<<<<<< HEAD
 curl 'https://your-supabase-project-ref.supabase.co/rest/v1/' \
+=======
+curl 'https://adktqahcctnqzdzlzrvx.supabase.co/rest/v1/' \
+>>>>>>> afbabf0751309f911b71357bc5d82ab569e9f086
   -H "apikey: OLD_KEY_HERE"
 # Expected: 401 Unauthorized
 
 # Test new key works
+<<<<<<< HEAD
 curl 'https://your-supabase-project-ref.supabase.co/rest/v1/' \
   -H "apikey: YOUR_NEW_ANON_KEY"
+=======
+curl 'https://adktqahcctnqzdzlzrvx.supabase.co/rest/v1/' \
+  -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFka3RxYWhjY3RucXpkemx6cnZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA2NTgyMjUsImV4cCI6MjA3NjIzNDIyNX0.5qa2lZGv8ThK8hpQsNSvRBuNYBlxaiRNloCVN87Aa1o"
+>>>>>>> afbabf0751309f911b71357bc5d82ab569e9f086
 # Expected: 200 OK
 ```
 

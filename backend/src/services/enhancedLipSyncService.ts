@@ -449,6 +449,7 @@ static async getEnhancedAnalytics(imageId?: string): Promise<{
       };
     }
   }
+  }
 }
 
 // Cleanup expired videos every hour
