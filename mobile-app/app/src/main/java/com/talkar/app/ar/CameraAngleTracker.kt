@@ -22,8 +22,6 @@ class CameraAngleTracker {
     // Pose tracker for smooth camera movement
     private val poseTracker = PoseTracker(smoothingFactor = 0.4f)
     
-    private val TAG = "CameraAngleTracker"
-    
     // Overlay transformation states
     private val _overlayScale = MutableStateFlow(1.0f)
     val overlayScale: StateFlow<Float> = _overlayScale.asStateFlow()
@@ -50,9 +48,6 @@ class CameraAngleTracker {
                 AugmentedImage.TrackingMethod.NOT_TRACKING -> 0.1f
                 else -> 0.5f
             }
-            
-            // Use pose tracker for smooth updates
-            val smoothedPose = poseTracker.updatePose(pose, trackingState, trackingConfidence)
             
             // Use pose tracker for smooth updates
             val smoothedPose = poseTracker.updatePose(pose, trackingState, trackingConfidence)

@@ -7,8 +7,11 @@ const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || '';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
+const missingVars = [];
+if (!supabaseUrl) missingVars.push('SUPABASE_URL');
+if (!supabaseAnonKey) missingVars.push('SUPABASE_ANON_KEY');
+if (missingVars.length > 0) {
+  throw new Error(`Missing required Supabase environment variable(s): ${missingVars.join(', ')}`);
 }
 
 // Client for public operations

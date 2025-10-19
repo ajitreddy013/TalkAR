@@ -243,17 +243,11 @@ router.post("/image/:imageId/chunks", async (req, res, next) => {
  */
 router.get("/analytics/triggers", async (req, res, next) => {
   try {
-    const { startDate, endDate, limit = 100 } = req.query;
-
-    const analytics = await analyticsService.getImageTriggerAnalytics({
-      startDate: startDate ? new Date(startDate as string) : undefined,
-      endDate: endDate ? new Date(endDate as string) : undefined,
-      limit: parseInt(limit as string, 10),
-    });
-
+    const analytics = AnalyticsService.getAnalytics();
+    
     res.json({
       success: true,
-      analytics,
+      analytics: analytics.imageTriggers,
     });
   } catch (error) {
     console.error("Error in analytics endpoint:", error);
@@ -267,11 +261,15 @@ router.get("/analytics/triggers", async (req, res, next) => {
  */
 router.get("/stats", async (req, res, next) => {
   try {
-    const stats = await analyticsService.getScriptStatistics();
-
+    const analytics = AnalyticsService.getAnalytics();
+    
     res.json({
       success: true,
-      stats,
+      stats: {
+        imageTriggers: analytics.imageTriggers,
+        avatarPlays: analytics.avatarPlays,
+        performance: analytics.performance,
+      },
     });
   } catch (error) {
     console.error("Error in stats endpoint:", error);

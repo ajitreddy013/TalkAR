@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-const jwt = require("jsonwebtoken");
+import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 
 export interface User {
@@ -131,14 +131,16 @@ export const loginUser = async (
     }
 
     // Generate JWT token
+    const jwtSecret = process.env.JWT_SECRET || "fallback-secret";
+    const jwtExpiry = process.env.JWT_EXPIRES_IN || "7d";
     const token = jwt.sign(
       {
         userId: user.id,
         email: user.email,
         role: user.role,
       },
-      process.env.JWT_SECRET || "fallback-secret",
-      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+      jwtSecret,
+      { expiresIn: jwtExpiry } as jwt.SignOptions
     );
 
     return {

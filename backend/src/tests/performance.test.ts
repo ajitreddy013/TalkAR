@@ -61,11 +61,11 @@ describe("Performance Tests", () => {
 
       const promises = Array(concurrentRequests)
         .fill(null)
-        .map((_, index) =>
+        .map((_) =>
           request(app)
             .post("/api/v1/sync/generate")
             .send({
-              text: `Test message ${index}`,
+              text: `Test message ${Math.random()}`,
               language: "en",
               voiceId: "voice-1",
             })
@@ -94,11 +94,11 @@ describe("Performance Tests", () => {
         // 10 sync requests
         ...Array(10)
           .fill(null)
-          .map((_, index) =>
+          .map((_) =>
             request(app)
               .post("/api/v1/sync/generate")
               .send({
-                text: `Mixed workload test ${index}`,
+                text: `Mixed workload test ${Math.random()}`,
                 language: "en",
                 voiceId: "voice-1",
               })

@@ -306,6 +306,9 @@ secrets/
 *.sqlite
 *.sqlite3
 
+# Detect-secrets baseline
+.secrets.baseline
+
 # ===========================================
 # Build Artifacts
 # ===========================================

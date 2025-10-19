@@ -1,19 +1,155 @@
 {
   "summary": {
-    "totalIssues": 11,
-    "highIssues": 7,
-    "mediumIssues": 4,
+    "totalIssues": 35,
+    "highIssues": 10,
+    "mediumIssues": 25,
     "lowIssues": 0,
     "riskLevel": "HIGH"
   },
   "issues": [
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "admin-dashboard/build/static/js/main.33dab628.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.227Z"
+    },
+    {
+      "severity": "high",
+      "category": "Hardcoded Secret",
+      "message": "Found potential hardcoded secret: Password = 'testpassword123'",
+      "file": "backend/test-backend-api-supabase.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.245Z"
+    },
+    {
+      "severity": "high",
+      "category": "Hardcoded Secret",
+      "message": "Found potential hardcoded secret: Password = 'testpassword123'",
+      "file": "backend/test-supabase-integration.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.246Z"
+    },
+    {
+      "severity": "medium",
+      "category": "XSS Vulnerability",
+      "message": "Potential XSS vulnerability: dangerouslySetInnerHTML",
+      "file": "security-audit.js",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.250Z"
+    },
     {
       "severity": "high",
       "category": "Hardcoded Secret",
       "message": "Found potential hardcoded secret: Password = 'oldpassword123'",
       "file": "backend/src/tests/auth.test.ts",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.316Z"
+      "timestamp": "2025-10-19T19:22:53.275Z"
     },
     {
       "severity": "high",
@@ -21,7 +157,7 @@
       "message": "Found potential hardcoded secret: Password = 'newpassword123'",
       "file": "backend/src/tests/auth.test.ts",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.317Z"
+      "timestamp": "2025-10-19T19:22:53.275Z"
     },
     {
       "severity": "high",
@@ -29,7 +165,7 @@
       "message": "Found potential hardcoded secret: Password = 'wrongpassword'",
       "file": "backend/src/tests/auth.test.ts",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.317Z"
+      "timestamp": "2025-10-19T19:22:53.275Z"
     },
     {
       "severity": "high",
@@ -37,7 +173,7 @@
       "message": "Found potential hardcoded secret: Password = 'newpassword123'",
       "file": "backend/src/tests/auth.test.ts",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.317Z"
+      "timestamp": "2025-10-19T19:22:53.275Z"
     },
     {
       "severity": "high",
@@ -45,7 +181,7 @@
       "message": "Found potential hardcoded secret: password = 'securepassword123'",
       "file": "backend/src/tests/supabase.test.ts",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.317Z"
+      "timestamp": "2025-10-19T19:22:53.277Z"
     },
     {
       "severity": "high",
@@ -53,15 +189,31 @@
       "message": "Found potential hardcoded secret: password = 'short'",
       "file": "backend/src/tests/supabase.test.ts",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.317Z"
+      "timestamp": "2025-10-19T19:22:53.277Z"
     },
     {
       "severity": "medium",
       "category": "Environment Configuration",
-      "message": "Environment file contains default/example values",
+      "message": "Environment file contains default/example values: backend/.env",
+      "file": "backend/.env",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.283Z"
+    },
+    {
+      "severity": "high",
+      "category": "JWT Security",
+      "message": "JWT secret is too short (should be at least 32 characters)",
+      "file": null,
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.284Z"
+    },
+    {
+      "severity": "medium",
+      "category": "Environment Configuration",
+      "message": "Environment file contains default/example values: admin-dashboard/.env.example",
       "file": "admin-dashboard/.env.example",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.320Z"
+      "timestamp": "2025-10-19T19:22:53.284Z"
     },
     {
       "severity": "medium",
@@ -69,7 +221,7 @@
       "message": "Dockerfile does not specify non-root user",
       "file": "backend/Dockerfile",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.320Z"
+      "timestamp": "2025-10-19T19:22:53.284Z"
     },
     {
       "severity": "medium",
@@ -77,15 +229,7 @@
       "message": "Dockerfile does not specify non-root user",
       "file": "admin-dashboard/Dockerfile",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.320Z"
-    },
-    {
-      "severity": "high",
-      "category": "Supabase Configuration",
-      "message": "Default Supabase keys detected - generate new keys for production",
-      "file": "docker-compose.yml",
-      "line": null,
-      "timestamp": "2025-10-16T19:50:42.321Z"
+      "timestamp": "2025-10-19T19:22:53.285Z"
     },
     {
       "severity": "medium",
@@ -93,10 +237,58 @@
       "message": "Localhost Supabase URL - configure production URL",
       "file": "docker-compose.yml",
       "line": null,
-      "timestamp": "2025-10-16T19:50:42.321Z"
+      "timestamp": "2025-10-19T19:22:53.285Z"
+    },
+    {
+      "severity": "high",
+      "category": "Supabase Configuration",
+      "message": "Supabase keys detected - ensure these are not production keys",
+      "file": ".env",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.285Z"
+    },
+    {
+      "severity": "medium",
+      "category": "File Permissions",
+      "message": "File has overly permissive permissions: 644 - should be 600 or less",
+      "file": ".env",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.285Z"
+    },
+    {
+      "severity": "medium",
+      "category": "File Permissions",
+      "message": "File has overly permissive permissions: 644 - should be 600 or less",
+      "file": "backend/.env",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.285Z"
+    },
+    {
+      "severity": "medium",
+      "category": "File Permissions",
+      "message": "File has overly permissive permissions: 644 - should be 600 or less",
+      "file": "admin-dashboard/.env",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.285Z"
+    },
+    {
+      "severity": "medium",
+      "category": "File Permissions",
+      "message": "File has overly permissive permissions: 644 - should be 600 or less",
+      "file": "docker-compose.yml",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.285Z"
+    },
+    {
+      "severity": "medium",
+      "category": "File Permissions",
+      "message": "File has overly permissive permissions: 644 - should be 600 or less",
+      "file": "supabase/config.toml",
+      "line": null,
+      "timestamp": "2025-10-19T19:22:53.285Z"
     }
   ],
-  "timestamp": "2025-10-16T19:50:42.322Z",
+  "timestamp": "2025-10-19T19:22:53.286Z",
   "recommendations": [
     "Address all high severity security issues before production deployment",
     "Replace all hardcoded secrets with environment variables",
@@ -108,6 +300,8 @@
     "Implement Content Security Policy (CSP) headers",
     "Use HTTPS in production",
     "Implement rate limiting for API endpoints",
-    "Set up security monitoring and alerting"
+    "Set up security monitoring and alerting",
+    "Regularly rotate secrets and API keys",
+    "Train team members on security best practices"
   ]
 }

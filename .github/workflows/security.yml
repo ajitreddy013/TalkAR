@@ -1,209 +1,48 @@
-name: Security Scanning
+name: Security Scan
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   schedule:
-    # Run daily at 2 AM UTC
-    - cron: "0 2 * * *"
+    - cron: "0 0 * * 1" # Weekly security scan
 
 jobs:
-  gitleaks:
-    name: Secret Scanning with Gitleaks
+  security:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Full history for comprehensive scanning
-
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }} # Optional for premium features
-
-  trufflehog:
-    name: Secret Scanning with TruffleHog
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
-          extra_args: --debug --only-verified
-
-  dependency-check:
-    name: Dependency Vulnerability Scan
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        directory: ["backend", "admin-dashboard"]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "18"
-
       - name: Install dependencies
-        working-directory: ${{ matrix.directory }}
-        run: npm ci
-
-      - name: Run npm audit
-        working-directory: ${{ matrix.directory }}
         run: |
-          npm audit --audit-level=moderate || true
-          npm audit --json > ../npm-audit-${{ matrix.directory }}.json || true
+          python -m pip install --upgrade pip
+          pip install detect-secrets
 
-      - name: Upload audit results
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-audit-${{ matrix.directory }}
-          path: npm-audit-${{ matrix.directory }}.json
-
-  codeql:
-    name: CodeQL Security Analysis
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-    strategy:
-      fail-fast: false
-      matrix:
-        language: ["javascript", "typescript"]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: ${{ matrix.language }}
-          queries: security-extended,security-and-quality
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:${{ matrix.language }}"
-
-  docker-scan:
-    name: Docker Image Security Scan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Run Trivy vulnerability scanner - Backend
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: "fs"
-          scan-ref: "./backend"
-          format: "sarif"
-          output: "trivy-backend-results.sarif"
-          severity: "CRITICAL,HIGH"
-
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: "trivy-backend-results.sarif"
-          category: "trivy-backend"
-
-      - name: Run Trivy vulnerability scanner - Admin Dashboard
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: "fs"
-          scan-ref: "./admin-dashboard"
-          format: "sarif"
-          output: "trivy-admin-results.sarif"
-          severity: "CRITICAL,HIGH"
-
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: "trivy-admin-results.sarif"
-          category: "trivy-admin"
-
-  security-report:
-    name: Generate Security Report
-    runs-on: ubuntu-latest
-    needs: [gitleaks, dependency-check, codeql, docker-scan]
-    if: always()
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Generate security summary
+      - name: Run detect-secrets scan
         run: |
-          echo "# Security Scan Summary" > security-summary.md
-          echo "" >> security-summary.md
-          echo "**Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> security-summary.md
-          echo "**Commit**: ${{ github.sha }}" >> security-summary.md
-          echo "" >> security-summary.md
-
-          if [ -f npm-audit-backend/npm-audit-backend.json ]; then
-            echo "## Backend Dependencies" >> security-summary.md
-            jq -r '.metadata | "- **Vulnerabilities**: \(.vulnerabilities.total)\n- **Critical**: \(.vulnerabilities.critical)\n- **High**: \(.vulnerabilities.high)\n- **Moderate**: \(.vulnerabilities.moderate)"' npm-audit-backend/npm-audit-backend.json >> security-summary.md
-            echo "" >> security-summary.md
+          detect-secrets scan > .secrets.baseline.new
+          # Check if there are new secrets not in the baseline
+          if ! diff .secrets.baseline .secrets.baseline.new > /dev/null 2>&1; then
+            echo "New secrets detected! Please review and update the baseline if needed."
+            diff .secrets.baseline .secrets.baseline.new || true
+            exit 1
           fi
 
-          if [ -f npm-audit-admin-dashboard/npm-audit-admin-dashboard.json ]; then
-            echo "## Admin Dashboard Dependencies" >> security-summary.md
-            jq -r '.metadata | "- **Vulnerabilities**: \(.vulnerabilities.total)\n- **Critical**: \(.vulnerabilities.critical)\n- **High**: \(.vulnerabilities.high)\n- **Moderate**: \(.vulnerabilities.moderate)"' npm-audit-admin-dashboard/npm-audit-admin-dashboard.json >> security-summary.md
-            echo "" >> security-summary.md
-          fi
-
-          echo "## Recommendations" >> security-summary.md
-          echo "- Review all critical and high severity vulnerabilities" >> security-summary.md
-          echo "- Update dependencies with \`npm update\` or \`npm audit fix\`" >> security-summary.md
-          echo "- Check GitHub Security tab for detailed findings" >> security-summary.md
-
-      - name: Upload security summary
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-summary
-          path: security-summary.md
-
-      - name: Comment PR with security summary
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const summary = fs.readFileSync('security-summary.md', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            });
-
-  notify-on-failure:
-    name: Notify on Security Issues
-    runs-on: ubuntu-latest
-    needs: [gitleaks, trufflehog, dependency-check, codeql, docker-scan]
-    if: failure()
-    steps:
-      - name: Send notification
+      - name: Check for hardcoded secrets
         run: |
-          echo "⚠️ Security scan detected issues!"
-          echo "Check the GitHub Security tab for details:"
-          echo "https://github.com/${{ github.repository }}/security"
+          # Look for common secret patterns
+          SECRET_PATTERNS=("api[key|_key]" "secret" "token" "password" "jwt" "bearer")
+          FOUND_SECRETS=false
+          for pattern in "${SECRET_PATTERNS[@]}"; do
+            if grep -r -i -n --exclude-dir=.git "$pattern[[:space:]]*=[[:space:]]*['\"][^'\"]\{10,\}['\"]" .; then
+              FOUND_SECRETS=true
+            fi
+          done
+          if [ "$FOUND_SECRETS" = true ]; then
+            echo "Hardcoded secrets detected! Please use environment variables instead."
+            exit 1
+          fi

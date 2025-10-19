@@ -66,7 +66,7 @@ export class ScriptService {
         };
       }
 
-      const dialogues = image.dialogues || [];
+      const dialogues = (image as any).dialogues || [];
       if (dialogues.length === 0) {
         return {
           success: false,
@@ -107,7 +107,7 @@ export class ScriptService {
       };
 
       // Convert all available scripts
-      const availableScripts: ScriptChunk[] = dialogues.map((dialogue) => ({
+      const availableScripts: ScriptChunk[] = dialogues.map((dialogue: any) => ({
         id: dialogue.id,
         text: dialogue.text,
         language: dialogue.language,
@@ -169,8 +169,8 @@ export class ScriptService {
         };
       }
 
-      const dialogues = image.dialogues || [];
-      const scripts: ScriptChunk[] = dialogues.map((dialogue) => ({
+      const dialogues = (image as any).dialogues || [];
+      const scripts: ScriptChunk[] = dialogues.map((dialogue: any) => ({
         id: dialogue.id,
         text: dialogue.text,
         language: dialogue.language,

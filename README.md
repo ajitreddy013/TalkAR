@@ -1,6 +1,20 @@
-# TalkAR - AR-Powered Talking Head App
+# TalkAR
 
-An innovative AR-powered mobile application that recognizes images and generates lip-synced talking heads in the user's chosen language, creating immersive interactive experiences.
+[![Security](https://github.com/ajitreddy013/TalkAR/actions/workflows/security.yml/badge.svg)](https://github.com/ajitreddy013/TalkAR/actions/workflows/security.yml)
+
+## Project Overview
+
+TalkAR is an innovative augmented reality application that enables interactive storytelling through animated avatars. The app uses advanced computer vision to track images and overlay dynamic 3D avatars with synchronized lip-sync animations, creating an immersive storytelling experience.
+
+## Security
+
+This repository has security measures in place to prevent secret leaks:
+
+- Pre-commit hooks to detect secrets before committing
+- GitHub secret scanning enabled
+- Regular security audits
+
+For security guidelines, see [SECURITY_GUIDELINES.md](SECURITY_GUIDELINES.md).
 
 ## 🎯 App Vision
 

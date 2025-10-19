@@ -85,7 +85,11 @@ export class AnalyticsService {
   /**
    * Persist analytics event to database (best effort, non-blocking)
    */
-  static async persistAnalyticsEvent(eventType: string, payload: any, options?: { id?: string; sessionId?: string; deviceId?: string; userId?: string; }): Promise<void> {
+  static async persistAnalyticsEvent(
+    eventType: string, 
+    payload: ImageTriggerEvent | AvatarPlayEvent | Record<string, any>, 
+    options?: { id?: string; sessionId?: string; deviceId?: string; userId?: string; }
+  ): Promise<void> {
     try {
       const insertPayload = {
         id: options?.id,

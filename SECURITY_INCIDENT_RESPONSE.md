@@ -316,23 +316,7 @@ cat .gitignore | grep -E "(\.env|secrets|\.pem|\.key)"
 
 ```bash
 # Install pre-commit framework
-pip install pre-commit
-
-# Create .pre-commit-config.yaml
-cat > .pre-commit-config.yaml << 'EOF'
-repos:
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
-    hooks:
-      - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
-        exclude: package-lock.json
-
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.18.0
-    hooks:
-      - id: gitleaks
-EOF
+pip install pre-commit detect-secrets
 
 # Install hooks
 pre-commit install
@@ -373,18 +357,25 @@ export const apiLimiter = rateLimit({
 
 ```bash
 # Add to CI/CD pipeline (.github/workflows/security.yml)
-name: Security Scan
-on: [push, pull_request]
-jobs:
-  gitleaks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+# See the security.yml file in .github/workflows/
+```
+
+### 5. Regular Secret Rotation:
+
+Use the provided script to rotate secrets regularly:
+
+```bash
+# Run the secret rotation script
+./scripts/rotate-secrets.sh
+```
+
+### 6. Security Audits:
+
+Run regular security audits using the provided script:
+
+```bash
+# Run security audit
+node security-audit.js
 ```
 
 ---

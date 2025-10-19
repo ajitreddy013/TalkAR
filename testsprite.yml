@@ -36,9 +36,9 @@ suites:
 		timeout: 300000
 
 artifacts:
-	- path: backend/test-results/**/*.xml
+	- path: backend/test-results/junit.xml
 		type: junit
-	- path: admin-dashboard/test-results/**
+	- path: admin-dashboard/playwright-report/**
 		type: html
 
 notifications:
