@@ -41,11 +41,11 @@ export interface RegisterRequest {
 export const registerUser = async (request: RegisterRequest): Promise<User> => {
   try {
     // Create user in Supabase Auth
-    const { user: authUser, error: authError } = await supabaseService.createUser(
-      request.email,
-      request.password,
-      { full_name: request.fullName, role: request.role || "user" }
-    );
+    const { user: authUser, error: authError } =
+      await supabaseService.createUser(request.email, request.password, {
+        full_name: request.fullName,
+        role: request.role || "user",
+      });
 
     if (authError) {
       throw new Error(`Failed to create user: ${authError.message}`);
@@ -57,7 +57,6 @@ export const registerUser = async (request: RegisterRequest): Promise<User> => {
 
     // Create user profile in database
     const profile = await supabaseService.createUserProfile({
-      id: authUser.id,
       email: request.email,
       full_name: request.fullName,
     });
@@ -83,26 +82,30 @@ export const registerUser = async (request: RegisterRequest): Promise<User> => {
 };
 
 export const loginUser = async (
-  request: LoginRequest
+  request: LoginRequest,
 ): Promise<LoginResponse> => {
   try {
     // For demo purposes, we'll create a JWT token that represents the user
     // In a real implementation, you would validate against Supabase Auth
-    const userProfile = await supabaseService.getUserProfileByEmail(request.email);
-    
+    const userProfile = await supabaseService.getUserProfileByEmail(
+      request.email,
+    );
+
     if (!userProfile) {
       throw new Error("Invalid credentials");
     }
 
     // Generate JWT token
+    const jwtSecret = process.env.JWT_SECRET || "fallback-secret";
+    const jwtExpiry = process.env.JWT_EXPIRES_IN || "7d";
     const token = jwt.sign(
       {
         userId: userProfile.id,
         email: userProfile.email,
-        role: userProfile.full_name?.includes('admin') ? 'admin' : 'user',
+        role: userProfile.full_name?.includes("admin") ? "admin" : "user",
       },
-      process.env.JWT_SECRET || "fallback-secret",
-      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+      jwtSecret,
+      { expiresIn: jwtExpiry } as jwt.SignOptions,
     );
 
     return {
@@ -110,7 +113,7 @@ export const loginUser = async (
       user: {
         id: userProfile.id,
         email: userProfile.email,
-        role: userProfile.full_name?.includes('admin') ? 'admin' : 'user',
+        role: userProfile.full_name?.includes("admin") ? "admin" : "user",
         fullName: userProfile.full_name,
         avatarUrl: userProfile.avatar_url,
       },
@@ -137,7 +140,7 @@ export const getUserById = async (userId: string): Promise<User | null> => {
     return {
       id: userProfile.id,
       email: userProfile.email,
-      role: userProfile.full_name?.includes('admin') ? 'admin' : 'user',
+      role: userProfile.full_name?.includes("admin") ? "admin" : "user",
       isActive: true,
       createdAt: new Date(userProfile.created_at),
       updatedAt: new Date(userProfile.updated_at),
@@ -152,20 +155,24 @@ export const getUserById = async (userId: string): Promise<User | null> => {
 
 export const updateUser = async (
   userId: string,
-  updates: Partial<User>
+  updates: Partial<User>,
 ): Promise<User | null> => {
   try {
     const updateData: any = {};
     if (updates.fullName !== undefined) updateData.full_name = updates.fullName;
-    if (updates.avatarUrl !== undefined) updateData.avatar_url = updates.avatarUrl;
+    if (updates.avatarUrl !== undefined)
+      updateData.avatar_url = updates.avatarUrl;
 
-    const updatedProfile = await supabaseService.updateUserProfile(userId, updateData);
+    const updatedProfile = await supabaseService.updateUserProfile(
+      userId,
+      updateData,
+    );
     if (!updatedProfile) return null;
 
     return {
       id: updatedProfile.id,
       email: updatedProfile.email,
-      role: updatedProfile.full_name?.includes('admin') ? 'admin' : 'user',
+      role: updatedProfile.full_name?.includes("admin") ? "admin" : "user",
       isActive: true,
       createdAt: new Date(updatedProfile.created_at),
       updatedAt: new Date(updatedProfile.updated_at),
@@ -202,11 +209,11 @@ export const getAllUsers = async (): Promise<User[]> => {
   try {
     // Get all user profiles from database
     const profiles = await supabaseService.getAllUserProfiles();
-    
-    return profiles.map(profile => ({
+
+    return profiles.map((profile) => ({
       id: profile.id,
       email: profile.email,
-      role: profile.full_name?.includes('admin') ? 'admin' : 'user',
+      role: profile.full_name?.includes("admin") ? "admin" : "user",
       isActive: true,
       createdAt: new Date(profile.created_at),
       updatedAt: new Date(profile.updated_at),
@@ -222,17 +229,33 @@ export const getAllUsers = async (): Promise<User[]> => {
 export const changePassword = async (
   userId: string,
   currentPassword: string,
-  newPassword: string
+  newPassword: string,
 ): Promise<boolean> => {
   try {
     // In a real implementation, you would validate the current password
     // against Supabase Auth and then update it
-    
+
     // For now, we'll just return true to indicate success
     // In production, implement proper password validation and update
     return true;
   } catch (error) {
     console.error("Password change error:", error);
+    return false;
+  }
+};
+
+export const resetPassword = async (email: string): Promise<boolean> => {
+  try {
+    // Send password reset email via Supabase Auth directly
+    const { supabase } = await import("../config/supabase");
+    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    if (error) {
+      console.error("Password reset error:", error);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.error("Password reset error:", error);
     return false;
   }
 };

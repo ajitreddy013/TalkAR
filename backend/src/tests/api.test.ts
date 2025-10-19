@@ -33,6 +33,7 @@ describe("API Integration Tests", () => {
   let adminToken: string;
 
   beforeAll(async () => {
+    process.env.SYNC_USE_MOCK = "true";
     await testDb.sync({ force: true });
   });
 

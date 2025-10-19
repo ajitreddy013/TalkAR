@@ -23,6 +23,7 @@ router.post("/generate", validateSyncRequest, async (req, res, next) => {
 
     return res.json(result);
   } catch (error) {
+    console.error("/sync/generate error:", error);
     return next(error);
   }
 });

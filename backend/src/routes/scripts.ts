@@ -12,7 +12,7 @@ router.get("/getScriptForImage/:imageId", async (req, res, next) => {
   try {
     const { imageId } = req.params;
     const { scriptIndex, chunkIndex } = req.query;
-    
+
     // Get user agent and IP for analytics
     const userAgent = req.get("User-Agent");
     const ipAddress = req.ip || req.connection.remoteAddress;
@@ -22,7 +22,7 @@ router.get("/getScriptForImage/:imageId", async (req, res, next) => {
       imageId,
       chunkIndex ? parseInt(chunkIndex as string, 10) : undefined,
       userAgent,
-      ipAddress
+      ipAddress,
     );
 
     if (!result.success) {
@@ -148,7 +148,7 @@ router.get(
 
       const dialogues = (image as any).dialogues || [];
       const currentIndex = dialogues.findIndex(
-        (d: any) => d.id === currentScriptId
+        (d: any) => d.id === currentScriptId,
       );
 
       if (currentIndex === -1) {
@@ -177,14 +177,14 @@ router.get(
 
       // Log script progression
       console.log(
-        `[ANALYTICS] Script progression for ${image.name}: ${currentIndex} -> ${nextIndex}`
+        `[ANALYTICS] Script progression for ${image.name}: ${currentIndex} -> ${nextIndex}`,
       );
 
       return res.json(response);
     } catch (error) {
       return next(error);
     }
-  }
+  },
 );
 
 /**
@@ -204,16 +204,22 @@ router.post("/image/:imageId/chunks", async (req, res, next) => {
     }
 
     // Validate script structure
-    const validScripts = scripts.every((script) => 
-      script.text && 
-      script.language && 
-      typeof script.orderIndex === "number"
+    const validScripts = scripts.every(
+      (script) =>
+        typeof script.text === "string" &&
+        script.text.trim().length > 0 &&
+        typeof script.language === "string" &&
+        script.language.trim().length > 0 &&
+        typeof script.orderIndex === "number" &&
+        typeof script.voiceId === "string" &&
+        script.voiceId.trim().length > 0,
     );
 
     if (!validScripts) {
       return res.status(400).json({
         success: false,
-        message: "Each script must have text, language, and orderIndex",
+        message:
+          "Each script must have text, language, orderIndex, and voiceId (all with correct types)",
       });
     }
 
@@ -244,7 +250,7 @@ router.post("/image/:imageId/chunks", async (req, res, next) => {
 router.get("/analytics/triggers", async (req, res, next) => {
   try {
     const analytics = AnalyticsService.getAnalytics();
-    
+
     res.json({
       success: true,
       analytics: analytics.imageTriggers,
@@ -262,7 +268,7 @@ router.get("/analytics/triggers", async (req, res, next) => {
 router.get("/stats", async (req, res, next) => {
   try {
     const analytics = AnalyticsService.getAnalytics();
-    
+
     res.json({
       success: true,
       stats: {

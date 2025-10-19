@@ -1,6 +1,6 @@
 import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
-import { supabaseService } from "./supabaseService";
+import supabaseService, { SyncJob } from "./supabaseService";
 
 interface SyncRequest {
   text: string;
@@ -19,27 +19,25 @@ interface SyncResponse {
 }
 
 export const generateSyncVideo = async (
-  request: SyncRequest
+  request: SyncRequest,
 ): Promise<SyncResponse> => {
   try {
     const jobId = uuidv4();
 
     // Store job in Supabase
     const jobData = {
-      id: jobId,
+      project_id: jobId, // Use as project_id instead
       user_id: request.userId,
       text: request.text,
       language: request.language,
       voice_id: request.voiceId,
       image_url: request.imageUrl,
-      status: "pending",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      status: "pending" as const,
     };
 
-    const { error: createError } = await supabaseService.createSyncJob(jobData);
-    if (createError) {
-      throw new Error(`Failed to create sync job: ${createError.message}`);
+    const createdJob = await supabaseService.createSyncJob(jobData);
+    if (!createdJob) {
+      throw new Error("Failed to create sync job");
     }
 
     // Real Sync.so API implementation
@@ -48,13 +46,13 @@ export const generateSyncVideo = async (
 
     if (!syncApiKey) {
       throw new Error(
-        "Sync API key not configured. Please set SYNC_API_KEY in .env file"
+        "Sync API key not configured. Please set SYNC_API_KEY in .env file",
       );
     }
 
     console.log(`Calling sync.so API: ${syncApiUrl}`);
     console.log(
-      `Generating sync video for: "${request.text}" in ${request.language}`
+      `Generating sync video for: "${request.text}" in ${request.language}`,
     );
 
     // Update job status to processing
@@ -120,7 +118,7 @@ export const generateSyncVideo = async (
         });
 
         console.log(
-          `Sync video completed for job ${jobId}: ${completedJob.videoUrl}`
+          `Sync video completed for job ${jobId}: ${completedJob.videoUrl}`,
         );
 
         // Return the completed job with video URL
@@ -146,20 +144,20 @@ export const generateSyncVideo = async (
               `${syncApiUrl}/status/${response.data.jobId || jobId}`,
               {
                 headers: { "x-api-key": syncApiKey },
-              }
+              },
             );
 
             if (statusResponse.data.status === "completed") {
-              const completedJobData = {
-                status: "completed",
-                video_url: statusResponse.data.videoUrl || statusResponse.data.outputUrl,
+              const completedJobData: Partial<SyncJob> = {
+                status: "completed" as const,
+                video_url:
+                  statusResponse.data.videoUrl || statusResponse.data.outputUrl,
                 duration: statusResponse.data.duration || 10,
-                updated_at: new Date().toISOString(),
               };
 
               await supabaseService.updateSyncJob(jobId, completedJobData);
               console.log(
-                `Sync video completed for job ${jobId}: ${completedJobData.video_url}`
+                `Sync video completed for job ${jobId}: ${completedJobData.video_url}`,
               );
             }
           } catch (pollError) {
@@ -196,7 +194,7 @@ export const getSyncStatus = async (jobId: string): Promise<SyncResponse> => {
   try {
     // Get job from Supabase
     const job = await supabaseService.getSyncJob(jobId);
-    
+
     if (!job) {
       throw new Error("Job not found");
     }
@@ -214,11 +212,13 @@ export const getSyncStatus = async (jobId: string): Promise<SyncResponse> => {
   }
 };
 
-export const getUserSyncJobs = async (userId: string): Promise<SyncResponse[]> => {
+export const getUserSyncJobs = async (
+  userId: string,
+): Promise<SyncResponse[]> => {
   try {
     const jobs = await supabaseService.getUserSyncJobs(userId);
-    
-    return jobs.map(job => ({
+
+    return jobs.map((job: SyncJob) => ({
       jobId: job.id,
       status: job.status,
       videoUrl: job.video_url,
@@ -231,7 +231,10 @@ export const getUserSyncJobs = async (userId: string): Promise<SyncResponse[]> =
   }
 };
 
-export const getTalkingHeadVideo = async (imageId: string, userId?: string): Promise<any> => {
+export const getTalkingHeadVideo = async (
+  imageId: string,
+  userId?: string,
+): Promise<any> => {
   try {
     // For now, return a mock talking head video
     // In production, this would fetch from database or storage

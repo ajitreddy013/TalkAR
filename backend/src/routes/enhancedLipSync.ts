@@ -1,5 +1,8 @@
 import express from "express";
-import { EnhancedLipSyncService, LipSyncRequest } from "../services/enhancedLipSyncService";
+import {
+  EnhancedLipSyncService,
+  LipSyncRequest,
+} from "../services/enhancedLipSyncService";
 
 const router = express.Router();
 
@@ -11,14 +14,14 @@ router.post("/generate", async (req, res, next) => {
     if (!text || !voiceId || !imageId || !scriptId) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields: text, voiceId, imageId, scriptId"
+        message: "Missing required fields: text, voiceId, imageId, scriptId",
       });
     }
 
     const request: LipSyncRequest = {
       text,
       voiceId,
-      language: language || 'en-US',
+      language: language || "en-US",
       imageId,
       scriptId,
     };
@@ -26,7 +29,9 @@ router.post("/generate", async (req, res, next) => {
     const result = await EnhancedLipSyncService.generateLipSyncVideo(request);
 
     // Log the generation request
-    console.log(`[ANALYTICS] Lip-sync generation requested for image ${imageId}, script ${scriptId}, voice ${voiceId}`);
+    console.log(
+      `[ANALYTICS] Lip-sync generation requested for image ${imageId}, script ${scriptId}, voice ${voiceId}`,
+    );
 
     return res.json(result);
   } catch (error) {
@@ -40,8 +45,10 @@ router.get("/status/:videoId", async (req, res, next) => {
     const { videoId } = req.params;
     const result = await EnhancedLipSyncService.getVideoStatus(videoId);
 
-    if (result.status === 'completed') {
-      console.log(`[ANALYTICS] Video ${videoId} accessed - processing time: ${result.processingTime}ms`);
+    if (result.status === "completed") {
+      console.log(
+        `[ANALYTICS] Video ${videoId} accessed - processing time: ${result.processingTime}ms`,
+      );
     }
 
     return res.json(result);
@@ -56,12 +63,14 @@ router.get("/videos/:imageId", async (req, res, next) => {
     const { imageId } = req.params;
     const videos = await EnhancedLipSyncService.getVideosForImage(imageId);
 
-    console.log(`[ANALYTICS] Retrieved ${videos.length} videos for image ${imageId}`);
+    console.log(
+      `[ANALYTICS] Retrieved ${videos.length} videos for image ${imageId}`,
+    );
 
     res.json({
       success: true,
       imageId,
-      videos: videos.map(v => ({
+      videos: videos.map((v) => ({
         videoId: v.videoId,
         scriptId: v.scriptId,
         text: v.text,
@@ -82,8 +91,10 @@ router.get("/videos/:imageId", async (req, res, next) => {
 router.get("/analytics", async (req, res, next) => {
   try {
     const analytics = await EnhancedLipSyncService.getAnalytics();
-    
-    console.log(`[ANALYTICS] Analytics requested - ${analytics.totalVideos} total videos`);
+
+    console.log(
+      `[ANALYTICS] Analytics requested - ${analytics.totalVideos} total videos`,
+    );
 
     res.json({
       success: true,
@@ -99,8 +110,10 @@ router.get("/analytics", async (req, res, next) => {
 router.post("/cleanup", async (req, res, next) => {
   try {
     const cleanedCount = await EnhancedLipSyncService.cleanupExpiredVideos();
-    
-    console.log(`[ANALYTICS] Manual cleanup performed - ${cleanedCount} videos removed`);
+
+    console.log(
+      `[ANALYTICS] Manual cleanup performed - ${cleanedCount} videos removed`,
+    );
 
     res.json({
       success: true,
@@ -129,27 +142,31 @@ router.post("/generate-for-image", async (req, res, next) => {
       });
     }
 
-    console.log(`[ENHANCED-LIPSYNC] Generating video for image: ${imageId}, chunk: ${chunkIndex}`);
+    console.log(
+      `[ENHANCED-LIPSYNC] Generating video for image: ${imageId}, chunk: ${chunkIndex}`,
+    );
 
     const result = await EnhancedLipSyncService.generateLipSyncVideoForImage(
       imageId,
       chunkIndex,
       userId,
       sessionId,
-      { userAgent, ip }
+      { userAgent, ip },
     );
 
     if (result.success) {
-      res.json({
+      return res.json({
         success: true,
         videoId: result.videoId,
         videoUrl: result.videoUrl,
         scriptChunk: result.scriptChunk,
         analyticsId: result.analyticsId,
-        message: result.videoUrl ? "Video ready" : "Video generation in progress",
+        message: result.videoUrl
+          ? "Video ready"
+          : "Video generation in progress",
       });
     } else {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: result.error,
         analyticsId: result.analyticsId,
@@ -157,7 +174,7 @@ router.post("/generate-for-image", async (req, res, next) => {
     }
   } catch (error) {
     console.error("Error in enhanced lip-sync generation:", error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -173,19 +190,20 @@ router.post("/playback/:videoId", async (req, res, next) => {
     if (!["start", "pause", "resume", "complete", "error"].includes(event)) {
       return res.status(400).json({
         success: false,
-        error: "Invalid event type. Must be: start, pause, resume, complete, or error",
+        error:
+          "Invalid event type. Must be: start, pause, resume, complete, or error",
       });
     }
 
     await EnhancedLipSyncService.logAvatarPlayback(videoId, event, metadata);
 
-    res.json({
+    return res.json({
       success: true,
       message: `Logged ${event} event for video ${videoId}`,
     });
   } catch (error) {
     console.error("Error logging playback event:", error);
-    next(error);
+    return next(error);
   }
 });
 
@@ -197,7 +215,9 @@ router.get("/enhanced-analytics", async (req, res, next) => {
   try {
     const { imageId } = req.query;
 
-    const analytics = await EnhancedLipSyncService.getEnhancedAnalytics(imageId as string);
+    const analytics = await EnhancedLipSyncService.getEnhancedAnalytics(
+      imageId as string,
+    );
 
     res.json({
       success: true,
@@ -212,22 +232,34 @@ router.get("/enhanced-analytics", async (req, res, next) => {
 /**
  * POST /api/v1/enhanced-lipsync/image/:imageId/pre-generate
  * Pre-generate lip-sync videos for all scripts of an image
+ * Note: This is a placeholder endpoint for future batch pre-generation feature
  */
 router.post("/image/:imageId/pre-generate", async (req, res, next) => {
   try {
     const { imageId } = req.params;
 
-    console.log(`[ENHANCED-LIPSYNC] Pre-generating all videos for image: ${imageId}`);
+    console.log(
+      `[ENHANCED-LIPSYNC] Pre-generation requested for image: ${imageId}`,
+    );
 
-    // Since there's no generateAllScriptsForImage method, we'll use a different approach
-    // For now, we'll just return a success response
+    // Get existing videos for the image
+    const existingVideos =
+      await EnhancedLipSyncService.getVideosForImage(imageId);
+
+    // TODO: Implement batch pre-generation when needed
+    // This would involve:
+    // 1. Fetching all scripts/dialogues for the image
+    // 2. Generating videos for each script in the background
+    // 3. Returning job IDs for tracking progress
+
     res.json({
       success: true,
-      generatedVideos: [],
-      message: `Pre-generation endpoint called for image ${imageId}`,
+      message: `Pre-generation endpoint - ${existingVideos.length} videos already exist for image ${imageId}`,
+      existingVideos: existingVideos.length,
+      note: "Batch pre-generation feature is planned for future implementation",
     });
   } catch (error) {
-    console.error("Error pre-generating videos:", error);
+    console.error("Error in pre-generation endpoint:", error);
     next(error);
   }
 });
