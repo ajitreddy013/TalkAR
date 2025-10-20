@@ -38,8 +38,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-          cache: "npm"
-          cache-dependency-path: backend/package-lock.json
+
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: backend/node_modules
+          key: ${{ runner.os }}-backend-node-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-backend-node-
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -50,13 +56,6 @@ jobs:
             pg_isready -h localhost -p 5432 -U postgres && break
             sleep 1
           done
-
-      - name: Create PostgreSQL role 'root' if missing
-        env:
-          PGPASSWORD: postgres
-        run: |
-          psql -h localhost -U postgres -tc "SELECT 1 FROM pg_roles WHERE rolname='root'" | grep -q 1 || \
-          psql -h localhost -U postgres -c "CREATE ROLE root WITH LOGIN SUPERUSER PASSWORD 'postgres';"
 
       - name: Install dependencies
         working-directory: ./backend
@@ -110,8 +109,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-          cache: "npm"
-          cache-dependency-path: admin-dashboard/package-lock.json
+
+      - name: Cache node modules
+        uses: actions/cache@v3
+        with:
+          path: admin-dashboard/node_modules
+          key: ${{ runner.os }}-admin-node-${{ hashFiles('admin-dashboard/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-admin-node-
 
       - name: Install dependencies
         working-directory: ./admin-dashboard
