@@ -191,16 +191,17 @@ router.get(
  * POST /api/v1/scripts/image/:imageId/chunks
  * Create multiple script chunks for an image
  */
-router.post("/image/:imageId/chunks", async (req, res, next) => {
+router.post("/image/:imageId/chunks", async (req, res, next): Promise<void> => {
   try {
     const { imageId } = req.params;
     const { scripts } = req.body;
 
     if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: "Scripts array is required and cannot be empty",
       });
+      return;
     }
 
     // Validate script structure
@@ -216,20 +217,22 @@ router.post("/image/:imageId/chunks", async (req, res, next) => {
     );
 
     if (!validScripts) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message:
           "Each script must have text, language, orderIndex, and voiceId (all with correct types)",
       });
+      return;
     }
 
     const result = await ScriptService.createScriptChunks(imageId, scripts);
 
     if (!result.success) {
-      return res.status(400).json({
+      res.status(400).json({
         success: false,
         message: result.message || "Failed to create script chunks",
       });
+      return;
     }
 
     res.status(201).json({
@@ -247,7 +250,7 @@ router.post("/image/:imageId/chunks", async (req, res, next) => {
  * GET /api/v1/scripts/analytics/triggers
  * Get script trigger analytics
  */
-router.get("/analytics/triggers", async (req, res, next) => {
+router.get("/analytics/triggers", async (req, res, next): Promise<void> => {
   try {
     const analytics = AnalyticsService.getAnalytics();
 
@@ -265,7 +268,7 @@ router.get("/analytics/triggers", async (req, res, next) => {
  * GET /api/v1/scripts/stats
  * Get script usage statistics
  */
-router.get("/stats", async (req, res, next) => {
+router.get("/stats", async (req, res, next): Promise<void> => {
   try {
     const analytics = AnalyticsService.getAnalytics();
 

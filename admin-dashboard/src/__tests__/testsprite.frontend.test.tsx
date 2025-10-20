@@ -12,32 +12,28 @@ import authReducer from "../store/slices/authSlice";
 jest.mock("../services/imageService", () => ({
   ImageService: {
     getAllImages: jest.fn().mockResolvedValue({ data: [] }),
-    createImage: jest
-      .fn()
-      .mockResolvedValue({
-        data: {
-          id: "1",
-          name: "Test",
-          imageUrl: "/uploads/x.jpg",
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          dialogues: [],
-        },
-      }),
-    updateImage: jest
-      .fn()
-      .mockResolvedValue({
-        data: {
-          id: "1",
-          name: "Updated",
-          imageUrl: "/uploads/x.jpg",
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          dialogues: [],
-        },
-      }),
+    createImage: jest.fn().mockResolvedValue({
+      data: {
+        id: "1",
+        name: "Test",
+        imageUrl: "/uploads/x.jpg",
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        dialogues: [],
+      },
+    }),
+    updateImage: jest.fn().mockResolvedValue({
+      data: {
+        id: "1",
+        name: "Updated",
+        imageUrl: "/uploads/x.jpg",
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        dialogues: [],
+      },
+    }),
     deleteImage: jest.fn().mockResolvedValue({}),
   },
 }));
@@ -57,8 +53,19 @@ function renderWithStore(ui: React.ReactElement) {
     },
     preloadedState: {
       images: { images: [], loading: false, error: null, selectedImage: null },
-      dialogues: { dialogues: [], loading: false, error: null },
-      auth: { token: null, user: null, loading: false, error: null },
+      dialogues: {
+        dialogues: [],
+        loading: false,
+        error: null,
+        selectedDialogue: null,
+      },
+      auth: {
+        user: null,
+        token: null,
+        loading: false,
+        error: null,
+        isAuthenticated: false,
+      },
     },
   });
   return render(<Provider store={store}>{ui}</Provider>);

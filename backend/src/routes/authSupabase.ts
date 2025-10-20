@@ -31,6 +31,7 @@ router.post("/register", validateAuthRequest, async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -44,6 +45,7 @@ router.post("/login", validateAuthRequest, async (req, res, next) => {
     res.json(result);
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -61,7 +63,8 @@ router.post("/change-password", authenticateUser, async (req, res, next) => {
 
     return res.json({ message: "Password changed successfully" });
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -75,6 +78,7 @@ router.post("/reset-password", async (req, res, next) => {
     res.json({ message: "Password reset email sent" });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -95,6 +99,7 @@ router.get("/users", authenticateAdmin, async (req, res, next) => {
     );
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -117,7 +122,8 @@ router.get("/users/:id", authenticateAdmin, async (req, res, next) => {
       updatedAt: user.updatedAt,
     });
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -141,7 +147,8 @@ router.put("/users/:id", authenticateAdmin, async (req, res, next) => {
       updatedAt: updatedUser.updatedAt,
     });
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -158,7 +165,8 @@ router.delete("/users/:id", authenticateAdmin, async (req, res, next) => {
 
     return res.json({ message: "User deleted successfully" });
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -186,7 +194,8 @@ router.get("/profile", authenticateUser, async (req, res, next) => {
       updatedAt: user.updatedAt,
     });
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 

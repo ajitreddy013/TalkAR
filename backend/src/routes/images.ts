@@ -25,6 +25,7 @@ router.get("/", async (req, res, next) => {
     res.json(images);
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -92,7 +93,8 @@ router.get("/:id", async (req, res, next) => {
 
     return res.json(image);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -131,7 +133,8 @@ router.post(
 
       return res.status(201).json(image);
     } catch (error) {
-      return next(error);
+      next(error);
+      return;
     }
   }
 );
@@ -155,7 +158,8 @@ router.put("/:id", async (req, res, next) => {
 
     return res.json(image);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -172,7 +176,8 @@ router.delete("/:id", async (req, res, next) => {
     await image.destroy();
     return res.status(204).send();
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -200,7 +205,8 @@ router.post("/:id/dialogues", async (req, res, next) => {
 
     return res.status(201).json(dialogue);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -227,7 +233,8 @@ router.put("/:imageId/dialogues/:dialogueId", async (req, res, next) => {
 
     return res.json(dialogue);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -247,7 +254,25 @@ router.delete("/:imageId/dialogues/:dialogueId", async (req, res, next) => {
     await dialogue.destroy();
     return res.status(204).send();
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
+  }
+});
+
+// Get all dialogues for an image
+router.get("/:id/dialogues", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const dialogues = await Dialogue.findAll({
+      where: { imageId: id, isActive: true },
+      order: [["orderIndex", "ASC"]],
+    });
+
+    res.json(dialogues);
+  } catch (error) {
+    next(error);
+    return;
   }
 });
 

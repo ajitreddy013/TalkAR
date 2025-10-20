@@ -16,7 +16,8 @@ router.get("/", async (req, res, next) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -34,6 +35,7 @@ router.get("/image-triggers", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -51,6 +53,7 @@ router.get("/avatar-plays", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -68,6 +71,7 @@ router.get("/performance", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -99,7 +103,8 @@ router.post("/log-image-trigger", async (req, res, next) => {
       message: "Image trigger logged successfully",
     });
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -129,7 +134,8 @@ router.post("/log-avatar-play-start", async (req, res, next) => {
       message: "Avatar play start logged successfully",
     });
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -152,7 +158,8 @@ router.post("/log-avatar-play-end", async (req, res, next) => {
       message: "Avatar play end logged successfully",
     });
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -175,6 +182,7 @@ router.post("/log-performance", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -192,6 +200,7 @@ router.post("/cleanup", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 

@@ -42,6 +42,7 @@ router.get("/images", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -60,6 +61,7 @@ router.get("/analytics", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -72,6 +74,7 @@ router.post("/images/bulk-deactivate", async (req, res, next) => {
     res.json({ message: "Images deactivated successfully" });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -83,6 +86,7 @@ router.post("/images/bulk-activate", async (req, res, next) => {
     res.json({ message: "Images activated successfully" });
   } catch (error) {
     next(error);
+    return;
   }
 });
 

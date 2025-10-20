@@ -2,3 +2,5 @@
 test("basic test", () => {
   expect(1 + 1).toBe(2);
 });
+
+export {}; // Make this file a module

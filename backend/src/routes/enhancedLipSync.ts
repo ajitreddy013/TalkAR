@@ -35,7 +35,8 @@ router.post("/generate", async (req, res, next) => {
 
     return res.json(result);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -53,7 +54,8 @@ router.get("/status/:videoId", async (req, res, next) => {
 
     return res.json(result);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -84,6 +86,7 @@ router.get("/videos/:imageId", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -103,6 +106,7 @@ router.get("/analytics", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -122,6 +126,7 @@ router.post("/cleanup", async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -174,7 +179,8 @@ router.post("/generate-for-image", async (req, res, next) => {
     }
   } catch (error) {
     console.error("Error in enhanced lip-sync generation:", error);
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -199,68 +205,11 @@ router.post("/playback/:videoId", async (req, res, next) => {
 
     return res.json({
       success: true,
-      message: `Logged ${event} event for video ${videoId}`,
+      message: "Playback event logged",
     });
   } catch (error) {
-    console.error("Error logging playback event:", error);
-    return next(error);
-  }
-});
-
-/**
- * GET /api/v1/enhanced-lipsync/enhanced-analytics
- * Get enhanced analytics data including script usage and playback patterns
- */
-router.get("/enhanced-analytics", async (req, res, next) => {
-  try {
-    const { imageId } = req.query;
-
-    const analytics = await EnhancedLipSyncService.getEnhancedAnalytics(
-      imageId as string,
-    );
-
-    res.json({
-      success: true,
-      analytics,
-    });
-  } catch (error) {
-    console.error("Error getting enhanced analytics:", error);
     next(error);
-  }
-});
-
-/**
- * POST /api/v1/enhanced-lipsync/image/:imageId/pre-generate
- * Pre-generate lip-sync videos for all scripts of an image
- * Note: This is a placeholder endpoint for future batch pre-generation feature
- */
-router.post("/image/:imageId/pre-generate", async (req, res, next) => {
-  try {
-    const { imageId } = req.params;
-
-    console.log(
-      `[ENHANCED-LIPSYNC] Pre-generation requested for image: ${imageId}`,
-    );
-
-    // Get existing videos for the image
-    const existingVideos =
-      await EnhancedLipSyncService.getVideosForImage(imageId);
-
-    // TODO: Implement batch pre-generation when needed
-    // This would involve:
-    // 1. Fetching all scripts/dialogues for the image
-    // 2. Generating videos for each script in the background
-    // 3. Returning job IDs for tracking progress
-
-    res.json({
-      success: true,
-      message: `Pre-generation endpoint - ${existingVideos.length} videos already exist for image ${imageId}`,
-      existingVideos: existingVideos.length,
-      note: "Batch pre-generation feature is planned for future implementation",
-    });
-  } catch (error) {
-    console.error("Error in pre-generation endpoint:", error);
-    next(error);
+    return;
   }
 });
 

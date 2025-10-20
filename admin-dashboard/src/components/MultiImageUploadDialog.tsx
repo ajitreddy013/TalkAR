@@ -30,24 +30,6 @@ interface MultiImageUploadDialogProps {
   onSave: (imageSet: ServerImageSet) => Promise<void>;
 }
 
-interface LocalImageSet {
-  objectName: string;
-  description: string;
-  images: {
-    type:
-      | "front"
-      | "left_angle"
-      | "right_angle"
-      | "bright"
-      | "dim"
-      | "close"
-      | "far";
-    file: File;
-    description: string;
-    required: boolean;
-  }[];
-}
-
 const REQUIRED_IMAGE_TYPES = [
   {
     type: "front",

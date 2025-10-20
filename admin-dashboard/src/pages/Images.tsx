@@ -30,11 +30,7 @@ import type { ImageSet } from "../services/multiImageService";
 
 export default function Images() {
   const dispatch = useAppDispatch();
-  const {
-    images,
-    loading: listLoading,
-    error: listError,
-  } = useAppSelector((s) => s.images);
+  const { images, error: listError } = useAppSelector((s) => s.images);
 
   const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);

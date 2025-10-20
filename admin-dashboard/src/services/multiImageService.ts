@@ -1,4 +1,4 @@
-import { api, API_BASE_URL } from "./api";
+import { api } from "./api";
 
 export interface MultiImageUpload {
   objectName: string;

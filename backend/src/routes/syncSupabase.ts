@@ -30,7 +30,8 @@ router.post("/generate", authenticateUser, validateSyncRequest, async (req, res,
 
     return res.json(result);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -56,7 +57,8 @@ router.get("/status/:jobId", authenticateUser, async (req, res, next) => {
 
     return res.json(status);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -73,7 +75,8 @@ router.get("/jobs", authenticateUser, async (req, res, next) => {
 
     return res.json(jobs);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -89,7 +92,8 @@ router.get("/voices", async (req, res, next) => {
     ];
     return res.json(voices);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
@@ -108,7 +112,8 @@ router.get("/talking-head/:imageId", authenticateUser, async (req, res, next) =>
 
     return res.json(talkingHeadVideo);
   } catch (error) {
-    return next(error);
+    next(error);
+    return;
   }
 });
 
