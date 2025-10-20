@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeAll, afterAll } from "@jest/globals";
 import request from "supertest";
 import express from "express";
 import { testDb } from "./setup";
@@ -13,24 +14,21 @@ app.use("/api/v1/images", imageRoutes);
 app.use("/api/v1/sync", syncRoutes);
 
 describe("Performance Tests", () => {
-  let authToken: string;
 
   beforeAll(async () => {
     process.env.SYNC_USE_MOCK = "true";
     await testDb.sync({ force: true });
 
     // Create test user
-    const response = await request(app).post("/api/v1/auth/register").send({
+    await request(app).post("/api/v1/auth/register").send({
       email: "perf@example.com",
       password: "password123",
     });
 
-    const loginResponse = await request(app).post("/api/v1/auth/login").send({
+    await request(app).post("/api/v1/auth/login").send({
       email: "perf@example.com",
       password: "password123",
     });
-
-    authToken = loginResponse.body.token;
   });
 
   afterAll(async () => {
@@ -62,7 +60,7 @@ describe("Performance Tests", () => {
 
       const promises = Array(concurrentRequests)
         .fill(null)
-        .map((_) =>
+        .map(() =>
           request(app)
             .post("/api/v1/sync/generate")
             .send({
@@ -95,7 +93,7 @@ describe("Performance Tests", () => {
         // 10 sync requests
         ...Array(10)
           .fill(null)
-          .map((_) =>
+          .map(() =>
             request(app)
               .post("/api/v1/sync/generate")
               .send({
@@ -131,8 +129,9 @@ describe("Performance Tests", () => {
       }
 
       // Force garbage collection if available
-      if (global.gc) {
-        global.gc();
+      const g: any = global as any;
+      if (typeof g.gc === "function") {
+        g.gc();
       }
 
       const finalMemory = process.memoryUsage();

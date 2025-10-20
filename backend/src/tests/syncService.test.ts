@@ -3,6 +3,7 @@ import {
   getSyncStatus,
   getAvailableVoices,
 } from "../services/syncService";
+import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 
 // Mock axios
 jest.mock("axios");

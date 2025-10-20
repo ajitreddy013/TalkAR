@@ -35,6 +35,11 @@
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
     "eject": "react-scripts eject"
   },
+  "overrides": {
+    "nth-check": "^2.1.1",
+    "postcss": "^8.4.31",
+    "webpack-dev-server": "^5.2.1"
+  },
   "eslintConfig": {
     "extends": [
       "react-app",
