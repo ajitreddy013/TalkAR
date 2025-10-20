@@ -160,25 +160,25 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
+      - name: Verify Java version
+        run: java -version
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Ensure Gradle cache directories exist
-        run: |
-          mkdir -p $HOME/.gradle
-          mkdir -p mobile-app/.gradle
-          mkdir -p mobile-app/app/build
+      - name: Cache Gradle wrapper
+        uses: actions/cache@v3
+        with:
+          path: ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('**/gradle-wrapper.properties') }}
 
       - name: Cache Gradle dependencies
         uses: actions/cache@v3
         with:
-          path: |
-            ~/.gradle
-            mobile-app/.gradle
-            mobile-app/app/build
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
-            ${{ runner.os }}-gradle-
+            ${{ runner.os }}-gradle-caches-
 
       - name: Make gradlew executable
         working-directory: ./mobile-app
