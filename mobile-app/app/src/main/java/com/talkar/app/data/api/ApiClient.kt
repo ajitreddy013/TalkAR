@@ -20,7 +20,7 @@ interface ApiService {
     suspend fun getSyncStatus(@Path("jobId") jobId: String): Response<SyncResponse>
     
     @GET("sync/talking-head/{imageId}")
-    suspend fun getTalkingHeadVideo(@Path("imageId") imageId: String): Response<TalkingHeadVideo>
+    suspend fun getTalkingHeadVideo(@Path("imageId") imageId: String, @Query("language") language: String?): Response<TalkingHeadVideo>
     
     // Avatar endpoints
     @GET("avatars")

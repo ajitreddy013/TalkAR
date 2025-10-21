@@ -54,9 +54,10 @@ router.get("/voices", async (req, res, next) => {
 router.get("/talking-head/:imageId", async (req, res, next) => {
   try {
     const { imageId } = req.params;
+    const { language } = req.query;
 
     // Get the talking head video for this specific image
-    const talkingHeadVideo = await getTalkingHeadVideo(imageId);
+    const talkingHeadVideo = await getTalkingHeadVideo(imageId, language as string);
 
     return res.json(talkingHeadVideo);
   } catch (error) {

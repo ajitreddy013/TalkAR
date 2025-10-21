@@ -48,8 +48,8 @@ export const generateSyncVideo = async (
       `Generating sync video for: "${request.text}" in ${request.language}`
     );
 
-    // Ensure English language for proper lip-sync
-    const language = request.language.toLowerCase() === "en" ? "en" : "en";
+    // Use the requested language for proper multi-language support
+    const language = request.language;
     const text = request.text;
 
     // Update job status to processing
@@ -176,7 +176,7 @@ export const getSyncStatus = async (jobId: string): Promise<SyncResponse> => {
   return job;
 };
 
-export const getTalkingHeadVideo = async (imageId: string): Promise<any> => {
+export const getTalkingHeadVideo = async (imageId: string, language: string = "en"): Promise<any> => {
   try {
     // For now, return a mock talking head video
     // In production, this would fetch from database or storage
@@ -184,10 +184,10 @@ export const getTalkingHeadVideo = async (imageId: string): Promise<any> => {
       imageId: imageId,
       videoUrl: "https://assets.sync.so/docs/example-talking-head.mp4", // Mock video URL
       duration: 15, // 15 seconds
-      title: "Welcome to TalkAR",
-      description: "This is a pre-saved talking head video for this image",
-      language: "en",
-      voiceId: "en-female-1",
+      title: `Welcome to TalkAR (${language})`,
+      description: `This is a pre-saved talking head video for this image in ${language}`,
+      language: language,
+      voiceId: `${language}-female-1`,
       createdAt: new Date().toISOString(),
     };
 
