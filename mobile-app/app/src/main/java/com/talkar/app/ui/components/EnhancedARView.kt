@@ -20,8 +20,6 @@ import com.talkar.app.data.models.BackendImage
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.ui.components.AvatarPlaceholder
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlin.coroutines.CoroutineContext
 
 /**
  * Enhanced AR View with Avatar Overlay Support
@@ -35,12 +33,45 @@ fun EnhancedARView(
     val context = LocalContext.current
     val viewModel: EnhancedARViewModel = viewModel()
     
+    // Observe when an image is detected and call the callback
+    val currentImage by viewModel.currentImage.collectAsState()
+    val currentAvatar by viewModel.currentAvatar.collectAsState()
+    
+    // Call onImageDetected when we have a new image
+    LaunchedEffect(currentImage, currentAvatar) {
+        currentImage?.let { image ->
+            onImageDetected(image, currentAvatar)
+        }
+    }
+    
+    // Call onImageLost when tracking stops
+    val isTracking by viewModel.isTracking.collectAsState()
+    var wasTracking by remember { mutableStateOf(false) }
+    var lastDetectedImageId by remember { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(isTracking, currentImage) {
+        // Update the last detected image ID when we have a new image
+        currentImage?.id?.let { 
+            lastDetectedImageId = it
+        }
+        
+        if (wasTracking && !isTracking && lastDetectedImageId != null) {
+            // We were tracking but now we're not - image was lost
+            onImageLost(lastDetectedImageId!!)
+        }
+        wasTracking = isTracking
+    }
+    
     // Use Simple AR View for now
     SimpleARView(
         modifier = modifier.fillMaxSize(),
         onImageDetected = { imageName ->
             // Simulate image detection
             viewModel.simulateImageDetection()
+        },
+        onImageLost = {
+            // When SimpleARView reports image lost, propagate to our callback
+            lastDetectedImageId?.let { onImageLost(it) }
         }
     )
     
@@ -71,10 +102,8 @@ private fun AvatarOverlayUI(
             contentAlignment = Alignment.Center
         ) {
             // Avatar Overlay
-            AvatarOverlayView(
+            AvatarPlaceholder(
                 isVisible = true,
-                avatar = avatar,
-                image = image,
                 modifier = Modifier
                     .padding(16.dp)
                     .size(200.dp)
@@ -90,7 +119,7 @@ private fun AvatarOverlayUI(
                 )
             ) {
                 Text(
-                    text = "🎯 ${image.name} Detected",
+                    text = "🎯 ${image?.name ?: "Image"} Detected",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(16.dp)
                 )
@@ -105,7 +134,8 @@ private fun AvatarOverlayUI(
 @Composable
 fun SimpleARView(
     modifier: Modifier = Modifier,
-    onImageDetected: (String) -> Unit = { _ -> }
+    onImageDetected: (String) -> Unit = { _ -> },
+    onImageLost: () -> Unit = { }
 ) {
     val context = LocalContext.current
     var isDetecting by remember { mutableStateOf(false) }
@@ -116,11 +146,20 @@ fun SimpleARView(
     var isLifecycleActive by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
 
     DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, _ ->
+        val observer = LifecycleEventObserver { _, event ->
             isLifecycleActive = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            
+            // When lifecycle becomes inactive and we were detecting, report image lost
+            if (!isLifecycleActive && isDetecting) {
+                onImageLost()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            // When composable is disposed and we were detecting, report image lost
+            if (isDetecting) {
+                onImageLost()
+            }
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
@@ -136,6 +175,7 @@ fun SimpleARView(
 
             delay(2000) // Show for 2 seconds
             isDetecting = false
+            onImageLost() // Report image lost when detection period ends
             detectedImage = null
         }
     }
