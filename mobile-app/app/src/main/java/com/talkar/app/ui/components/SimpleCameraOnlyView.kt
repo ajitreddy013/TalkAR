@@ -75,7 +75,8 @@ fun SimpleCameraOnlyView(
                             id = "dialogue_001",
                             text = "Hello! I'm a water bottle. Stay hydrated!",
                             language = "en",
-                            voiceId = "voice_001"
+                            voiceId = "voice_001",
+                            emotion = null // Default emotion
                         )
                     ),
                     createdAt = System.currentTimeMillis().toString(),

@@ -269,6 +269,7 @@ class SimpleARViewModel : ViewModel() {
                             title = "${backendImage.name} Lip Sync Video",
                             description = "AI-generated lip sync video for ${backendImage.name}",
                             language = language,
+                            emotion = null, // Default emotion
                             voiceId = voiceId,
                             createdAt = System.currentTimeMillis().toString()
                         )
@@ -311,7 +312,8 @@ class SimpleARViewModel : ViewModel() {
                 val syncRequest = SyncRequest(
                     text = dialogueText,
                     language = language,
-                    voiceId = voiceId
+                    voiceId = voiceId,
+                    emotion = null // Default emotion
                 )
                 
                 android.util.Log.d("SimpleARViewModel", "Sending sync request: $dialogueText in language: $language")
@@ -334,6 +336,7 @@ class SimpleARViewModel : ViewModel() {
                             title = "${imageRecognition.name} Lip Sync Video",
                             description = "AI-generated lip sync video for ${imageRecognition.name}",
                             language = language,
+                            emotion = null, // Default emotion
                             voiceId = voiceId,
                             createdAt = System.currentTimeMillis().toString()
                         )
@@ -370,6 +373,7 @@ class SimpleARViewModel : ViewModel() {
                 title = "Water Bottle Talking Head (Mock)",
                 description = "AI-generated talking head video for water bottle",
                 language = "en",
+                emotion = null, // Default emotion
                 voiceId = "voice_001",
                 createdAt = System.currentTimeMillis().toString()
             )
@@ -389,7 +393,8 @@ class SimpleARViewModel : ViewModel() {
             val request = SyncRequest(
                 text = text,
                 language = language,
-                voiceId = voiceId
+                voiceId = voiceId,
+                emotion = null // Default emotion
             )
             
             try {

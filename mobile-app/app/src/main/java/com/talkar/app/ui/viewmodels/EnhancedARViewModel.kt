@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.repository.ImageRepository
+import com.talkar.app.TalkARApplication
+import com.talkar.app.data.services.EnhancedARService
+import com.google.ar.core.LightEstimate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +22,9 @@ class EnhancedARViewModel(
 ) : ViewModel() {
     
     private val TAG = "EnhancedARViewModel"
+    
+    // AR Service
+    private val arService = EnhancedARService(TalkARApplication.instance)
     
     // UI State
     private val _isAvatarVisible = MutableStateFlow(false)
@@ -36,6 +42,19 @@ class EnhancedARViewModel(
     private val _detectionStatus = MutableStateFlow("Ready")
     val detectionStatus: StateFlow<String> = _detectionStatus.asStateFlow()
     
+    // Enhanced tracking metrics
+    private val _trackingQuality = MutableStateFlow(com.talkar.app.data.services.EnhancedARService.TrackingQuality.UNKNOWN)
+    val trackingQuality: StateFlow<com.talkar.app.data.services.EnhancedARService.TrackingQuality> = _trackingQuality.asStateFlow()
+    
+    private val _lightingQuality = MutableStateFlow(com.talkar.app.data.services.EnhancedARService.LightingQuality.UNKNOWN)
+    val lightingQuality: StateFlow<com.talkar.app.data.services.EnhancedARService.LightingQuality> = _lightingQuality.asStateFlow()
+    
+    private val _lightEstimate = MutableStateFlow<LightEstimate?>(null)
+    val lightEstimate: StateFlow<LightEstimate?> = _lightEstimate.asStateFlow()
+    
+    private val _isAvatarSpeaking = MutableStateFlow(false)
+    val isAvatarSpeaking: StateFlow<Boolean> = _isAvatarSpeaking.asStateFlow()
+    
     // Backend data
     private val _images = MutableStateFlow<List<BackendImage>>(emptyList())
     val images: StateFlow<List<BackendImage>> = _images.asStateFlow()
@@ -45,6 +64,68 @@ class EnhancedARViewModel(
     
     init {
         loadBackendData()
+        initializeARService()
+    }
+    
+    /**
+     * Initialize AR service
+     */
+    private fun initializeARService() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Initializing AR service...")
+                val initialized = arService.initialize()
+                if (initialized) {
+                    Log.d(TAG, "AR service initialized successfully")
+                    // Start observing AR service state
+                    observeARServiceState()
+                } else {
+                    Log.e(TAG, "Failed to initialize AR service")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing AR service: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Observe AR service state changes
+     */
+    private fun observeARServiceState() {
+        viewModelScope.launch {
+            // Observe tracking state
+            arService.isTracking.collect { isTracking ->
+                _isTracking.value = isTracking
+            }
+        }
+        
+        viewModelScope.launch {
+            // Observe tracking quality
+            arService.trackingQuality.collect { quality ->
+                _trackingQuality.value = quality
+            }
+        }
+        
+        viewModelScope.launch {
+            // Observe lighting quality
+            arService.lightingQuality.collect { quality ->
+                _lightingQuality.value = quality
+            }
+        }
+        
+        viewModelScope.launch {
+            // Observe light estimate
+            arService.lightEstimate.collect { estimate ->
+                _lightEstimate.value = estimate
+            }
+        }
+        
+        viewModelScope.launch {
+            // Observe avatar speaking state
+            arService.isAvatarSpeaking.collect { isSpeaking ->
+                _isAvatarSpeaking.value = isSpeaking
+            }
+        }
     }
     
     /**
@@ -117,10 +198,15 @@ class EnhancedARViewModel(
         Log.d(TAG, "Starting AR tracking")
         _detectionStatus.value = "Starting AR..."
         
-        // Simulate AR initialization
+        // Start AR service
         viewModelScope.launch {
-            kotlinx.coroutines.delay(1000)
-            _detectionStatus.value = "Searching for images..."
+            try {
+                arService.resumeTracking()
+                _detectionStatus.value = "Searching for images..."
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting AR tracking: ${e.message}")
+                _detectionStatus.value = "Error: ${e.message}"
+            }
         }
     }
     
@@ -132,6 +218,51 @@ class EnhancedARViewModel(
         _isTracking.value = false
         _isAvatarVisible.value = false
         _detectionStatus.value = "Stopped"
+        
+        // Stop AR service
+        viewModelScope.launch {
+            try {
+                arService.stopTracking()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping AR tracking: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Set avatar speaking state
+     */
+    fun setAvatarSpeaking(isSpeaking: Boolean) {
+        _isAvatarSpeaking.value = isSpeaking
+        arService.setAvatarSpeaking(isSpeaking)
+    }
+    
+    /**
+     * Start ambient audio
+     */
+    fun startAmbientAudio() {
+        arService.startAmbientAudio()
+    }
+    
+    /**
+     * Stop ambient audio
+     */
+    fun stopAmbientAudio() {
+        arService.stopAmbientAudio()
+    }
+    
+    /**
+     * Pause ambient audio
+     */
+    fun pauseAmbientAudio() {
+        arService.pauseAmbientAudio()
+    }
+    
+    /**
+     * Resume ambient audio
+     */
+    fun resumeAmbientAudio() {
+        arService.resumeAmbientAudio()
     }
     
     /**
@@ -169,6 +300,16 @@ class EnhancedARViewModel(
                 kotlinx.coroutines.delay(3000)
                 onImageLost()
             }
+        }
+    }
+    
+    /**
+     * Cleanup when ViewModel is cleared
+     */
+    override fun onCleared() {
+        super.onCleared()
+        viewModelScope.launch {
+            arService.stopTracking()
         }
     }
 }

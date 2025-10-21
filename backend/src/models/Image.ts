@@ -40,6 +40,7 @@ export interface DialogueAttributes {
   text: string;
   language: string;
   voiceId?: string;
+  emotion?: string; // Add emotion parameter
   isActive: boolean;
   isDefault: boolean;
   createdAt: Date;
@@ -58,6 +59,7 @@ export class Dialogue
   public text!: string;
   public language!: string;
   public voiceId?: string;
+  public emotion?: string; // Add emotion parameter
   public isActive!: boolean;
   public isDefault!: boolean;
   public readonly createdAt!: Date;
@@ -134,6 +136,14 @@ Dialogue.init(
     voiceId: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    emotion: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: "neutral",
+      validate: {
+        isIn: [["neutral", "happy", "surprised", "serious"]]
+      }
     },
     isActive: {
       type: DataTypes.BOOLEAN,

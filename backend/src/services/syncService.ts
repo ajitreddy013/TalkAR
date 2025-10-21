@@ -5,6 +5,7 @@ interface SyncRequest {
   text: string;
   language: string;
   voiceId?: string;
+  emotion?: string; // Add emotion parameter
   imageUrl?: string; // URL of the recognized image for AR overlay
 }
 
@@ -45,12 +46,13 @@ export const generateSyncVideo = async (
 
     console.log(`Calling sync.so API: ${syncApiUrl}`);
     console.log(
-      `Generating sync video for: "${request.text}" in ${request.language}`
+      `Generating sync video for: "${request.text}" in ${request.language} with emotion: ${request.emotion || 'neutral'}`
     );
 
     // Use the requested language for proper multi-language support
     const language = request.language;
     const text = request.text;
+    const emotion = request.emotion || "neutral"; // Default to neutral emotion
 
     // Update job status to processing
     job.status = "processing";
@@ -60,7 +62,7 @@ export const generateSyncVideo = async (
       // For TalkAR, we need to:
       // 1. Use the recognized image as the video input
       // 2. Convert the script text to audio using TTS
-      // 3. Generate lipsync video
+      // 3. Generate lipsync video with emotion
 
       // First, we need to get the recognized image URL from the request
       const imageUrl =
@@ -69,15 +71,16 @@ export const generateSyncVideo = async (
       // For now, we'll use a simple approach:
       // - Use the recognized image as video input
       // - Convert text to audio (in production, use TTS service)
-      // - Generate lipsync video
+      // - Generate lipsync video with emotion
 
       // TODO: In production, you need to:
       // 1. Convert text to audio using TTS service
       // 2. Upload audio file to get a proper URL
       // 3. Use that audio URL in the sync request
+      // 4. Pass emotion parameter to sync API
 
       // For now, let's use a mock response for testing
-      console.log(`Mock sync video generation for: "${request.text}"`);
+      console.log(`Mock sync video generation for: "${request.text}" with emotion: ${emotion}`);
 
       // Simulate API call delay
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -176,7 +179,7 @@ export const getSyncStatus = async (jobId: string): Promise<SyncResponse> => {
   return job;
 };
 
-export const getTalkingHeadVideo = async (imageId: string, language: string = "en"): Promise<any> => {
+export const getTalkingHeadVideo = async (imageId: string, language: string = "en", emotion: string = "neutral"): Promise<any> => {
   try {
     // For now, return a mock talking head video
     // In production, this would fetch from database or storage
@@ -187,11 +190,12 @@ export const getTalkingHeadVideo = async (imageId: string, language: string = "e
       title: `Welcome to TalkAR (${language})`,
       description: `This is a pre-saved talking head video for this image in ${language}`,
       language: language,
+      emotion: emotion, // Include emotion in response
       voiceId: `${language}-female-1`,
       createdAt: new Date().toISOString(),
     };
 
-    console.log(`Returning talking head video for image ${imageId}`);
+    console.log(`Returning talking head video for image ${imageId} with emotion: ${emotion}`);
     return mockTalkingHeadVideo;
   } catch (error) {
     console.error("Error getting talking head video:", error);

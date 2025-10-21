@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.VideoView
 import com.google.ar.core.AugmentedImage
 import com.talkar.app.data.models.SyncResponse
@@ -20,15 +21,16 @@ import com.talkar.app.data.models.TalkingHeadVideo
 fun AROverlay(
     recognizedImage: AugmentedImage?,
     talkingHeadVideo: TalkingHeadVideo?,
+    lightEstimate: com.google.ar.core.LightEstimate?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     
     if (recognizedImage != null && talkingHeadVideo != null) {
-        // Create AR overlay positioned over the recognized image
+        // Create AR overlay positioned over the recognized image with shadow
         AndroidView(
             factory = { ctx ->
-                createAROverlayView(ctx, recognizedImage, talkingHeadVideo)
+                createAROverlayView(ctx, recognizedImage, talkingHeadVideo, lightEstimate)
             },
             modifier = modifier
         )
@@ -38,13 +40,26 @@ fun AROverlay(
 private fun createAROverlayView(
     context: Context,
     augmentedImage: AugmentedImage,
-    talkingHeadVideo: TalkingHeadVideo
+    talkingHeadVideo: TalkingHeadVideo,
+    lightEstimate: com.google.ar.core.LightEstimate?
 ): android.view.View {
-    return android.widget.FrameLayout(context).apply {
+    return FrameLayout(context).apply {
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
+        
+        // Create shadow plane below the avatar
+        val shadowPlane = ShadowPlane(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        
+        // Update shadow properties based on image and lighting
+        shadowPlane.updateShadowProperties(augmentedImage, lightEstimate)
+        addView(shadowPlane)
         
         // Create video overlay positioned over the recognized image
         val videoView = VideoView(context).apply {

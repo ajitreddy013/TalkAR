@@ -210,7 +210,8 @@ class MLKitRecognitionService(private val context: Context) {
                     id = "dialogue-${System.currentTimeMillis()}",
                     text = "Hello! I'm a $primaryLabel. I was detected using ML Kit!",
                     language = "en",
-                    voiceId = "voice_001"
+                    voiceId = "voice_001",
+                    emotion = null // Default emotion
                 )
             ),
             createdAt = System.currentTimeMillis().toString(),

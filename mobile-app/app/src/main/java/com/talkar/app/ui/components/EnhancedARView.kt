@@ -17,6 +17,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 // ARCore imports removed for now - using simplified implementation
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
+import com.talkar.app.ui.components.EmotionalAvatarView // Add import for EmotionalAvatarView
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.ui.components.AvatarPlaceholder
 import kotlinx.coroutines.delay
@@ -77,9 +78,9 @@ fun EnhancedARView(
     
     // Avatar Overlay UI
     AvatarOverlayUI(
-        isVisible = viewModel.isAvatarVisible.value,
-        avatar = viewModel.currentAvatar.value,
-        image = viewModel.currentImage.value,
+        isVisible = viewModel.isAvatarVisible.collectAsState().value,
+        avatar = currentAvatar,
+        image = currentImage,
         onAvatarTapped = { viewModel.onAvatarTapped() }
     )
 }
@@ -101,9 +102,13 @@ private fun AvatarOverlayUI(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            // Avatar Overlay
-            AvatarPlaceholder(
+            // Emotional Avatar Overlay
+            EmotionalAvatarView(
                 isVisible = true,
+                avatar = avatar,
+                image = image,
+                emotion = "neutral", // This will be updated based on dialogue emotion
+                isTalking = true, // This will be controlled by video playback
                 modifier = Modifier
                     .padding(16.dp)
                     .size(200.dp)

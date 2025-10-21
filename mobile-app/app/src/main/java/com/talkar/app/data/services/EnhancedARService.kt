@@ -31,6 +31,10 @@ class EnhancedARService(private val context: Context) {
     private var session: Session? = null
     private var imageDatabase: AugmentedImageDatabase? = null
     
+    // Performance optimization: Throttle lighting updates
+    private var lastLightingUpdate = 0L
+    private val LIGHTING_UPDATE_INTERVAL = 500L // Update lighting every 500ms
+    
     // Tracking state management
     private val _trackingState = MutableStateFlow(TrackingState.STOPPED)
     val trackingState: StateFlow<TrackingState> = _trackingState.asStateFlow()
@@ -56,6 +60,17 @@ class EnhancedARService(private val context: Context) {
     
     private val _trackingGuidance = MutableStateFlow<String?>(null)
     val trackingGuidance: StateFlow<String?> = _trackingGuidance.asStateFlow()
+    
+    // Light estimation data
+    private val _lightEstimate = MutableStateFlow<LightEstimate?>(null)
+    val lightEstimate: StateFlow<LightEstimate?> = _lightEstimate.asStateFlow()
+    
+    // Ambient audio service
+    private var ambientAudioService: AmbientAudioService? = null
+    
+    // Avatar voice state
+    private val _isAvatarSpeaking = MutableStateFlow(false)
+    val isAvatarSpeaking: StateFlow<Boolean> = _isAvatarSpeaking.asStateFlow()
     
     // Cache for recognized images
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
@@ -104,6 +119,9 @@ class EnhancedARService(private val context: Context) {
             // Create ARCore session with enhanced configuration
             session = Session(context)
             
+            // Initialize ambient audio service
+            initializeAmbientAudio()
+            
             // Configure session for better tracking stability
             configureSessionForStability()
             
@@ -123,6 +141,20 @@ class EnhancedARService(private val context: Context) {
             Log.e(tag, "Failed to initialize enhanced AR service", e)
             _error.value = "Failed to initialize AR service: ${e.message}"
             false
+        }
+    }
+    
+    /**
+     * Initialize ambient audio service
+     */
+    private fun initializeAmbientAudio() {
+        try {
+            // TODO: Add ambient audio resource file
+            // For now, we'll initialize without a specific audio file
+            ambientAudioService = AmbientAudioService(context)
+            Log.d(tag, "Ambient audio service initialized")
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to initialize ambient audio service", e)
         }
     }
     
@@ -151,6 +183,9 @@ class EnhancedARService(private val context: Context) {
             // Configure for better performance on mobile devices
             config.cloudAnchorMode = Config.CloudAnchorMode.DISABLED
             
+            // Enable light estimation for dynamic lighting
+            config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
+            
             // Enable image tracking
             imageDatabase?.let { database ->
                 config.augmentedImageDatabase = database
@@ -159,7 +194,7 @@ class EnhancedARService(private val context: Context) {
             // Apply configuration
             session.configure(config)
             
-            Log.d(tag, "ARCore session configured for enhanced stability")
+            Log.d(tag, "ARCore session configured for enhanced stability and light estimation")
         }
     }
     
@@ -467,7 +502,7 @@ class EnhancedARService(private val context: Context) {
                 try {
                     session?.let { session ->
                         val frame = session.update()
-                        processEnhancedFrame(frame)
+                        processFrame(frame)
                     }
                     
                     delay(33) // ~30 FPS monitoring
@@ -480,30 +515,43 @@ class EnhancedARService(private val context: Context) {
     }
     
     /**
-     * Process frame with enhanced tracking analysis
+     * Process ARCore frame with enhanced tracking and light estimation
      */
-    private fun processEnhancedFrame(frame: Frame) {
+    private fun processFrame(frame: Frame) {
         try {
-            val currentTime = System.currentTimeMillis()
+            // Update tracking state
+            updateTrackingState(frame)
             
-            // Update frame metrics
+            // Analyze motion stability
+            analyzeMotionStability(frame)
+            
+            // Analyze lighting quality using ARCore light estimation
+            analyzeLightEstimation(frame)
+            
+            // Update overall tracking quality
+            updateTrackingQuality()
+            
+            // Process augmented images
+            processAugmentedImages(frame)
+            
             frameCount++
-            if (lastFrameTime > 0) {
-                val frameTime = currentTime - lastFrameTime
-                if (frameTime > 100) { // Frame drop detection
-                    Log.w(tag, "Frame drop detected: ${frameTime}ms")
-                }
-            }
-            lastFrameTime = currentTime
             
-            // Analyze tracking state
+        } catch (e: Exception) {
+            Log.e(tag, "Error processing frame", e)
+        }
+    }
+    
+    /**
+     * Update tracking state based on ARCore frame
+     */
+    private fun updateTrackingState(frame: Frame) {
+        try {
             val camera = frame.camera
             val trackingState = camera.trackingState
             
             when (trackingState) {
                 TrackingState.TRACKING -> {
-                    analyzeTrackingQuality(frame)
-                    processAugmentedImages(frame)
+                    _trackingGuidance.value = "Tracking excellent"
                 }
                 TrackingState.PAUSED -> {
                     Log.w(tag, "Tracking paused - insufficient features")
@@ -522,38 +570,16 @@ class EnhancedARService(private val context: Context) {
             _trackingState.value = trackingState
             
         } catch (e: Exception) {
-            Log.e(tag, "Error processing enhanced frame", e)
-        }
-    }
-    
-    /**
-     * Analyze tracking quality based on ARCore metrics
-     */
-    private fun analyzeTrackingQuality(frame: Frame) {
-        try {
-            val camera = frame.camera
-            val pose = camera.pose
-            
-            // Analyze motion stability
-            analyzeMotionStability(pose)
-            
-            // Analyze lighting quality
-            analyzeLightingQuality(frame)
-            
-            // Update tracking quality based on analysis
-            updateTrackingQuality()
-            
-        } catch (e: Exception) {
-            Log.e(tag, "Error analyzing tracking quality", e)
+            Log.e(tag, "Error updating tracking state", e)
         }
     }
     
     /**
      * Analyze motion stability to prevent VIO resets
      */
-    private fun analyzeMotionStability(pose: Pose) {
+    private fun analyzeMotionStability(frame: Frame) {
         lastPose?.let { lastPose ->
-            val translation = pose.translation
+            val translation = frame.camera.pose.translation
             val lastTranslation = lastPose.translation
             
             val motion = sqrt(
@@ -580,31 +606,46 @@ class EnhancedARService(private val context: Context) {
             }
         }
         
-        lastPose = pose
+        lastPose = frame.camera.pose
     }
     
     /**
-     * Analyze lighting quality to prevent tracking issues
+     * Analyze lighting quality using ARCore light estimation
+     * Performance optimized with throttling
      */
-    private fun analyzeLightingQuality(frame: Frame) {
+    private fun analyzeLightEstimation(frame: Frame) {
+        // Performance optimization: Throttle lighting updates
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastLightingUpdate < LIGHTING_UPDATE_INTERVAL) {
+            return
+        }
+        lastLightingUpdate = currentTime
+        
         try {
-            // This is a simplified lighting analysis
-            // In a real implementation, you would analyze the camera image
-            val currentTime = System.currentTimeMillis()
-            val hour = (currentTime / (1000 * 60 * 60)) % 24
+            val lightEstimate = frame.lightEstimate
+            _lightEstimate.value = lightEstimate
             
-            _lightingQuality.value = when {
-                hour in 6..18 -> LightingQuality.GOOD // Daylight hours
-                hour in 19..21 || hour in 4..5 -> LightingQuality.FAIR // Dawn/dusk
-                else -> LightingQuality.POOR // Night time
+            // Update lighting quality based on light estimate state and pixel intensity
+            _lightingQuality.value = when (lightEstimate.state) {
+                LightEstimate.State.NOT_VALID -> LightingQuality.POOR
+                LightEstimate.State.VALID -> {
+                    val pixelIntensity = lightEstimate.pixelIntensity
+                    when {
+                        pixelIntensity > 0.7f -> LightingQuality.EXCELLENT
+                        pixelIntensity > 0.4f -> LightingQuality.GOOD
+                        pixelIntensity > 0.2f -> LightingQuality.FAIR
+                        else -> LightingQuality.POOR
+                    }
+                }
+                else -> LightingQuality.UNKNOWN
             }
             
             if (_lightingQuality.value == LightingQuality.POOR) {
-                _trackingGuidance.value = "Poor lighting detected. Move to a well-lit area"
+                _trackingGuidance.value = "Poor lighting detected. Move to a well-lit area for better avatar rendering"
             }
             
         } catch (e: Exception) {
-            Log.e(tag, "Error analyzing lighting quality", e)
+            Log.e(tag, "Error analyzing light estimation", e)
         }
     }
     
@@ -741,6 +782,9 @@ class EnhancedARService(private val context: Context) {
      */
     fun stopTracking() {
         try {
+            // Stop ambient audio
+            stopAmbientAudio()
+            
             session?.close()
             session = null
             imageDatabase = null
@@ -799,5 +843,57 @@ class EnhancedARService(private val context: Context) {
      */
     fun postError(errorMessage: String) {
         _error.value = errorMessage
+    }
+    
+    /**
+     * Set avatar speaking state to control ambient audio
+     */
+    fun setAvatarSpeaking(isSpeaking: Boolean) {
+        if (_isAvatarSpeaking.value != isSpeaking) {
+            _isAvatarSpeaking.value = isSpeaking
+            
+            // Control ambient audio based on avatar speaking state
+            if (isSpeaking) {
+                // Fade out ambient audio when avatar is speaking
+                ambientAudioService?.fadeOut()
+            } else {
+                // Fade in ambient audio when avatar is not speaking
+                ambientAudioService?.startAmbientAudio()
+            }
+            
+            Log.d(tag, "Avatar speaking state changed to: $isSpeaking")
+        }
+    }
+    
+    /**
+     * Start ambient background audio
+     */
+    fun startAmbientAudio() {
+        if (!_isAvatarSpeaking.value) {
+            ambientAudioService?.startAmbientAudio()
+        }
+    }
+    
+    /**
+     * Stop ambient audio
+     */
+    fun stopAmbientAudio() {
+        ambientAudioService?.stop()
+    }
+    
+    /**
+     * Pause ambient audio
+     */
+    fun pauseAmbientAudio() {
+        ambientAudioService?.pause()
+    }
+    
+    /**
+     * Resume ambient audio
+     */
+    fun resumeAmbientAudio() {
+        if (!_isAvatarSpeaking.value) {
+            ambientAudioService?.resume()
+        }
     }
 }
