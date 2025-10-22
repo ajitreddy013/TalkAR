@@ -191,8 +191,12 @@ class SimpleARViewModel : ViewModel() {
             try {
                 android.util.Log.d("SimpleARViewModel", "Fetching talking head video for image: $imageId")
                 
-                // Make real API call to backend for lip sync video generation
-                val response = TalkARApplication.instance.apiClient.getTalkingHeadVideo(imageId)
+                // Find the image in our local cache to get the language
+                val image = _uiState.value.images.find { it.id == imageId }
+                val language = image?.dialogues?.firstOrNull()?.language ?: "en"
+                
+                // Make real API call to backend for lip sync video generation with language support
+                val response = TalkARApplication.instance.apiClient.getTalkingHeadVideo(imageId, language)
                 
                 if (response.isSuccessful) {
                     val talkingHeadVideo = response.body()
@@ -265,6 +269,7 @@ class SimpleARViewModel : ViewModel() {
                             title = "${backendImage.name} Lip Sync Video",
                             description = "AI-generated lip sync video for ${backendImage.name}",
                             language = language,
+                            emotion = null, // Default emotion
                             voiceId = voiceId,
                             createdAt = System.currentTimeMillis().toString()
                         )
@@ -297,17 +302,21 @@ class SimpleARViewModel : ViewModel() {
             try {
                 android.util.Log.d("SimpleARViewModel", "Generating lip sync video for: ${imageRecognition.name}")
                 
-                // Get the first dialogue text for lip sync
-                val dialogueText = imageRecognition.dialogues.firstOrNull()?.text ?: "Hello! I'm a ${imageRecognition.name}."
+                // Get the first dialogue text and language for lip sync
+                val dialogue = imageRecognition.dialogues.firstOrNull()
+                val dialogueText = dialogue?.text ?: "Hello! I'm a ${imageRecognition.name}."
+                val language = dialogue?.language ?: "en"
+                val voiceId = dialogue?.voiceId ?: "voice_001"
                 
                 // Create sync request for lip sync video generation
                 val syncRequest = SyncRequest(
                     text = dialogueText,
-                    language = "en",
-                    voiceId = "voice_001"
+                    language = language,
+                    voiceId = voiceId,
+                    emotion = null // Default emotion
                 )
                 
-                android.util.Log.d("SimpleARViewModel", "Sending sync request: $dialogueText")
+                android.util.Log.d("SimpleARViewModel", "Sending sync request: $dialogueText in language: $language")
                 
                 // Call the sync API to generate lip sync video
                 val response = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
@@ -326,8 +335,9 @@ class SimpleARViewModel : ViewModel() {
                             duration = syncResponse.duration.toInt(),
                             title = "${imageRecognition.name} Lip Sync Video",
                             description = "AI-generated lip sync video for ${imageRecognition.name}",
-                            language = "en",
-                            voiceId = "voice_001",
+                            language = language,
+                            emotion = null, // Default emotion
+                            voiceId = voiceId,
                             createdAt = System.currentTimeMillis().toString()
                         )
                         
@@ -363,6 +373,7 @@ class SimpleARViewModel : ViewModel() {
                 title = "Water Bottle Talking Head (Mock)",
                 description = "AI-generated talking head video for water bottle",
                 language = "en",
+                emotion = null, // Default emotion
                 voiceId = "voice_001",
                 createdAt = System.currentTimeMillis().toString()
             )
@@ -382,7 +393,8 @@ class SimpleARViewModel : ViewModel() {
             val request = SyncRequest(
                 text = text,
                 language = language,
-                voiceId = voiceId
+                voiceId = voiceId,
+                emotion = null // Default emotion
             )
             
             try {

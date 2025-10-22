@@ -138,6 +138,10 @@ cp backend/env.example backend/.env
 
 # Admin dashboard environment
 echo "REACT_APP_API_URL=http://localhost:3000/api/v1" > admin-dashboard/.env
+
+# Root environment (for Docker)
+cp .env.example .env
+# Edit .env with your configuration
 ```
 
 ### 3. Start with Docker (Recommended)
@@ -214,6 +218,51 @@ cd admin-dashboard && npm install && npm start
 - **AWS S3**: Store images, videos, and assets
 - **CDN Integration**: Fast content delivery
 - **Security**: Secure access controls
+
+## 🔒 Security Best Practices
+
+### Environment Variables and Secrets Management
+
+This project uses environment variables to manage sensitive configuration data. Never commit actual secrets to the repository.
+
+#### Docker Development
+
+For local development with Docker, use the `.env` file:
+
+1. Copy `.env.example` to `.env`:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` with your actual values (never commit this file)
+
+3. Docker Compose will automatically load these variables
+
+#### Manual Development
+
+For manual development setup:
+
+1. **Backend**:
+
+   ```bash
+   cd backend
+   cp env.example .env
+   # Edit .env with your configuration
+   ```
+
+2. **Frontend**:
+   ```bash
+   cd admin-dashboard
+   echo "REACT_APP_API_URL=http://localhost:3000/api/v1" > .env
+   ```
+
+### Secret Rotation
+
+- Rotate JWT secrets periodically
+- Rotate AWS credentials using IAM roles where possible
+- Update Sync API keys through their dashboard
+- Change database passwords regularly
 
 ## 📚 Documentation
 

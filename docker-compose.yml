@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: talkar_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -29,14 +29,14 @@ services:
       - DB_PORT=5432
       - DB_NAME=talkar_db
       - DB_USER=postgres
-      - DB_PASSWORD=password
-      - JWT_SECRET=your-super-secret-jwt-key
-      - AWS_ACCESS_KEY_ID=your-aws-access-key
-      - AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+      - DB_PASSWORD=${DB_PASSWORD}
+      - JWT_SECRET=${JWT_SECRET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
       - AWS_REGION=us-east-1
       - AWS_S3_BUCKET=talkar-assets
       - SYNC_API_URL=https://api.sync.com/v1
-      - SYNC_API_KEY=your-sync-api-key
+      - SYNC_API_KEY=${SYNC_API_KEY}
       - CORS_ORIGIN=http://localhost:3001
     depends_on:
       postgres:

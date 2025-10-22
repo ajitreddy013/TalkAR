@@ -45,6 +45,9 @@ data class Dialogue(
     @SerializedName("voiceId")
     val voiceId: String?,
     
+    @SerializedName("emotion")
+    val emotion: String?, // Add emotion parameter
+    
     @SerializedName("isDefault")
     val isDefault: Boolean = false
 )
@@ -53,6 +56,7 @@ data class SyncRequest(
     val text: String,
     val language: String,
     val voiceId: String? = null,
+    val emotion: String? = null, // Add emotion parameter
     val imageUrl: String? = null
 )
 
@@ -80,6 +84,9 @@ data class TalkingHeadVideo(
     
     @SerializedName("language")
     val language: String,
+    
+    @SerializedName("emotion")
+    val emotion: String?, // Add emotion parameter
     
     @SerializedName("voiceId")
     val voiceId: String,
