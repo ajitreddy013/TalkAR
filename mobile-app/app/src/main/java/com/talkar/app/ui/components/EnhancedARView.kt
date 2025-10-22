@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
@@ -81,7 +82,8 @@ fun EnhancedARView(
         isVisible = viewModel.isAvatarVisible.collectAsState().value,
         avatar = currentAvatar,
         image = currentImage,
-        onAvatarTapped = { viewModel.onAvatarTapped() }
+        onAvatarTapped = { viewModel.onAvatarTapped() },
+        isTracking = isTracking
     )
 }
 
@@ -95,13 +97,14 @@ private fun AvatarOverlayUI(
     isVisible: Boolean,
     avatar: Avatar?,
     image: BackendImage?,
-    onAvatarTapped: () -> Unit
+    onAvatarTapped: () -> Unit,
+    isTracking: Boolean = false
 ) {
-    if (isVisible && avatar != null && image != null) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isVisible && avatar != null && image != null) {
             // Emotional Avatar Overlay
             EmotionalAvatarView(
                 isVisible = true,
@@ -115,18 +118,53 @@ private fun AvatarOverlayUI(
             )
             
             // Detection Status
-            Card(
+            Box(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
                     .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Text(
+                        text = "🎯 ${image?.name ?: "Image"} Detected",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+            }
+            
+            // Info text below avatar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 32.dp),
+                contentAlignment = Alignment.BottomCenter
             ) {
                 Text(
-                    text = "🎯 ${image?.name ?: "Image"} Detected",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(16.dp)
+                    text = "Tap to replay dialogue",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+        
+        // Show scanning animation when not tracking
+        if (!isTracking) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Simple scanning indicator
+                CircularProgressIndicator(
+                    modifier = Modifier.size(100.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 8.dp
                 )
             }
         }
@@ -219,19 +257,23 @@ fun SimpleARView(
             )
             
             // Detection indicator
-            Card(
+            Box(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
                     .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
+                contentAlignment = Alignment.TopCenter
             ) {
-                Text(
-                    text = "🎯 $detectedImage Detected",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(16.dp)
-                )
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Text(
+                        text = "🎯 $detectedImage Detected",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
             }
         }
     }

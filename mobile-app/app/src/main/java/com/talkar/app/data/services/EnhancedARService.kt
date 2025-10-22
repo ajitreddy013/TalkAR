@@ -5,14 +5,8 @@ import android.util.Log
 import com.google.ar.core.*
 import com.google.ar.core.exceptions.*
 import com.talkar.app.data.models.ImageRecognition
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.sqrt
 import kotlin.math.abs
@@ -77,7 +71,7 @@ class EnhancedARService(private val context: Context) {
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
     
     // Coroutine scope for background operations
-    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     // Tracking metrics for stability analysis
     private var lastFrameTime = 0L
@@ -153,9 +147,10 @@ class EnhancedARService(private val context: Context) {
      */
     private fun initializeAmbientAudio() {
         try {
-            // TODO: Add ambient audio resource file
-            // For now, we'll initialize without a specific audio file
+            // Initialize with ambient background audio resource
             ambientAudioService = AmbientAudioService(context)
+            // Note: In a real implementation, you would initialize with a valid audio resource
+            // For now, we'll just initialize the service without a specific audio file
             Log.d(tag, "Ambient audio service initialized")
         } catch (e: Exception) {
             Log.e(tag, "Failed to initialize ambient audio service", e)
