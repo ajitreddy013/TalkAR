@@ -92,6 +92,60 @@ export class AIPipelineService {
   }
 
   /**
+   * Generate complete ad content: product → script → audio → lipsync video
+   */
+  static async generateAdContent(productName: string): Promise<{
+    script: string;
+    audioUrl: string;
+    videoUrl: string;
+  }> {
+    try {
+      // Validate product name
+      if (!productName || typeof productName !== 'string' || productName.trim().length === 0) {
+        throw new Error("Invalid product name: must be a non-empty string");
+      }
+
+      if (productName.length > 100) {
+        throw new Error("Invalid product name: must be less than 100 characters");
+      }
+
+      // Step 1: Generate script for the product
+      const script = await this.generateProductScript(productName);
+      
+      // Step 2: Convert script to audio
+      const audioResponse = await this.generateAudio({
+        text: script,
+        language: "en",
+        emotion: "neutral"
+      });
+      
+      // Step 3: Generate lip-sync video
+      const lipSyncResponse = await this.generateLipSync({
+        imageId: "default",
+        audioUrl: audioResponse.audioUrl,
+        emotion: "neutral",
+        avatar: `${productName.replace(/\s+/g, '_')}_avatar.png`
+      });
+      
+      // Return the complete ad content
+      return {
+        script,
+        audioUrl: audioResponse.audioUrl,
+        videoUrl: lipSyncResponse.videoUrl
+      };
+    } catch (error) {
+      console.error("Ad content generation error:", error);
+      
+      // Re-throw with more context
+      if (error instanceof Error) {
+        throw new Error(`Failed to generate ad content for product "${productName}": ${error.message}`);
+      } else {
+        throw new Error(`Failed to generate ad content for product "${productName}": Unknown error`);
+      }
+    }
+  }
+
+  /**
    * Process the complete AI pipeline asynchronously
    */
   private static async processAIPipeline(jobId: string, imageId: string, language: string, emotion: string): Promise<void> {

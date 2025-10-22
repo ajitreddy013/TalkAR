@@ -110,6 +110,27 @@ Generate only the script/text content.
 }
 ```
 
+### POST /api/v1/ai-pipeline/generate_product_script
+
+Generate a product description script.
+
+**Request Body:**
+
+```json
+{
+  "productName": "iPhone"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "script": "Experience the future in your hands with the revolutionary iPhone. Cutting-edge technology meets elegant design."
+}
+```
+
 ### POST /api/v1/ai-pipeline/generate_audio
 
 Convert text to audio.
@@ -142,9 +163,8 @@ Generate lip-sync video from image and audio.
 
 ```json
 {
-  "imageId": "image_123",
-  "audioUrl": "https://example.com/audio.mp3",
-  "emotion": "happy"
+  "audio_url": "https://example.com/audio.mp3",
+  "avatar": "celebrity_face.png"
 }
 ```
 
@@ -155,6 +175,29 @@ Generate lip-sync video from image and audio.
   "success": true,
   "videoUrl": "https://example.com/video.mp4",
   "duration": 15
+}
+```
+
+### POST /api/v1/ai-pipeline/generate_ad_content
+
+Generate complete ad content from a product name (script → audio → video).
+
+**Request Body:**
+
+```json
+{
+  "product": "Sunrich Water Bottle"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "script": "Refresh your day with Sunrich Water!",
+  "audio_url": "https://example.com/audio.mp3",
+  "video_url": "https://example.com/video.mp4"
 }
 ```
 
@@ -196,11 +239,12 @@ npm test
 
 ### Manual Testing
 
-Use the provided test script:
+Use the provided test scripts:
 
 ```bash
 cd backend
 node test-ai-pipeline.js
+node test-ad-content.js
 ```
 
 ## Monitoring

@@ -107,13 +107,117 @@ Get the status of a video generation job.
 
 Generate only the script/text content.
 
+**Request Body:**
+
+```json
+{
+  "imageId": "image_123",
+  "language": "en",
+  "emotion": "happy"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "script": "Welcome! I'm so excited to show you around our wonderful exhibition today!",
+  "language": "en",
+  "emotion": "happy"
+}
+```
+
+#### POST /api/v1/ai-pipeline/generate_product_script
+
+Generate a product description script.
+
+**Request Body:**
+
+```json
+{
+  "productName": "iPhone"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "script": "Experience the future in your hands with the revolutionary iPhone. Cutting-edge technology meets elegant design."
+}
+```
+
 #### POST /api/v1/ai-pipeline/generate_audio
 
 Convert text to audio.
 
+**Request:**
+
+```json
+{
+  "text": "Welcome to our product showcase!",
+  "language": "en",
+  "emotion": "happy"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "audioUrl": "https://example.com/audio.mp3",
+  "duration": 15
+}
+```
+
 #### POST /api/v1/ai-pipeline/generate_lipsync
 
 Generate lip-sync video from image and audio.
+
+**Request:**
+
+```json
+{
+  "audio_url": "https://example.com/audio.mp3",
+  "avatar": "celebrity_face.png"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "videoUrl": "https://example.com/video.mp4",
+  "duration": 15
+}
+```
+
+#### POST /api/v1/ai-pipeline/generate_ad_content
+
+Generate complete ad content from a product name (script → audio → video).
+
+**Request:**
+
+```json
+{
+  "product": "Sunrich Water Bottle"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "script": "Refresh your day with Sunrich Water!",
+  "audio_url": "https://example.com/audio.mp3",
+  "video_url": "https://example.com/video.mp4"
+}
+```
 
 ## Development vs Production
 
@@ -128,89 +232,3 @@ Generate lip-sync video from image and audio.
 - Uses real API services (OpenAI, ElevenLabs, Sync.so)
 - Requires valid API keys
 - Activated when `NODE_ENV=production`
-
-## Environment Configuration
-
-Add the following to your `.env` file:
-
-```env
-# AI Pipeline API Configuration
-OPENAI_API_KEY=your-openai-api-key
-ELEVENLABS_API_KEY=your-elevenlabs-api-key
-SYNC_API_KEY=your-sync-api-key
-SYNC_API_URL=https://api.sync.so/v2
-```
-
-## Testing
-
-### Automated Tests
-
-The implementation includes comprehensive tests for all components:
-
-- Unit tests for service functions
-- Integration tests for API endpoints
-- Error handling validation
-
-### Manual Testing
-
-Use the provided test scripts:
-
-- `test-ai-pipeline.js`: Complete pipeline testing
-- `test-emotion-support.js`: Emotion functionality testing
-- `test-error-handling.js`: Error handling validation
-- `test-caching.js`: Caching mechanism verification
-
-## Monitoring & Logging
-
-The pipeline includes extensive logging for:
-
-- API calls and responses
-- Job status transitions
-- Error conditions and exceptions
-- Cache hits and misses
-- Processing times for each step
-
-## Future Enhancements
-
-### Short-term Improvements
-
-1. **Database Integration**: Replace in-memory storage with persistent database
-2. **Redis Implementation**: Production-grade caching with Redis
-3. **Advanced Emotion Mapping**: More sophisticated emotion-to-content mapping
-4. **Voice Personalization**: User-specific voice preferences
-
-### Long-term Features
-
-1. **Real-time Processing**: WebSocket-based real-time status updates
-2. **Batch Processing**: Multiple image processing in parallel
-3. **Content Customization**: AI-powered personalization based on user history
-4. **Multi-modal Input**: Support for image description and context analysis
-
-## Troubleshooting
-
-### Common Issues
-
-1. **API Keys Not Working**
-
-   - Verify keys in `.env` file
-   - Check for extra spaces or characters
-   - Ensure keys have proper permissions
-
-2. **Jobs Stuck in "processing"**
-
-   - Check server logs for errors
-   - Verify external API connectivity
-   - Restart server if necessary
-
-3. **Caching Issues**
-   - Clear cache by restarting server
-   - Check cache TTL configuration
-   - Verify cache key generation logic
-
-### Getting Help
-
-For issues not covered in this guide:
-
-1. Review server logs for detailed error messages
-2. Check API provider documentation
-3. Refer to project architecture documentation
