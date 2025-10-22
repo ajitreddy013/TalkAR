@@ -11,7 +11,8 @@ import com.talkar.app.TalkARApplication
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -79,6 +80,9 @@ class BackendImageARService(private val context: Context) {
     // Cache
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
     private val imageBitmaps = ConcurrentHashMap<String, Bitmap>()
+
+    // Coroutine scope for background operations
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     /**
      * Initialize service and download images from backend
@@ -408,7 +412,7 @@ class BackendImageARService(private val context: Context) {
      * Start frame processing
      */
     private fun startFrameProcessing() {
-        GlobalScope.launch(Dispatchers.IO) {
+        coroutineScope.launch {
             while (_isTracking.value) {
                 try {
                     session?.let { session ->

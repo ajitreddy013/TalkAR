@@ -170,9 +170,8 @@ private fun initializeCamera(
         Log.d("SimpleRealCameraView", "Opening camera: $cameraId")
         
         // Check for camera permission before opening
-        val permission = android.content.pm.PackageManager.PERMISSION_GRANTED
         val context = textureView.context
-        if (context.checkSelfPermission(android.Manifest.permission.CAMERA) == permission) {
+        if (context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             cameraManager.openCamera(cameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
                     Log.d("SimpleRealCameraView", "Camera opened successfully")

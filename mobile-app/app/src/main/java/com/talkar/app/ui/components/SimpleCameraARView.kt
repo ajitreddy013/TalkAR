@@ -19,6 +19,8 @@ import com.talkar.app.TalkARApplication
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import android.util.Log
 import android.widget.FrameLayout
 import android.view.ViewGroup
@@ -231,8 +233,7 @@ private fun initializeCameraWithAR(
         Log.d("SimpleCameraARView", "Using camera: $cameraId")
 
         // Check camera permission
-        val permission = android.content.pm.PackageManager.PERMISSION_GRANTED
-        val hasPermission = textureView.context.checkSelfPermission(android.Manifest.permission.CAMERA) == permission
+        val hasPermission = textureView.context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
         if (!hasPermission) {
             onError("Camera permission not granted")
@@ -299,7 +300,7 @@ private fun startCameraPreview(
 }
 
 private fun startARProcessing(arService: ARImageRecognitionService) {
-    kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+    CoroutineScope(SupervisorJob()).launch(Dispatchers.IO) {
         try {
             // Wait for AR service to be fully initialized
             var attempts = 0

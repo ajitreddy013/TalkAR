@@ -11,6 +11,9 @@ import com.google.ar.core.Frame
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.services.ARImageRecognitionService
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
 
 @Composable
 fun ARView(
@@ -208,8 +211,7 @@ private fun initializeCamera(
         android.util.Log.d("ARView", "Using camera: $cameraId")
         
         // Check camera permissions
-        val permission = android.content.pm.PackageManager.PERMISSION_GRANTED
-        val hasPermission = textureView.context.checkSelfPermission(android.Manifest.permission.CAMERA) == permission
+        val hasPermission = textureView.context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
         
         if (!hasPermission) {
             android.util.Log.e("ARView", "Camera permission not granted")
@@ -278,7 +280,7 @@ private fun startARFrameProcessing(
         android.util.Log.d("ARView", "Starting AR frame processing...")
         
         // Create a coroutine to continuously process ARCore frames
-        kotlinx.coroutines.GlobalScope.launch {
+        CoroutineScope(SupervisorJob()).launch(Dispatchers.IO) {
             var frameCount = 0
             while (true) {
                 try {

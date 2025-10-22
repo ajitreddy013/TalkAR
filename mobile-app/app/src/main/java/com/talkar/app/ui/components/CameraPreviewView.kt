@@ -174,8 +174,7 @@ private fun initializeCamera(
         android.util.Log.d("CameraPreviewView", "Using camera: $cameraId")
         
         // Check camera permissions
-        val permission = android.content.pm.PackageManager.PERMISSION_GRANTED
-        val hasPermission = textureView.context.checkSelfPermission(android.Manifest.permission.CAMERA) == permission
+        val hasPermission = textureView.context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
         
         if (!hasPermission) {
             android.util.Log.e("CameraPreviewView", "Camera permission not granted")

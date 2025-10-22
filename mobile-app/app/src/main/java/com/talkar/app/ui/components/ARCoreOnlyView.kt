@@ -11,6 +11,8 @@ import com.talkar.app.TalkARApplication
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import android.util.Log
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -175,7 +177,7 @@ private fun createARCoreOnlyView(
     layout.addView(scanningOverlay, overlayParams)
 
     // Start ARCore processing only after initialization is complete
-    kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+    CoroutineScope(SupervisorJob()).launch(Dispatchers.IO) {
         try {
             // Wait for ARCore to be fully initialized with proper checking
             var attempts = 0
