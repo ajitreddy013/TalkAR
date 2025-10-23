@@ -8,6 +8,7 @@ export interface Dialogue {
   language: string;
   voiceId?: string;
   emotion?: string; // Add emotion field
+  tone?: string; // Add tone field
   isDefault: boolean;
   createdAt: string;
   updatedAt: string;

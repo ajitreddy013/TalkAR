@@ -47,6 +47,13 @@ interface ApiService {
     
     @POST("lipsync/talking-head")
     suspend fun generateTalkingHeadVideo(@Body request: TalkingHeadRequest): Response<LipSyncResponse>
+    
+    // AI Pipeline endpoints
+    @POST("ai-pipeline/generate_script")
+    suspend fun generateScript(@Body request: ScriptGenerationRequest): Response<ScriptGenerationResponse>
+    
+    @POST("ai-pipeline/generate_ad_content")
+    suspend fun generateAdContent(@Body request: AdContentGenerationRequest): Response<AdContentGenerationResponse>
 }
 
 object ApiClient {
@@ -103,3 +110,34 @@ data class TalkingHeadRequest(
     val voiceId: String? = null
 )
 
+// AI Pipeline data models
+data class ScriptGenerationRequest(
+    val imageId: String,
+    val language: String? = null,
+    val emotion: String? = null,
+    val userPreferences: UserPreferences? = null
+)
+
+data class ScriptGenerationResponse(
+    val success: Boolean,
+    val script: String? = null,
+    val language: String? = null,
+    val emotion: String? = null
+)
+
+data class UserPreferences(
+    val language: String? = null,
+    val preferredTone: String? = null
+)
+
+// Ad Content Generation models
+data class AdContentGenerationRequest(
+    val product: String
+)
+
+data class AdContentGenerationResponse(
+    val success: Boolean,
+    val script: String? = null,
+    val audio_url: String? = null,
+    val video_url: String? = null
+)

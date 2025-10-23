@@ -8,6 +8,7 @@ import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.SyncRequest
 import com.talkar.app.data.models.SyncResponse
 import com.talkar.app.data.models.TalkingHeadVideo
+import com.talkar.app.data.models.AdContent
 import com.talkar.app.data.config.ApiConfig
 import com.google.ar.core.AugmentedImage
 import kotlinx.coroutines.flow.*
@@ -32,6 +33,13 @@ class SimpleARViewModel : ViewModel() {
     
     private val _recognizedAugmentedImage = MutableStateFlow<AugmentedImage?>(null)
     val recognizedAugmentedImage: StateFlow<AugmentedImage?> = _recognizedAugmentedImage.asStateFlow()
+    
+    // Ad Content state
+    private val _adContent = MutableStateFlow<AdContent?>(null)
+    val adContent: StateFlow<AdContent?> = _adContent.asStateFlow()
+    
+    private val _showAdContent = MutableStateFlow(false)
+    val showAdContent: StateFlow<Boolean> = _showAdContent.asStateFlow()
 
     // Simple debounce/deduplication to avoid repeated detection events flooding logs
     // and triggering duplicate backend work when AR repeatedly detects the same target.
@@ -147,6 +155,10 @@ class SimpleARViewModel : ViewModel() {
                             android.util.Log.d("SimpleARViewModel", "Generating lip sync video for matched image: ${matchingImage.name}")
                             generateLipSyncVideoForMatchedImage(matchingImage)
                             
+                            // Generate ad content for the matched image
+                            android.util.Log.d("SimpleARViewModel", "Generating ad content for matched image: ${matchingImage.name}")
+                            generateAdContentForImage(matchingImage)
+                            
                         } else {
                             android.util.Log.d("SimpleARViewModel", "❌ Image NOT FOUND in backend: ${imageRecognition.name}")
                             
@@ -184,6 +196,75 @@ class SimpleARViewModel : ViewModel() {
     private fun triggerHapticFeedback() {
         // This would trigger haptic feedback when an image is detected
         android.util.Log.d("SimpleARViewModel", "Image detected - triggering haptic feedback")
+    }
+    
+    private fun generateAdContentForImage(backendImage: com.talkar.app.data.models.BackendImage) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                android.util.Log.d("SimpleARViewModel", "Generating ad content for backend image: ${backendImage.name}")
+                
+                // Update UI state to show loading
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(
+                        isGeneratingAdContent = true,
+                        adContentError = null
+                    )
+                }
+                
+                // Use the image name as the product name for ad content generation
+                val productName = backendImage.name
+                
+                // Get the EnhancedARService instance
+                val arService = TalkARApplication.instance.arImageRecognitionService as com.talkar.app.data.services.EnhancedARService
+                
+                // Generate ad content
+                val result = arService.generateAdContentForImage(backendImage.id, productName)
+                
+                if (result.isSuccess) {
+                    val adContent = result.getOrNull()
+                    if (adContent != null) {
+                        // Update UI on main thread
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _adContent.value = adContent
+                            _showAdContent.value = true
+                            _uiState.value = _uiState.value.copy(
+                                isGeneratingAdContent = false,
+                                adContentError = null
+                            )
+                            android.util.Log.d("SimpleARViewModel", "Ad content generated successfully for: ${backendImage.name}")
+                        }
+                    } else {
+                        android.util.Log.e("SimpleARViewModel", "Ad content is null")
+                        // Update UI state to show error
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _uiState.value = _uiState.value.copy(
+                                isGeneratingAdContent = false,
+                                adContentError = "Ad content is null"
+                            )
+                        }
+                    }
+                } else {
+                    android.util.Log.e("SimpleARViewModel", "Failed to generate ad content: ${result.exceptionOrNull()?.message}")
+                    // Update UI state to show error
+                    viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(
+                            isGeneratingAdContent = false,
+                            adContentError = result.exceptionOrNull()?.message ?: "Failed to generate ad content"
+                        )
+                    }
+                }
+                
+            } catch (e: Exception) {
+                android.util.Log.e("SimpleARViewModel", "Error generating ad content", e)
+                // Update UI state to show error
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(
+                        isGeneratingAdContent = false,
+                        adContentError = e.message ?: "Error generating ad content"
+                    )
+                }
+            }
+        }
     }
     
     private fun fetchTalkingHeadVideo(imageId: String) {
@@ -433,12 +514,18 @@ class SimpleARViewModel : ViewModel() {
         _recognizedAugmentedImage.value = null
         _talkingHeadVideo.value = null
         _syncVideo.value = null
+        _adContent.value = null
+        _showAdContent.value = false
         _uiState.value = _uiState.value.copy(
             recognizedImage = null,
             syncVideo = null,
             error = null,
             arError = null
         )
+    }
+    
+    fun hideAdContent() {
+        _showAdContent.value = false
     }
 }
 
@@ -449,5 +536,7 @@ data class SimpleARUiState(
     val recognizedImage: ImageRecognition? = null,
     val syncVideo: SyncResponse? = null,
     val error: String? = null,
-    val arError: String? = null
+    val arError: String? = null,
+    val isGeneratingAdContent: Boolean = false,
+    val adContentError: String? = null
 )

@@ -21,19 +21,39 @@ This document provides detailed information about the AI text generation integra
 - Support for various product categories
 - Caching for frequently requested products
 
-### 3. Museum Guide Script Generation
+### 3. Metadata-Driven Script Generation
+
+- Enhanced script generation based on detailed product metadata
+- Support for tone, category, features, and other product attributes
+- JSON-based metadata storage with caching
+
+### 4. User Personalization Layer
+
+- User preferences stored in `/mobile-app/app/src/main/assets/user_preferences.json`
+- Preferences automatically loaded on app start
+- AI tailors output based on user language and tone preferences
+- Seamless integration with existing metadata and tone systems
+
+### 5. Tone & Emotion Support
+
+- Dynamic tone selection: friendly, excited, professional, casual, enthusiastic, persuasive
+- Admin dashboard dropdown for tone selection
+- Prompt engineering dynamically adapts based on selected tone
+- Backward compatibility with existing emotion-based system
+
+### 6. Museum Guide Script Generation
 
 - Context-aware scripts for interactive museum guides
 - Multi-language support (English, Spanish, French, etc.)
 - Emotion-based content generation (neutral, happy, surprised, serious)
 
-### 4. File Persistence
+### 7. File Persistence
 
 - Automatic saving of generated scripts to `/scripts/` directory
 - Timestamped filenames for version control
 - Organized file structure based on parameters
 
-### 5. Comprehensive Error Handling
+### 8. Comprehensive Error Handling
 
 - Input validation for all parameters
 - API-specific error messages
@@ -65,7 +85,7 @@ Generate a product description script.
 
 ### POST /api/v1/ai-pipeline/generate_script
 
-Generate a museum guide script.
+Generate a museum guide script or metadata-driven product script.
 
 **Request:**
 
@@ -73,7 +93,11 @@ Generate a museum guide script.
 {
   "imageId": "image_123",
   "language": "en",
-  "emotion": "happy"
+  "emotion": "happy",
+  "userPreferences": {
+    "language": "English",
+    "preferred_tone": "casual"
+  }
 }
 ```
 
@@ -87,6 +111,62 @@ Generate a museum guide script.
   "emotion": "happy"
 }
 ```
+
+## Metadata Structure
+
+Product metadata is stored in `/data/product-metadata.json` with the following structure:
+
+```json
+{
+  "image_id": "poster_01",
+  "product_name": "Sunrich Water Bottle",
+  "category": "Beverage",
+  "tone": "excited",
+  "language": "English"
+}
+```
+
+### Supported Metadata Fields
+
+- `image_id`: Unique identifier for the poster/image
+- `product_name`: Name of the product
+- `category`: Product category (e.g., "Beverage", "Fashion")
+- `brand`: Brand name
+- `price`: Product price
+- `currency`: Price currency (e.g., "USD")
+- `features`: Array of product features
+- `description`: Detailed product description
+- `tone`: Desired tone for the advertisement (e.g., "excited", "enthusiastic")
+- `language`: Language for the script
+- `target_audience`: Array of target audience segments
+- `keywords`: Array of relevant keywords
+
+## User Preferences Structure
+
+User preferences are stored in `/mobile-app/app/src/main/assets/user_preferences.json`:
+
+```json
+{
+  "language": "English",
+  "preferred_tone": "casual"
+}
+```
+
+### Supported Preference Fields
+
+- `language`: Preferred language for content generation
+- `preferred_tone`: Preferred tone for content generation (friendly, excited, professional, casual, enthusiastic, persuasive)
+
+## Tone Support
+
+The system supports the following tones for script generation:
+
+- **Friendly**: Warm, approachable, and welcoming
+- **Excited**: Energetic, enthusiastic, and vibrant
+- **Professional**: Formal, authoritative, and business-oriented
+- **Casual**: Relaxed, informal, and conversational
+- **Enthusiastic**: Passionate, eager, and optimistic
+- **Persuasive**: Convincing, compelling, and influential
 
 ## Environment Configuration
 
@@ -118,7 +198,53 @@ async function generateScript(productName) {
 }
 ```
 
-### 2. File Saving
+### 2. Metadata-Based Prompt Engineering
+
+When product metadata is available, the system generates enhanced prompts:
+
+```
+Generate a 2-line voiceover for an advertisement about {product_name}.
+Category: {category}
+Brand: {brand}
+Tone: {tone}
+Language: {language}
+
+Product Description: {description}
+Key Features:
+1. {feature_1}
+2. {feature_2}
+...
+
+Price: {currency} {price}
+
+Create an engaging, concise advertisement script that highlights the product's value proposition and appeals to the target audience.
+The tone should be {tone} - {tone_description}.
+```
+
+### 3. User Preferences Integration
+
+When user preferences are provided, they are used to enhance the prompt:
+
+```
+Generate a 2-line voiceover for an advertisement about {product_name}.
+Category: {category}
+Brand: {brand}
+Tone: {user_preferred_tone}
+Language: {user_preferred_language}
+
+Product Description: {description}
+Key Features:
+1. {feature_1}
+2. {feature_2}
+...
+
+Price: {currency} {price}
+
+Create an engaging, concise advertisement script that highlights the product's value proposition and appeals to the target audience.
+The tone should be {user_preferred_tone} - {tone_description}.
+```
+
+### 4. File Saving
 
 Generated scripts are automatically saved to `/scripts/` with the following naming convention:
 
@@ -126,18 +252,12 @@ Generated scripts are automatically saved to `/scripts/` with the following nami
 script-{imageId}-{language}-{emotion}-{timestamp}.txt
 ```
 
-### 3. Caching
+### 5. Caching
 
 - In-memory caching with 5-minute TTL
 - Cache keys based on request parameters
 - Automatic cache invalidation
-
-### 4. Error Handling
-
-- Input validation for all parameters
-- Specific error messages for different failure modes
-- Timeout handling (10 seconds default)
-- Fallback to mock implementations
+- Separate caching for product metadata and user preferences
 
 ## Testing
 
@@ -146,6 +266,9 @@ script-{imageId}-{language}-{emotion}-{timestamp}.txt
 The implementation includes comprehensive tests:
 
 - Product script generation
+- Metadata-driven script generation
+- Tone-based script generation
+- User preferences-based script generation
 - Museum guide script generation
 - Multi-language support
 - Error handling validation
@@ -155,6 +278,9 @@ The implementation includes comprehensive tests:
 Use the provided test scripts:
 
 - `test-product-script.js`: Product description testing
+- `test-metadata-script.js`: Metadata-driven script generation testing
+- `test-tone-script.js`: Tone-based script generation testing
+- `test-user-preferences-script.js`: User preferences-based script generation testing
 - `test-script-generation.js`: Comprehensive script generation testing
 
 ## Performance Considerations
@@ -177,12 +303,16 @@ Use the provided test scripts:
 1. **Advanced Prompt Engineering**: More sophisticated prompts for better results
 2. **Content Customization**: Personalization based on user preferences
 3. **Batch Processing**: Generate multiple scripts in parallel
+4. **Database Integration**: Store metadata in database instead of JSON files
+5. **Dynamic Preferences**: Allow users to change preferences in-app
 
 ### Long-term Features
 
 1. **Real-time Content Generation**: WebSocket-based streaming responses
 2. **Content Versioning**: Track and compare different script versions
 3. **Analytics Dashboard**: Monitor usage and performance metrics
+4. **A/B Testing**: Compare different script variations for effectiveness
+5. **Contextual Personalization**: Adapt content based on user behavior and context
 
 ## Troubleshooting
 
@@ -220,6 +350,34 @@ For issues not covered in this guide:
 const script = await AIPipelineService.generateProductScript("iPhone");
 console.log(script);
 // "Experience the future in your hands with the revolutionary iPhone. Cutting-edge technology meets elegant design."
+```
+
+### Metadata-Driven Script Generation
+
+```javascript
+const script = await AIPipelineService.generateScript({
+  imageId: "poster_01",
+  language: "en",
+  emotion: "excited",
+});
+console.log(script.text);
+// "Wow! Get ready for the incredible Sunrich Water Bottle - you won't believe how awesome it is!"
+```
+
+### User Preferences-Based Script Generation
+
+```javascript
+const script = await AIPipelineService.generateScript({
+  imageId: "poster_02",
+  language: "en",
+  emotion: "neutral",
+  userPreferences: {
+    language: "English",
+    preferred_tone: "professional",
+  },
+});
+console.log(script.text);
+// "Introducing the premium Eco-Friendly Backpack, engineered for discerning professionals who demand excellence."
 ```
 
 ### Museum Guide Script Generation

@@ -11,6 +11,26 @@ interface ScriptGenerationRequest {
   language: string;
   emotion?: string;
   productName?: string; // New field for product name
+  userPreferences?: {
+    language?: string;
+    preferred_tone?: string;
+  }; // New field for user preferences
+}
+
+// New interface for product metadata
+interface ProductMetadata {
+  image_id: string;
+  product_name: string;
+  category?: string;
+  brand?: string;
+  price?: number;
+  currency?: string;
+  features?: string[];
+  description?: string;
+  tone?: string;
+  language?: string;
+  target_audience?: string[];
+  keywords?: string[];
 }
 
 interface ScriptGenerationResponse {
@@ -62,6 +82,9 @@ const aiPipelineJobs = new Map<string, AIPipelineJob>();
 // In-memory cache for frequently requested content (in production, use Redis)
 const contentCache = new Map<string, any>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// In-memory storage for product metadata
+const productMetadataCache = new Map<string, ProductMetadata>();
 
 // Retry configuration
 const MAX_RETRIES = 3;
@@ -236,6 +259,17 @@ export class AIPipelineService {
         return cachedResult;
       }
 
+      // Load product metadata if available
+      const productMetadata = await this.loadProductMetadata(request.imageId);
+      
+      // If we have product metadata, use it for enhanced script generation
+      if (productMetadata) {
+        console.log("Using product metadata for script generation");
+        const result = await this.generateScriptFromMetadata(productMetadata, request.userPreferences);
+        this.setInCache(cacheKey, result);
+        return result;
+      }
+
       // In development, use mock implementation
       if (process.env.NODE_ENV === "development" || (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY)) {
         console.log("Using mock script generation");
@@ -264,6 +298,96 @@ export class AIPipelineService {
       console.log("Falling back to mock script generation");
       return this.generateMockScript(request);
     }
+  }
+
+  /**
+   * Generate script based on product metadata
+   */
+  private static async generateScriptFromMetadata(metadata: ProductMetadata, userPreferences?: { language?: string; preferred_tone?: string }): Promise<ScriptGenerationResponse> {
+    try {
+      // Create enhanced prompt using product metadata and user preferences
+      const prompt = this.createMetadataBasedPrompt(metadata, userPreferences);
+      
+      // Create request object for existing AI functions
+      const request: ScriptGenerationRequest = {
+        imageId: metadata.image_id,
+        language: metadata.language || userPreferences?.language || "en",
+        emotion: metadata.tone || userPreferences?.preferred_tone || "neutral",
+        productName: metadata.product_name
+      };
+
+      // In development, use mock implementation
+      if (process.env.NODE_ENV === "development" || (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY)) {
+        console.log("Using mock metadata-based script generation");
+        const result = this.generateMockMetadataScript(metadata, userPreferences);
+        return result;
+      }
+
+      // Determine which AI provider to use
+      const aiProvider = process.env.AI_PROVIDER || "openai"; // Default to OpenAI
+
+      let result: ScriptGenerationResponse;
+      if (aiProvider === "groq" && process.env.GROQCLOUD_API_KEY) {
+        console.log("Calling GroqCloud API for metadata-based script generation");
+        result = await this.callGroqCloudAPI(request);
+      } else {
+        console.log("Calling OpenAI API for metadata-based script generation");
+        result = await this.callOpenAIAPI(request);
+      }
+
+      return result;
+    } catch (error) {
+      console.error("Metadata-based script generation error:", error);
+      // Fallback to mock implementation if real API fails
+      console.log("Falling back to mock metadata-based script generation");
+      return this.generateMockMetadataScript(metadata, userPreferences);
+    }
+  }
+
+  /**
+   * Create enhanced prompt based on product metadata
+   */
+  private static createMetadataBasedPrompt(metadata: ProductMetadata, userPreferences?: { language?: string; preferred_tone?: string }): string {
+    // Build features string if available
+    const featuresString = metadata.features && metadata.features.length > 0 
+      ? metadata.features.map((feature, index) => `${index + 1}. ${feature}`).join("\n")
+      : "High-quality product";
+
+    // Use tone from metadata, user preferences, or default to "friendly"
+    const tone = metadata.tone || userPreferences?.preferred_tone || "friendly";
+    const language = metadata.language || userPreferences?.language || "English";
+
+    // Build prompt with metadata
+    return `Generate a 2-line voiceover for an advertisement about ${metadata.product_name}.
+Category: ${metadata.category || "General"}
+Brand: ${metadata.brand || "Premium"}
+Tone: ${tone}
+Language: ${language}
+
+Product Description: ${metadata.description || "A premium product"}
+Key Features:
+${featuresString}
+
+Price: ${metadata.currency || "USD"} ${metadata.price || "N/A"}
+
+Create an engaging, concise advertisement script that highlights the product's value proposition and appeals to the target audience.
+The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
+  }
+
+  /**
+   * Get description for a given tone
+   */
+  private static getToneDescription(tone: string): string {
+    const toneDescriptions: Record<string, string> = {
+      friendly: "warm, approachable, and welcoming",
+      excited: "energetic, enthusiastic, and vibrant",
+      professional: "formal, authoritative, and business-oriented",
+      casual: "relaxed, informal, and conversational",
+      enthusiastic: "passionate, eager, and optimistic",
+      persuasive: "convincing, compelling, and influential"
+    };
+
+    return toneDescriptions[tone] || toneDescriptions["friendly"];
   }
 
   /**
@@ -1298,32 +1422,51 @@ export class AIPipelineService {
     // Simulate API delay
     const delay = Math.random() * 1000 + 500;
     
-    // Generate mock script based on language and emotion
+    // Generate mock script based on language and emotion/tone
     const scripts: Record<string, Record<string, string>> = {
       en: {
         neutral: "Welcome to our exhibition. I'm here to guide you through this amazing collection.",
         happy: "Welcome! I'm so excited to show you around our wonderful exhibition today!",
         surprised: "Oh my! Look at this incredible piece. Isn't it absolutely fascinating?",
-        serious: "Please pay attention to this important historical artifact and its significance."
+        serious: "Please pay attention to this important historical artifact and its significance.",
+        friendly: "Hello there! I'm delighted to be your guide through this fascinating exhibition.",
+        excited: "Wow! Get ready for an incredible journey through our amazing collection.",
+        professional: "Welcome to our distinguished exhibition. I'm here to provide you with expert insights.",
+        casual: "Hey there! Come check out these cool exhibits I've got to show you.",
+        enthusiastic: "You're going to love what we have in store for you today - it's absolutely incredible!",
+        persuasive: "Don't miss this opportunity to explore our exceptional collection - it's truly remarkable!"
       },
       es: {
         neutral: "Bienvenido a nuestra exposición. Estoy aquí para guiarlo a través de esta increíble colección.",
         happy: "¡Bienvenido! ¡Estoy muy emocionado de mostrarle nuestra maravillosa exposición hoy!",
         surprised: "¡Oh cielos! Mire esta pieza increíble. ¿No es absolutamente fascinante?",
-        serious: "Por favor, preste atención a este importante artefacto histórico y su significado."
+        serious: "Por favor, preste atención a este importante artefacto histórico y su significado.",
+        friendly: "¡Hola! Me complace ser su guía a través de esta fascinante exposición.",
+        excited: "¡Guau! Prepárese para un viaje increíble a través de nuestra asombrosa colección.",
+        professional: "Bienvenido a nuestra distinguida exposición. Estoy aquí para proporcionarle conocimientos expertos.",
+        casual: "¡Oye! Ven a ver estos geniales exhibiciones que tengo para mostrarte.",
+        enthusiastic: "¡Te encantará lo que tenemos preparado para ti hoy - es absolutamente increíble!",
+        persuasive: "No pierdas esta oportunidad de explorar nuestra colección excepcional - es verdaderamente notable."
       },
       fr: {
         neutral: "Bienvenue à notre exposition. Je suis ici pour vous guider à travers cette collection incroyable.",
         happy: "Bienvenue ! Je suis tellement excité de vous montrer notre merveilleuse exposition aujourd'hui !",
         surprised: "Oh mon Dieu ! Regardez cette pièce incroyable. N'est-ce pas absolument fascinant ?",
-        serious: "Veuillez prêter attention à cet important artefact historique et sa signification."
+        serious: "Veuillez prêter attention à cet important artefact historique et sa signification.",
+        friendly: "Bonjour ! Je suis ravi de vous guider à travers cette fascinante exposition.",
+        excited: "Waouh ! Préparez-vous pour un voyage incroyable à travers notre collection étonnante.",
+        professional: "Bienvenue dans notre exposition distinguée. Je suis ici pour vous fournir des connaissances expertes.",
+        casual: "Hé ! Viens voir ces expositions cool que j'ai à te montrer.",
+        enthusiastic: "Vous allez adorer ce que nous avons en stock pour vous aujourd'hui - c'est absolument incroyable !",
+        persuasive: "Ne manquez pas cette opportunité d'explorer notre collection exceptionnelle - elle est vraiment remarquable !"
       }
     };
 
     const language = request.language || "en";
-    const emotion = request.emotion || "neutral";
+    // Use emotion if available, otherwise fall back to tone or default to neutral
+    const emotionOrTone = request.emotion || "neutral";
     
-    const text = scripts[language]?.[emotion] || scripts["en"]["neutral"];
+    const text = scripts[language]?.[emotionOrTone] || scripts["en"]["neutral"];
 
     return {
       text,
@@ -1425,6 +1568,69 @@ export class AIPipelineService {
     return {
       videoUrl,
       duration
+    };
+  }
+
+  /**
+   * Load product metadata from JSON file or database
+   */
+  private static async loadProductMetadata(imageId: string): Promise<ProductMetadata | null> {
+    try {
+      // Check cache first
+      if (productMetadataCache.has(imageId)) {
+        return productMetadataCache.get(imageId) || null;
+      }
+
+      // Try to load from JSON file
+      const metadataFilePath = path.join(__dirname, "..", "..", "data", "product-metadata.json");
+      if (fs.existsSync(metadataFilePath)) {
+        const metadataContent = fs.readFileSync(metadataFilePath, "utf8");
+        const allMetadata: ProductMetadata[] = JSON.parse(metadataContent);
+        
+        // Find metadata for the specific image ID
+        const metadata = allMetadata.find(item => item.image_id === imageId) || null;
+        
+        if (metadata) {
+          // Cache the metadata
+          productMetadataCache.set(imageId, metadata);
+          return metadata;
+        }
+      }
+
+      // If not found in file, try to load from database
+      // For now, we'll return null if not found
+      return null;
+    } catch (error) {
+      console.error("Error loading product metadata:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Mock metadata-based script generation
+   */
+  private static generateMockMetadataScript(metadata: ProductMetadata, userPreferences?: { language?: string; preferred_tone?: string }): ScriptGenerationResponse {
+    // Generate mock script based on metadata and user preferences
+    const tone = metadata.tone || userPreferences?.preferred_tone || "friendly";
+    const language = metadata.language || userPreferences?.language || "en";
+    
+    // Create mock scripts based on tone and product
+    const scripts: Record<string, string> = {
+      friendly: `Hi there! Check out the amazing ${metadata.product_name} - it's perfect for you!`,
+      excited: `Wow! Get ready for the incredible ${metadata.product_name} - you won't believe how awesome it is!`,
+      professional: `Introducing the premium ${metadata.product_name}, engineered for discerning professionals who demand excellence.`,
+      casual: `Hey, you should really check out this cool ${metadata.product_name} - it's pretty awesome!`,
+      enthusiastic: `You're going to love the fantastic ${metadata.product_name} - it's everything you've been looking for!`,
+      persuasive: `Don't miss out on the exceptional ${metadata.product_name} - transform your experience today!`
+    };
+
+    // Return a mock script based on the tone or a generic one
+    const text = scripts[tone] || scripts["friendly"];
+
+    return {
+      text,
+      language,
+      emotion: tone
     };
   }
 

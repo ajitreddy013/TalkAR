@@ -70,10 +70,10 @@ router.get("/lipsync/status/:jobId", async (req, res, next) => {
   }
 });
 
-// Generate script only
+// Generate script with metadata support
 router.post("/generate_script", async (req, res, next) => {
   try {
-    const { imageId, language, emotion } = req.body;
+    const { imageId, language, emotion, userPreferences } = req.body;
 
     // Validate required parameters
     if (!imageId) {
@@ -85,7 +85,8 @@ router.post("/generate_script", async (req, res, next) => {
     const result = await AIPipelineService.generateScript({
       imageId,
       language: language || "en",
-      emotion: emotion || "neutral"
+      emotion: emotion || "neutral",
+      userPreferences // Pass user preferences if provided
     });
 
     return res.json({

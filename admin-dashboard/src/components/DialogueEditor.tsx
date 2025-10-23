@@ -42,6 +42,7 @@ export const DialogueEditor: React.FC<DialogueEditorProps> = ({
   const [language, setLanguage] = useState(dialogue?.language || "en");
   const [voiceId, setVoiceId] = useState(dialogue?.voiceId || "");
   const [emotion, setEmotion] = useState(dialogue?.emotion || "neutral");
+  const [tone, setTone] = useState(dialogue?.tone || "friendly"); // New tone state
   const [isDefault, setIsDefault] = useState(dialogue?.isDefault || false);
 
   const handleSave = () => {
@@ -54,6 +55,7 @@ export const DialogueEditor: React.FC<DialogueEditorProps> = ({
           language,
           voiceId: voiceId || undefined,
           emotion: emotion || undefined,
+          tone: tone || undefined, // Include tone in save
           isDefault,
         },
       });
@@ -65,6 +67,7 @@ export const DialogueEditor: React.FC<DialogueEditorProps> = ({
         language,
         voiceId: voiceId || undefined,
         emotion: emotion || undefined,
+        tone: tone || undefined, // Include tone in save
         isDefault,
       });
     }
@@ -78,6 +81,16 @@ export const DialogueEditor: React.FC<DialogueEditorProps> = ({
     { value: "de", label: "German" },
     { value: "it", label: "Italian" },
     { value: "pt", label: "Portuguese" },
+  ];
+
+  // New tone options
+  const toneOptions = [
+    { value: "friendly", label: "Friendly" },
+    { value: "excited", label: "Excited" },
+    { value: "professional", label: "Professional" },
+    { value: "casual", label: "Casual" },
+    { value: "enthusiastic", label: "Enthusiastic" },
+    { value: "persuasive", label: "Persuasive" },
   ];
 
   return (
@@ -125,6 +138,22 @@ export const DialogueEditor: React.FC<DialogueEditorProps> = ({
             label="Emotion"
             fullWidth
           />
+
+          {/* New Tone Selector */}
+          <FormControl fullWidth>
+            <InputLabel>Tone</InputLabel>
+            <Select
+              value={tone}
+              label="Tone"
+              onChange={(e) => setTone(e.target.value as string)}
+            >
+              {toneOptions.map((toneOption) => (
+                <MenuItem key={toneOption.value} value={toneOption.value}>
+                  {toneOption.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           <FormControlLabel
             control={

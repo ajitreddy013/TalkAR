@@ -7,7 +7,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
-import com.talkar.app.ui.components.SimpleARView
+import com.talkar.app.ui.components.EnhancedCameraView
 import com.talkar.app.ui.components.AvatarOverlayView
 import com.talkar.app.ui.components.AvatarPlaceholder
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
@@ -59,11 +59,20 @@ fun Week2ARScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Simple AR View for testing
-            SimpleARView(
+            // Enhanced camera preview (shows real camera output)
+            EnhancedCameraView(
                 modifier = Modifier.fillMaxSize(),
-                onImageDetected = { imageName ->
-                    android.util.Log.d("Week2ARScreen", "Image detected: $imageName")
+                isImageDetected = isTracking,
+                onImageRecognized = {
+                    // When wired to real AR, update the VM
+                    viewModel.onImageDetected()
+                },
+                onAugmentedImageRecognized = {
+                    // Placeholder hook if using ARCore-backed recognition
+                    android.util.Log.d("Week2ARScreen", "Augmented image recognized: ${it.name}")
+                },
+                onError = { error ->
+                    android.util.Log.e("Week2ARScreen", "Camera error: $error")
                 }
             )
             
