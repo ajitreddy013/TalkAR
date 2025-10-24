@@ -5,26 +5,23 @@ module.exports = {
     es2021: true,
     node: true,
   },
-  extends: ["react-app", "react-app/jest", "@typescript-eslint/recommended"],
-  parser: "@typescript-eslint/parser",
-  parserOptions: {
-    ecmaFeatures: {
-      jsx: true,
-    },
-    ecmaVersion: 12,
-    sourceType: "module",
-  },
-  plugins: ["react", "@typescript-eslint"],
+  extends: [
+    'react-app',
+    'react-app/jest'
+  ],
   rules: {
-    "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
-    "@typescript-eslint/explicit-function-return-type": "off",
-    "@typescript-eslint/explicit-module-boundary-types": "off",
-    "@typescript-eslint/no-explicit-any": "warn",
-    "react-hooks/exhaustive-deps": "warn",
+    '@typescript-eslint/no-unused-vars': [
+      'warn',
+      { 'argsIgnorePattern': '^_', 'varsIgnorePattern': '^_' }
+    ],
+    '@typescript-eslint/no-explicit-any': 'warn',
+    '@typescript-eslint/explicit-function-return-type': 'off',
+    '@typescript-eslint/explicit-module-boundary-types': 'off',
+    'react-hooks/exhaustive-deps': 'warn',
   },
   settings: {
     react: {
-      version: "detect",
+      version: 'detect',
     },
   },
 };
