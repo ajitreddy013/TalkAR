@@ -1,5 +1,6 @@
 import { DataTypes, Model, Optional } from "sequelize";
 import { sequelize } from "../config/database";
+import { Avatar } from "./Avatar";
 
 export interface ImageAvatarMappingAttributes {
   id: string;
@@ -74,3 +75,7 @@ ImageAvatarMapping.init(
     timestamps: true,
   }
 );
+
+// Define associations after model initialization
+ImageAvatarMapping.belongsTo(Avatar, { foreignKey: "avatarId", as: "avatar" });
+Avatar.hasMany(ImageAvatarMapping, { foreignKey: "avatarId", as: "mappings" });
