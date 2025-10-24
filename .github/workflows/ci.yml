@@ -97,7 +97,7 @@ jobs:
 
       - name: Run linting
         working-directory: ./admin-dashboard
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Run tests
         working-directory: ./admin-dashboard
@@ -130,6 +130,7 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        continue-on-error: true
 
       - name: Cache Gradle dependencies
         uses: actions/cache@v3
@@ -210,9 +211,16 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Test Docker Compose
+        env:
+          POSTGRES_PASSWORD: test_password
+          DB_PASSWORD: test_password
+          JWT_SECRET: test_jwt_secret_key_for_ci
+          AWS_ACCESS_KEY_ID: test_access_key
+          AWS_SECRET_ACCESS_KEY: test_secret_key
+          SYNC_API_KEY: test_sync_key
         run: |
           docker-compose -f docker-compose.yml config
-          docker-compose -f docker-compose.yml build
+          docker-compose -f docker-compose.yml build --parallel
 
   # Deployment (only on main branch)
   deploy:
