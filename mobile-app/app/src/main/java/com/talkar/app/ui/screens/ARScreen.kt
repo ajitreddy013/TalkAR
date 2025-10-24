@@ -120,8 +120,8 @@ fun ARScreen(
                 .padding(paddingValues),
             onImageDetected = { image, avatar ->
                 android.util.Log.d("ARScreen", "Image detected: ${image.name} with avatar: ${avatar?.name}")
-                // Generate ad content when image is detected
-                enhancedARViewModel.generateAdContentForImage(image.id, image.name)
+                // Generate streaming ad content when image is detected
+                enhancedARViewModel.generateAdContentForImageStreaming(image.id, image.name)
             },
             onImageLost = { imageId ->
                 android.util.Log.d("ARScreen", "Image lost: $imageId")

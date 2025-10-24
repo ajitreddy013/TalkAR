@@ -281,10 +281,10 @@ class EnhancedARViewModel(
     }
     
     /**
-     * Generate ad content for a detected image/product
+     * Generate ad content for a detected image/product with streaming support
      */
-    fun generateAdContentForImage(imageId: String, productName: String) {
-        Log.d(TAG, "Generating ad content for image: $imageId, product: $productName")
+    fun generateAdContentForImageStreaming(imageId: String, productName: String) {
+        Log.d(TAG, "Generating streaming ad content for image: $imageId, product: $productName")
         
         viewModelScope.launch {
             try {
@@ -292,8 +292,8 @@ class EnhancedARViewModel(
                 _adContentError.value = null
                 
                 
-                // Call the ad content generation service
-                val result = adContentService.generateAdContent(productName)
+                // Call the streaming ad content generation service
+                val result = adContentService.generateAdContentStreaming(productName)
                 
                 if (result.isSuccess) {
                     val response = result.getOrNull()!!
@@ -308,16 +308,16 @@ class EnhancedARViewModel(
                     _isAvatarVisible.value = true // Show the avatar overlay
                     _isAdContentLoading.value = false
                     
-                    Log.d(TAG, "Ad content generated successfully for $productName")
+                    Log.d(TAG, "Streaming ad content generated successfully for $productName")
                 } else {
-                    _adContentError.value = result.exceptionOrNull()?.message ?: "Failed to generate ad content"
+                    _adContentError.value = result.exceptionOrNull()?.message ?: "Failed to generate streaming ad content"
                     _isAdContentLoading.value = false
-                    Log.e(TAG, "Failed to generate ad content: ${_adContentError.value}")
+                    Log.e(TAG, "Failed to generate streaming ad content: ${_adContentError.value}")
                 }
             } catch (e: Exception) {
                 _adContentError.value = e.message ?: "Unknown error occurred"
                 _isAdContentLoading.value = false
-                Log.e(TAG, "Exception while generating ad content: ${e.message}")
+                Log.e(TAG, "Exception while generating streaming ad content: ${e.message}")
             }
         }
     }
