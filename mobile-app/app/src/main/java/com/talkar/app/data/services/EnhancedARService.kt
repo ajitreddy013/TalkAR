@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Minimal stub of EnhancedARService to satisfy compile-time references across the project.
@@ -81,6 +82,9 @@ class EnhancedARService(private val context: Context) {
 	private val _error = MutableStateFlow<String?>(null)
 	val error: StateFlow<String?> = _error.asStateFlow()
 
+	// Ad content cache
+	private val adContentCache = ConcurrentHashMap<String, AdContent>()
+
 	/**
 	 * Initialize the AR service. This bridges to ARImageRecognitionService in the background.
 	 * Returns true to indicate initialization was started.
@@ -146,9 +150,16 @@ class EnhancedARService(private val context: Context) {
 	}
 
 	/**
-	 * Return cached AdContent if available (stub returns null)
+	 * Return cached AdContent if available
 	 */
-	fun getCachedAdContent(imageId: String): AdContent? = null
+	fun getCachedAdContent(imageId: String): AdContent? = adContentCache[imageId]
+
+	/**
+	 * Cache AdContent for future use
+	 */
+	fun cacheAdContent(imageId: String, adContent: AdContent) {
+		adContentCache[imageId] = adContent
+	}
 
 	fun setAvatarSpeaking(isSpeaking: Boolean) {
 		_isAvatarSpeaking.value = isSpeaking
@@ -165,6 +176,12 @@ class EnhancedARService(private val context: Context) {
 	 * This stub returns a successful Result with null content to indicate "no-op" generation.
 	 */
 	fun generateAdContentForImage(imageId: String, productName: String): Result<AdContent?> {
+		// Check cache first
+		val cachedContent = getCachedAdContent(imageId)
+		if (cachedContent != null) {
+			return Result.success(cachedContent)
+		}
+		
 		// Real implementation would call generation pipeline and return AdContent
 		return Result.success(null)
 	}

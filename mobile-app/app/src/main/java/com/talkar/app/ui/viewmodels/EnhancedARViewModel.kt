@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * ViewModel for Enhanced AR functionality
@@ -71,8 +72,18 @@ class EnhancedARViewModel(
     private val _isAdContentLoading = MutableStateFlow(false)
     val isAdContentLoading: StateFlow<Boolean> = _isAdContentLoading.asStateFlow()
     
+    private val _isVideoLoading = MutableStateFlow(false) // New state for video loading
+    val isVideoLoading: StateFlow<Boolean> = _isVideoLoading.asStateFlow()
+    
     private val _adContentError = MutableStateFlow<String?>(null)
     val adContentError: StateFlow<String?> = _adContentError.asStateFlow()
+    
+    // Ad content cache
+    private val adContentCache = ConcurrentHashMap<String, AdContent>()
+    
+    // Retry counter
+    private var retryCount = 0
+    private val maxRetries = 3
     
     // Services
     private val adContentService = AdContentGenerationService.getInstance()
@@ -281,16 +292,25 @@ class EnhancedARViewModel(
     }
     
     /**
-     * Generate ad content for a detected image/product with streaming support
+     * Generate ad content for a detected image/product with streaming support and caching
      */
     fun generateAdContentForImageStreaming(imageId: String, productName: String) {
         Log.d(TAG, "Generating streaming ad content for image: $imageId, product: $productName")
+        
+        // Check cache first
+        val cachedContent = adContentCache[productName]
+        if (cachedContent != null) {
+            Log.d(TAG, "Using cached ad content for product: $productName")
+            _currentAdContent.value = cachedContent
+            _isAvatarVisible.value = true
+            return
+        }
         
         viewModelScope.launch {
             try {
                 _isAdContentLoading.value = true
                 _adContentError.value = null
-                
+                retryCount = 0 // Reset retry counter on new request
                 
                 // Call the streaming ad content generation service
                 val result = adContentService.generateAdContentStreaming(productName)
@@ -304,22 +324,52 @@ class EnhancedARViewModel(
                         productName = productName
                     )
                     
+                    // Cache the ad content
+                    adContentCache[productName] = adContent
+                    
                     _currentAdContent.value = adContent
                     _isAvatarVisible.value = true // Show the avatar overlay
                     _isAdContentLoading.value = false
                     
                     Log.d(TAG, "Streaming ad content generated successfully for $productName")
                 } else {
-                    _adContentError.value = result.exceptionOrNull()?.message ?: "Failed to generate streaming ad content"
-                    _isAdContentLoading.value = false
-                    Log.e(TAG, "Failed to generate streaming ad content: ${_adContentError.value}")
+                    // Handle error with retry mechanism
+                    handleAdContentError(result.exceptionOrNull()?.message ?: "Failed to generate streaming ad content", productName)
                 }
             } catch (e: Exception) {
-                _adContentError.value = e.message ?: "Unknown error occurred"
-                _isAdContentLoading.value = false
-                Log.e(TAG, "Exception while generating streaming ad content: ${e.message}")
+                // Handle exception with retry mechanism
+                handleAdContentError(e.message ?: "Unknown error occurred", productName)
             }
         }
+    }
+    
+    /**
+     * Handle ad content generation errors with retry mechanism
+     */
+    private fun handleAdContentError(errorMessage: String, productName: String) {
+        if (retryCount < maxRetries) {
+            retryCount++
+            Log.d(TAG, "Retrying ad content generation for $productName (attempt $retryCount/$maxRetries)")
+            
+            // Retry after a short delay
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(1000 * retryCount.toLong()) // Exponential backoff
+                generateAdContentForImageStreaming(productName, productName)
+            }
+        } else {
+            _adContentError.value = errorMessage
+            _isAdContentLoading.value = false
+            Log.e(TAG, "Failed to generate streaming ad content after $maxRetries retries: $errorMessage")
+        }
+    }
+    
+    /**
+     * Retry ad content generation
+     */
+    fun retryAdContentGeneration(imageId: String, productName: String) {
+        Log.d(TAG, "Retrying ad content generation for image: $imageId, product: $productName")
+        _adContentError.value = null
+        generateAdContentForImageStreaming(imageId, productName)
     }
     
     /**
@@ -329,6 +379,14 @@ class EnhancedARViewModel(
         _currentAdContent.value = null
         _adContentError.value = null
         _isAdContentLoading.value = false
+        _isVideoLoading.value = false
+    }
+    
+    /**
+     * Set video loading state
+     */
+    fun setVideoLoading(isLoading: Boolean) {
+        _isVideoLoading.value = isLoading
     }
     
     /**
