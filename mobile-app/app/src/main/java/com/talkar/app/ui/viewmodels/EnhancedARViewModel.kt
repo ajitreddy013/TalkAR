@@ -3,10 +3,12 @@ package com.talkar.app.ui.viewmodels
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.talkar.app.data.models.AdContent
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.repository.ImageRepository
 import com.talkar.app.TalkARApplication
+import com.talkar.app.data.services.AdContentGenerationService
 import com.talkar.app.data.services.EnhancedARService
 import com.google.ar.core.LightEstimate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,6 +63,19 @@ class EnhancedARViewModel(
     
     private val _avatars = MutableStateFlow<List<Avatar>>(emptyList())
     val avatars: StateFlow<List<Avatar>> = _avatars.asStateFlow()
+    
+    // Ad Content State
+    private val _currentAdContent = MutableStateFlow<AdContent?>(null)
+    val currentAdContent: StateFlow<AdContent?> = _currentAdContent.asStateFlow()
+    
+    private val _isAdContentLoading = MutableStateFlow(false)
+    val isAdContentLoading: StateFlow<Boolean> = _isAdContentLoading.asStateFlow()
+    
+    private val _adContentError = MutableStateFlow<String?>(null)
+    val adContentError: StateFlow<String?> = _adContentError.asStateFlow()
+    
+    // Services
+    private val adContentService = AdContentGenerationService.getInstance()
     
     init {
         loadBackendData()
@@ -263,6 +278,57 @@ class EnhancedARViewModel(
      */
     fun resumeAmbientAudio() {
         arService.resumeAmbientAudio()
+    }
+    
+    /**
+     * Generate ad content for a detected image/product
+     */
+    fun generateAdContentForImage(imageId: String, productName: String) {
+        Log.d(TAG, "Generating ad content for image: $imageId, product: $productName")
+        
+        viewModelScope.launch {
+            try {
+                _isAdContentLoading.value = true
+                _adContentError.value = null
+                
+                
+                // Call the ad content generation service
+                val result = adContentService.generateAdContent(productName)
+                
+                if (result.isSuccess) {
+                    val response = result.getOrNull()!!
+                    val adContent = AdContent(
+                        script = response.script ?: "No script available",
+                        audioUrl = response.audio_url,
+                        videoUrl = response.video_url,
+                        productName = productName
+                    )
+                    
+                    _currentAdContent.value = adContent
+                    _isAvatarVisible.value = true // Show the avatar overlay
+                    _isAdContentLoading.value = false
+                    
+                    Log.d(TAG, "Ad content generated successfully for $productName")
+                } else {
+                    _adContentError.value = result.exceptionOrNull()?.message ?: "Failed to generate ad content"
+                    _isAdContentLoading.value = false
+                    Log.e(TAG, "Failed to generate ad content: ${_adContentError.value}")
+                }
+            } catch (e: Exception) {
+                _adContentError.value = e.message ?: "Unknown error occurred"
+                _isAdContentLoading.value = false
+                Log.e(TAG, "Exception while generating ad content: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Clear current ad content
+     */
+    fun clearAdContent() {
+        _currentAdContent.value = null
+        _adContentError.value = null
+        _isAdContentLoading.value = false
     }
     
     /**

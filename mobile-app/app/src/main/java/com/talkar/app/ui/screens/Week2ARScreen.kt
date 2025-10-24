@@ -10,6 +10,7 @@ import androidx.compose.runtime.collectAsState
 import com.talkar.app.ui.components.EnhancedCameraView
 import com.talkar.app.ui.components.AvatarOverlayView
 import com.talkar.app.ui.components.AvatarPlaceholder
+import com.talkar.app.ui.screens.AdContentTestScreen
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.Avatar
@@ -25,6 +26,13 @@ fun Week2ARScreen(
     onPermissionCheck: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var showTestScreen by remember { mutableStateOf(false) }
+    
+    if (showTestScreen) {
+        AdContentTestScreen(modifier = modifier)
+        return
+    }
+    
     val isAvatarVisible by viewModel.isAvatarVisible.collectAsState()
     val currentAvatar by viewModel.currentAvatar.collectAsState()
     val currentImage by viewModel.currentImage.collectAsState()
@@ -49,6 +57,11 @@ fun Week2ARScreen(
                         onClick = { viewModel.simulateImageDetection() }
                     ) {
                         Text("Test Detection")
+                    }
+                    IconButton(
+                        onClick = { showTestScreen = true }
+                    ) {
+                        Text("🧪")
                     }
                 }
             )
@@ -162,6 +175,12 @@ fun Week2ARScreen(
                     Text(
                         text = "• Avatar disappears when image is lost",
                         style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "🧪 Tap the test icon to access ad content integration tests",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
