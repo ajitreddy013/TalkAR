@@ -13,7 +13,7 @@ export function defineAssociations() {
   });
   ImageAvatarMapping.belongsTo(Avatar, {
     foreignKey: "avatarId",
-    as: "avatar",
+    as: "associatedAvatar",
   });
 
   // Image-Avatar mapping associations
@@ -21,7 +21,7 @@ export function defineAssociations() {
     foreignKey: "imageId",
     as: "avatarMappings",
   });
-  ImageAvatarMapping.belongsTo(Image, { foreignKey: "imageId", as: "image" });
+  ImageAvatarMapping.belongsTo(Image, { foreignKey: "imageId", as: "associatedImage" });
 
   // Avatar-Dialogue associations (for voice mapping)
   // Note: This is a loose association based on voiceId string matching
