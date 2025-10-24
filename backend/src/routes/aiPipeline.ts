@@ -251,4 +251,63 @@ router.post("/generate_ad_content", async (req, res, next) => {
   }
 });
 
+// Generate complete ad content with streaming optimization
+router.post("/generate_ad_content_streaming", async (req, res, next) => {
+  try {
+    const { product } = req.body;
+
+    // Validate required parameters
+    if (!product) {
+      return res.status(400).json({
+        error: "Missing required parameter: product"
+      });
+    }
+
+    // Validate product name
+    if (typeof product !== 'string' || product.trim().length === 0) {
+      return res.status(400).json({
+        error: "Invalid product name: must be a non-empty string"
+      });
+    }
+
+    // Limit product name length
+    if (product.length > 100) {
+      return res.status(400).json({
+        error: "Invalid product name: must be less than 100 characters"
+      });
+    }
+
+    // Generate complete ad content with streaming optimization
+    const result = await AIPipelineService.generateAdContentStreaming(product);
+
+    return res.json({
+      success: true,
+      script: result.script,
+      audio_url: result.audioUrl,
+      video_url: result.videoUrl
+    });
+  } catch (error: any) {
+    console.error("Ad content generation error:", error);
+    
+    // Handle specific error cases
+    if (error.message.includes("API key")) {
+      return res.status(401).json({
+        error: "API authentication failed. Please check your API keys."
+      });
+    } else if (error.message.includes("rate limit")) {
+      return res.status(429).json({
+        error: "API rate limit exceeded. Please try again later."
+      });
+    } else if (error.message.includes("timeout")) {
+      return res.status(408).json({
+        error: "API request timeout. Please try again later."
+      });
+    } else {
+      return res.status(500).json({
+        error: "Failed to generate ad content. Please try again later."
+      });
+    }
+  }
+});
+
 export default router;
