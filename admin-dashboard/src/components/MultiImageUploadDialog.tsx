@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -13,6 +13,7 @@ import {
   IconButton,
   Alert,
   LinearProgress,
+  Chip,
   Grid,
   Paper,
 } from "@mui/material";
@@ -21,13 +22,30 @@ import { useDropzone } from "react-dropzone";
 import {
   MultiImageService,
   MultiImageUpload,
-  ImageSet as ServerImageSet,
 } from "../services/multiImageService";
 
 interface MultiImageUploadDialogProps {
   open: boolean;
   onClose: () => void;
-  onSave: (imageSet: ServerImageSet) => Promise<void>;
+  onSave: (imageSet: ImageSet) => void;
+}
+
+interface ImageSet {
+  objectName: string;
+  description: string;
+  images: {
+    type:
+      | "front"
+      | "left_angle"
+      | "right_angle"
+      | "bright"
+      | "dim"
+      | "close"
+      | "far";
+    file: File;
+    description: string;
+    required: boolean;
+  }[];
 }
 
 const REQUIRED_IMAGE_TYPES = [
@@ -83,18 +101,8 @@ export const MultiImageUploadDialog: React.FC<MultiImageUploadDialogProps> = ({
   const [objectName, setObjectName] = useState("");
   const [description, setDescription] = useState("");
   const [images, setImages] = useState<{ [key: string]: File }>({});
-  const [imageUrls, setImageUrls] = useState<{ [key: string]: string }>({});
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
-
-  // Cleanup object URLs on unmount
-  useEffect(() => {
-    return () => {
-      Object.values(imageUrls).forEach((url) => {
-        URL.revokeObjectURL(url);
-      });
-    };
-  }, [imageUrls]);
 
   const handleDrop = (acceptedFiles: File[], imageType: string) => {
     if (acceptedFiles.length > 0) {
@@ -118,35 +126,16 @@ export const MultiImageUploadDialog: React.FC<MultiImageUploadDialogProps> = ({
         return;
       }
 
-      // Revoke old URL if exists
-      if (imageUrls[imageType]) {
-        URL.revokeObjectURL(imageUrls[imageType]);
-      }
-
-      // Create new object URL
-      const objectUrl = URL.createObjectURL(file);
-
       setImages((prev) => ({ ...prev, [imageType]: file }));
-      setImageUrls((prev) => ({ ...prev, [imageType]: objectUrl }));
       setErrors((prev) => prev.filter((error) => !error.startsWith(imageType)));
     }
   };
 
   const handleRemove = (imageType: string) => {
-    // Revoke object URL to prevent memory leak
-    if (imageUrls[imageType]) {
-      URL.revokeObjectURL(imageUrls[imageType]);
-    }
-
     setImages((prev) => {
       const newImages = { ...prev };
       delete newImages[imageType];
       return newImages;
-    });
-    setImageUrls((prev) => {
-      const newUrls = { ...prev };
-      delete newUrls[imageType];
-      return newUrls;
     });
   };
 
@@ -206,16 +195,10 @@ export const MultiImageUploadDialog: React.FC<MultiImageUploadDialogProps> = ({
       // Call onSave with the result
       await onSave(result.imageSet);
 
-      // Cleanup object URLs before reset
-      Object.values(imageUrls).forEach((url) => {
-        URL.revokeObjectURL(url);
-      });
-
       // Reset form
       setObjectName("");
       setDescription("");
       setImages({});
-      setImageUrls({});
       setErrors([]);
     } catch (error: any) {
       console.error("Upload failed:", error);
@@ -230,13 +213,13 @@ export const MultiImageUploadDialog: React.FC<MultiImageUploadDialogProps> = ({
   };
 
   const getImagePreview = (imageType: string) => {
-    const url = imageUrls[imageType];
-    if (!url) return null;
+    const file = images[imageType];
+    if (!file) return null;
 
     return (
       <Box
         component="img"
-        src={url}
+        src={URL.createObjectURL(file)}
         alt={`${imageType} preview`}
         sx={{
           width: "100%",

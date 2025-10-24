@@ -86,15 +86,6 @@ dependencies {
     implementation 'com.google.ar:core:1.41.0'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
     
-    // Sceneform for 3D model rendering (GLB/GLTF support)
-    implementation 'com.google.ar.sceneform:core:1.17.1'
-    implementation 'com.google.ar.sceneform:animation:1.17.1'
-    implementation 'com.google.ar.sceneform.ux:sceneform-ux:1.17.1'
-    
-    // 3D model format support
-    implementation 'de.javagl:obj:0.3.0' // OBJ model support
-    implementation 'com.google.android.filament:filament-android:1.41.0' // Filament rendering engine
-    
     // Networking
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
@@ -124,11 +115,6 @@ dependencies {
     implementation 'com.google.mlkit:image-labeling:17.0.7'
     implementation 'com.google.mlkit:object-detection:17.0.1'
     implementation 'com.google.mlkit:vision-common:17.3.0'
-    
-    // ExoPlayer for video playback
-    implementation 'androidx.media3:media3-exoplayer:1.2.0'
-    implementation 'androidx.media3:media3-ui:1.2.0'
-    implementation 'androidx.media3:media3-common:1.2.0'
     
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

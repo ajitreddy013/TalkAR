@@ -1,40 +1,22 @@
 import request from "supertest";
 import express from "express";
-import { describe, it, expect, beforeAll, afterAll } from "@jest/globals";
 import { testDb } from "./setup";
 import authRoutes from "../routes/auth";
 import imageRoutes from "../routes/images";
 import syncRoutes from "../routes/sync";
-import adminRoutes from "../routes/admin";
 
 // Create test app
 const app = express();
-
-// Add JSON error handling middleware
-app.use((req, res, next) => {
-  express.json()(req, res, (err: any) => {
-    if (err) {
-      return res.status(400).json({ error: "Invalid JSON" });
-    }
-    return next();
-  });
-});
-
+app.use(express.json());
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/images", imageRoutes);
 app.use("/api/v1/sync", syncRoutes);
-app.use("/api/v1/admin", adminRoutes);
-
-// Add error handler
-import { errorHandler } from "../middleware/errorHandler";
-app.use(errorHandler);
 
 describe("API Integration Tests", () => {
   let authToken: string;
   let adminToken: string;
 
   beforeAll(async () => {
-    process.env.SYNC_USE_MOCK = "true";
     await testDb.sync({ force: true });
   });
 
@@ -76,20 +58,8 @@ describe("API Integration Tests", () => {
     });
 
     it("should reject invalid credentials", async () => {
-      // First register a user
-      const userData = {
-        email: "invalidtest@example.com",
-        password: "password123",
-      };
-
-      await request(app)
-        .post("/api/v1/auth/register")
-        .send(userData)
-        .expect(201);
-
-      // Then try to login with wrong password
       const loginData = {
-        email: "invalidtest@example.com",
+        email: "test@example.com",
         password: "wrongpassword",
       };
 
@@ -98,8 +68,9 @@ describe("API Integration Tests", () => {
 
     it("should create admin user", async () => {
       const adminData = {
-        email: "newadmin@example.com",
+        email: "admin@example.com",
         password: "admin123",
+        role: "admin",
       };
 
       const response = await request(app)
@@ -107,13 +78,12 @@ describe("API Integration Tests", () => {
         .send(adminData)
         .expect(201);
 
-      // Note: Role is assigned server-side, default is 'user'
-      expect(response.body.user.role).toBe("user");
+      expect(response.body.user.role).toBe("admin");
     });
 
     it("should login as admin", async () => {
       const loginData = {
-        email: "admin@talkar.com",
+        email: "admin@example.com",
         password: "admin123",
       };
 
@@ -137,7 +107,7 @@ describe("API Integration Tests", () => {
       await request(app)
         .post("/api/v1/images")
         .send({ name: "Test Image" })
-        .expect(400); // Validation error for missing file, not auth error
+        .expect(401);
     });
 
     it("should upload image with authentication", async () => {
@@ -246,9 +216,7 @@ describe("API Integration Tests", () => {
         .set("Authorization", `Bearer ${adminToken}`)
         .expect(200);
 
-      expect(response.body).toHaveProperty("images");
-      expect(Array.isArray(response.body.images)).toBe(true);
-      expect(response.body).toHaveProperty("pagination");
+      expect(Array.isArray(response.body)).toBe(true);
     });
   });
 

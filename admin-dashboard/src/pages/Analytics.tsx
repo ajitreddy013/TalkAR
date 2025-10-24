@@ -1,5 +1,5 @@
 import React from "react";
-import { Typography, Paper } from "@mui/material";
+import { Typography, Paper, Box } from "@mui/material";
 
 export default function Analytics() {
   return (

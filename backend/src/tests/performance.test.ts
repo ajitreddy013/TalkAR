@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeAll, afterAll } from "@jest/globals";
 import request from "supertest";
 import express from "express";
 import { testDb } from "./setup";
@@ -14,21 +13,23 @@ app.use("/api/v1/images", imageRoutes);
 app.use("/api/v1/sync", syncRoutes);
 
 describe("Performance Tests", () => {
+  let authToken: string;
 
   beforeAll(async () => {
-    process.env.SYNC_USE_MOCK = "true";
     await testDb.sync({ force: true });
 
     // Create test user
-    await request(app).post("/api/v1/auth/register").send({
+    const response = await request(app).post("/api/v1/auth/register").send({
       email: "perf@example.com",
       password: "password123",
     });
 
-    await request(app).post("/api/v1/auth/login").send({
+    const loginResponse = await request(app).post("/api/v1/auth/login").send({
       email: "perf@example.com",
       password: "password123",
     });
+
+    authToken = loginResponse.body.token;
   });
 
   afterAll(async () => {
@@ -60,15 +61,15 @@ describe("Performance Tests", () => {
 
       const promises = Array(concurrentRequests)
         .fill(null)
-        .map(() =>
+        .map((_, index) =>
           request(app)
             .post("/api/v1/sync/generate")
             .send({
-              text: `Test message ${Math.random()}`,
+              text: `Test message ${index}`,
               language: "en",
               voiceId: "voice-1",
             })
-            .expect(200),
+            .expect(200)
         );
 
       const responses = await Promise.all(promises);
@@ -79,7 +80,7 @@ describe("Performance Tests", () => {
       expect(duration).toBeLessThan(10000); // Should complete within 10 seconds
 
       console.log(
-        `Concurrent sync requests (${concurrentRequests}): ${duration}ms`,
+        `Concurrent sync requests (${concurrentRequests}): ${duration}ms`
       );
     });
 
@@ -93,14 +94,14 @@ describe("Performance Tests", () => {
         // 10 sync requests
         ...Array(10)
           .fill(null)
-          .map(() =>
+          .map((_, index) =>
             request(app)
               .post("/api/v1/sync/generate")
               .send({
-                text: `Mixed workload test ${Math.random()}`,
+                text: `Mixed workload test ${index}`,
                 language: "en",
                 voiceId: "voice-1",
-              }),
+              })
           ),
         // 10 voice requests
         ...Array(10)
@@ -129,9 +130,8 @@ describe("Performance Tests", () => {
       }
 
       // Force garbage collection if available
-      const g: any = global as any;
-      if (typeof g.gc === "function") {
-        g.gc();
+      if (global.gc) {
+        global.gc();
       }
 
       const finalMemory = process.memoryUsage();
@@ -141,7 +141,7 @@ describe("Performance Tests", () => {
       expect(memoryIncrease).toBeLessThan(50 * 1024 * 1024);
 
       console.log(
-        `Memory increase: ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`,
+        `Memory increase: ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`
       );
     });
   });
@@ -153,7 +153,7 @@ describe("Performance Tests", () => {
       await request(app).get("/api/v1/images").expect(200);
 
       const duration = Date.now() - startTime;
-      expect(duration).toBeLessThan(1200); // Should respond within 1.2 seconds
+      expect(duration).toBeLessThan(1000); // Should respond within 1 second
 
       console.log(`Image request response time: ${duration}ms`);
     });
@@ -171,7 +171,7 @@ describe("Performance Tests", () => {
         .expect(200);
 
       const duration = Date.now() - startTime;
-      expect(duration).toBeLessThan(2500); // Should respond within 2.5 seconds
+      expect(duration).toBeLessThan(2000); // Should respond within 2 seconds
 
       console.log(`Sync request response time: ${duration}ms`);
     });
@@ -217,7 +217,7 @@ describe("Performance Tests", () => {
           request(app)
             .post("/api/v1/sync/generate")
             .send({}) // Invalid request
-            .expect(400),
+            .expect(400)
         );
 
       await Promise.all(promises);
@@ -236,14 +236,14 @@ describe("Performance Tests", () => {
       // Test multiple login attempts
       const promises = Array(20)
         .fill(null)
-        .map(() =>
+        .map((_, index) =>
           request(app)
             .post("/api/v1/auth/login")
             .send({
               email: "perf@example.com",
               password: "password123",
             })
-            .expect(200),
+            .expect(200)
         );
 
       await Promise.all(promises);

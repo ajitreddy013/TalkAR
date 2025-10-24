@@ -1,4 +1,4 @@
-import { Sequelize, DataTypes } from "sequelize";
+import { Sequelize } from "sequelize";
 import { Image, Dialogue } from "../models/Image";
 
 // Test database configuration
@@ -12,36 +12,36 @@ const testDb = new Sequelize({
 Image.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: "UUID",
+      defaultValue: "UUIDV4",
       primaryKey: true,
     },
     name: {
-      type: DataTypes.STRING,
+      type: "STRING",
       allowNull: false,
     },
     description: {
-      type: DataTypes.TEXT,
+      type: "TEXT",
       allowNull: true,
     },
     imageUrl: {
-      type: DataTypes.STRING,
+      type: "STRING",
       allowNull: false,
     },
     thumbnailUrl: {
-      type: DataTypes.STRING,
+      type: "STRING",
       allowNull: true,
     },
     isActive: {
-      type: DataTypes.BOOLEAN,
+      type: "BOOLEAN",
       defaultValue: true,
     },
     createdAt: {
-      type: DataTypes.DATE,
+      type: "DATE",
       allowNull: false,
     },
     updatedAt: {
-      type: DataTypes.DATE,
+      type: "DATE",
       allowNull: false,
     },
   },
@@ -55,50 +55,40 @@ Image.init(
 Dialogue.init(
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: "UUID",
+      defaultValue: "UUIDV4",
       primaryKey: true,
     },
     imageId: {
-      type: DataTypes.UUID,
+      type: "UUID",
       allowNull: false,
     },
     text: {
-      type: DataTypes.TEXT,
+      type: "TEXT",
       allowNull: false,
     },
     language: {
-      type: DataTypes.STRING(5),
+      type: "STRING(5)",
       allowNull: false,
     },
     voiceId: {
-      type: DataTypes.STRING,
+      type: "STRING",
       allowNull: true,
     },
-    orderIndex: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 0,
-    },
-    chunkSize: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 1,
-    },
     isActive: {
-      type: DataTypes.BOOLEAN,
+      type: "BOOLEAN",
       defaultValue: true,
     },
     isDefault: {
-      type: DataTypes.BOOLEAN,
+      type: "BOOLEAN",
       defaultValue: false,
     },
     createdAt: {
-      type: DataTypes.DATE,
+      type: "DATE",
       allowNull: false,
     },
     updatedAt: {
-      type: DataTypes.DATE,
+      type: "DATE",
       allowNull: false,
     },
   },

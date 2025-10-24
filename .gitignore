@@ -306,9 +306,6 @@ secrets/
 *.sqlite
 *.sqlite3
 
-# Detect-secrets baseline
-.secrets.baseline
-
 # ===========================================
 # Build Artifacts
 # ===========================================
@@ -333,16 +330,6 @@ coverage/
 # Test results
 test-results/
 junit.xml
-
-# E2E/Test artifacts (do not commit)
-reports/
-artifacts/
-test-output/
-screenshots/
-videos/
-.traces/
-playwright-report/
-.playwright/
 
 # ===========================================
 # Documentation

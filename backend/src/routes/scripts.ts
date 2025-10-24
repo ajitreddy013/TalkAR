@@ -2,39 +2,49 @@ import express from "express";
 import { Image, Dialogue } from "../models/Image";
 import { Avatar } from "../models/Avatar";
 import { ImageAvatarMapping } from "../models/ImageAvatarMapping";
-import { ScriptService } from "../services/scriptService";
-import { AnalyticsService } from "../services/analyticsService";
 
 const router = express.Router();
 
-// Get dynamic script chunk for detected image - Enhanced version
+// Get script for detected image
 router.get("/getScriptForImage/:imageId", async (req, res, next) => {
   try {
     const { imageId } = req.params;
-    const { scriptIndex, chunkIndex } = req.query;
+    const { scriptIndex } = req.query;
 
-    // Get user agent and IP for analytics
-    const userAgent = req.get("User-Agent");
-    const ipAddress = req.ip || req.connection.remoteAddress;
+    // Find the image with its dialogues
+    const image = await Image.findByPk(imageId, {
+      include: [
+        {
+          model: Dialogue,
+          as: "dialogues",
+          where: { isActive: true },
+          required: false,
+        },
+      ],
+    });
 
-    // Use enhanced ScriptService for dynamic script mapping
-    const result = await ScriptService.getScriptForImage(
-      imageId,
-      chunkIndex ? parseInt(chunkIndex as string, 10) : undefined,
-      userAgent,
-      ipAddress,
-    );
-
-    if (!result.success) {
-      return res.status(404).json({
-        success: false,
-        message: result.message || "Failed to retrieve script",
-        availableScripts: result.availableScripts,
-        totalChunks: result.totalChunks,
-      });
+    if (!image) {
+      return res.status(404).json({ error: "Image not found" });
     }
 
-    // Get associated avatar for the image
+    const dialogues = (image as any).dialogues || [];
+    
+    if (dialogues.length === 0) {
+      return res.status(404).json({ error: "No scripts found for this image" });
+    }
+
+    // Select script based on index or random selection
+    let selectedScript;
+    if (scriptIndex && !isNaN(Number(scriptIndex))) {
+      const index = Number(scriptIndex);
+      selectedScript = dialogues[index] || dialogues[0];
+    } else {
+      // Random selection for variety
+      const randomIndex = Math.floor(Math.random() * dialogues.length);
+      selectedScript = dialogues[randomIndex];
+    }
+
+    // Get associated avatar
     const avatarMapping = await ImageAvatarMapping.findOne({
       where: { imageId, isActive: true },
       include: [
@@ -45,38 +55,29 @@ router.get("/getScriptForImage/:imageId", async (req, res, next) => {
       ],
     });
 
-    // Log analytics data if available
-    if (result.analytics && result.script) {
-      // Fetch image name for better analytics labeling
-      const imageRecord = await Image.findByPk(imageId);
-
-      AnalyticsService.logImageTrigger({
-        imageId: result.analytics.imageId,
-        imageName: imageRecord?.name || imageId,
-        scriptId: result.analytics.scriptId,
-        scriptText: result.script.text,
-        voiceId: result.script.voiceId || "unknown",
-        userAgent,
-        ipAddress,
-      });
-    }
-
     const response = {
-      success: true,
       image: {
-        id: imageId,
-        // Additional image details can be fetched if needed
+        id: image.id,
+        name: image.name,
+        description: image.description,
       },
-      script: result.script,
+      script: {
+        id: selectedScript.id,
+        text: selectedScript.text,
+        language: selectedScript.language,
+        voiceId: selectedScript.voiceId,
+        isDefault: selectedScript.isDefault,
+      },
       avatar: (avatarMapping as any)?.avatar || null,
-      availableScripts: result.availableScripts,
-      totalChunks: result.totalChunks,
-      message: result.message,
+      availableScripts: dialogues.length,
+      currentScriptIndex: dialogues.findIndex((d: any) => d.id === selectedScript.id),
     };
+
+    // Log the script selection for analytics
+    console.log(`[ANALYTICS] Script selected for image ${image.name}: "${selectedScript.text.substring(0, 50)}..."`);
 
     return res.json(response);
   } catch (error) {
-    console.error("Error in getScriptForImage endpoint:", error);
     return next(error);
   }
 });
@@ -107,14 +108,13 @@ router.get("/getAllScriptsForImage/:imageId", async (req, res, next) => {
         name: image.name,
         description: image.description,
       },
-      scripts:
-        (image as any).dialogues?.map((dialogue: any) => ({
-          id: dialogue.id,
-          text: dialogue.text,
-          language: dialogue.language,
-          voiceId: dialogue.voiceId,
-          isDefault: dialogue.isDefault,
-        })) || [],
+      scripts: (image as any).dialogues?.map((dialogue: any) => ({
+        id: dialogue.id,
+        text: dialogue.text,
+        language: dialogue.language,
+        voiceId: dialogue.voiceId,
+        isDefault: dialogue.isDefault,
+      })) || [],
       totalScripts: (image as any).dialogues?.length || 0,
     };
 
@@ -125,164 +125,58 @@ router.get("/getAllScriptsForImage/:imageId", async (req, res, next) => {
 });
 
 // Get next script in sequence
-router.get(
-  "/getNextScript/:imageId/:currentScriptId",
-  async (req, res, next) => {
-    try {
-      const { imageId, currentScriptId } = req.params;
+router.get("/getNextScript/:imageId/:currentScriptId", async (req, res, next) => {
+  try {
+    const { imageId, currentScriptId } = req.params;
 
-      const image = await Image.findByPk(imageId, {
-        include: [
-          {
-            model: Dialogue,
-            as: "dialogues",
-            where: { isActive: true },
-            required: false,
-          },
-        ],
-      });
-
-      if (!image) {
-        return res.status(404).json({ error: "Image not found" });
-      }
-
-      const dialogues = (image as any).dialogues || [];
-      const currentIndex = dialogues.findIndex(
-        (d: any) => d.id === currentScriptId,
-      );
-
-      if (currentIndex === -1) {
-        return res.status(404).json({ error: "Current script not found" });
-      }
-
-      // Get next script (cycle back to first if at end)
-      const nextIndex = (currentIndex + 1) % dialogues.length;
-      const nextScript = dialogues[nextIndex];
-
-      const response = {
-        image: {
-          id: image.id,
-          name: image.name,
+    const image = await Image.findByPk(imageId, {
+      include: [
+        {
+          model: Dialogue,
+          as: "dialogues",
+          where: { isActive: true },
+          required: false,
         },
-        script: {
-          id: nextScript.id,
-          text: nextScript.text,
-          language: nextScript.language,
-          voiceId: nextScript.voiceId,
-          isDefault: nextScript.isDefault,
-        },
-        currentIndex: nextIndex,
-        totalScripts: dialogues.length,
-      };
-
-      // Log script progression
-      console.log(
-        `[ANALYTICS] Script progression for ${image.name}: ${currentIndex} -> ${nextIndex}`,
-      );
-
-      return res.json(response);
-    } catch (error) {
-      return next(error);
-    }
-  },
-);
-
-/**
- * POST /api/v1/scripts/image/:imageId/chunks
- * Create multiple script chunks for an image
- */
-router.post("/image/:imageId/chunks", async (req, res, next): Promise<void> => {
-  try {
-    const { imageId } = req.params;
-    const { scripts } = req.body;
-
-    if (!scripts || !Array.isArray(scripts) || scripts.length === 0) {
-      res.status(400).json({
-        success: false,
-        message: "Scripts array is required and cannot be empty",
-      });
-      return;
-    }
-
-    // Validate script structure
-    const validScripts = scripts.every(
-      (script) =>
-        typeof script.text === "string" &&
-        script.text.trim().length > 0 &&
-        typeof script.language === "string" &&
-        script.language.trim().length > 0 &&
-        typeof script.orderIndex === "number" &&
-        typeof script.voiceId === "string" &&
-        script.voiceId.trim().length > 0,
-    );
-
-    if (!validScripts) {
-      res.status(400).json({
-        success: false,
-        message:
-          "Each script must have text, language, orderIndex, and voiceId (all with correct types)",
-      });
-      return;
-    }
-
-    const result = await ScriptService.createScriptChunks(imageId, scripts);
-
-    if (!result.success) {
-      res.status(400).json({
-        success: false,
-        message: result.message || "Failed to create script chunks",
-      });
-      return;
-    }
-
-    res.status(201).json({
-      success: true,
-      createdScripts: result.createdScripts,
-      message: result.message,
+      ],
     });
-  } catch (error) {
-    console.error("Error in createScriptChunks endpoint:", error);
-    next(error);
-  }
-});
 
-/**
- * GET /api/v1/scripts/analytics/triggers
- * Get script trigger analytics
- */
-router.get("/analytics/triggers", async (req, res, next): Promise<void> => {
-  try {
-    const analytics = AnalyticsService.getAnalytics();
+    if (!image) {
+      return res.status(404).json({ error: "Image not found" });
+    }
 
-    res.json({
-      success: true,
-      analytics: analytics.imageTriggers,
-    });
-  } catch (error) {
-    console.error("Error in analytics endpoint:", error);
-    next(error);
-  }
-});
+    const dialogues = (image as any).dialogues || [];
+    const currentIndex = dialogues.findIndex((d: any) => d.id === currentScriptId);
+    
+    if (currentIndex === -1) {
+      return res.status(404).json({ error: "Current script not found" });
+    }
 
-/**
- * GET /api/v1/scripts/stats
- * Get script usage statistics
- */
-router.get("/stats", async (req, res, next): Promise<void> => {
-  try {
-    const analytics = AnalyticsService.getAnalytics();
+    // Get next script (cycle back to first if at end)
+    const nextIndex = (currentIndex + 1) % dialogues.length;
+    const nextScript = dialogues[nextIndex];
 
-    res.json({
-      success: true,
-      stats: {
-        imageTriggers: analytics.imageTriggers,
-        avatarPlays: analytics.avatarPlays,
-        performance: analytics.performance,
+    const response = {
+      image: {
+        id: image.id,
+        name: image.name,
       },
-    });
+      script: {
+        id: nextScript.id,
+        text: nextScript.text,
+        language: nextScript.language,
+        voiceId: nextScript.voiceId,
+        isDefault: nextScript.isDefault,
+      },
+      currentIndex: nextIndex,
+      totalScripts: dialogues.length,
+    };
+
+    // Log script progression
+    console.log(`[ANALYTICS] Script progression for ${image.name}: ${currentIndex} -> ${nextIndex}`);
+
+    return res.json(response);
   } catch (error) {
-    console.error("Error in stats endpoint:", error);
-    next(error);
+    return next(error);
   }
 });
 

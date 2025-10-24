@@ -7,8 +7,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
-import com.talkar.app.ui.components.SimpleARView
-import com.talkar.app.ui.components.AnimatedAvatarOverlay
+import com.talkar.app.ui.components.EnhancedCameraView
+import com.talkar.app.ui.components.AvatarOverlayView
 import com.talkar.app.ui.components.AvatarPlaceholder
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.data.models.BackendImage
@@ -28,10 +28,8 @@ fun Week2ARScreen(
     val isAvatarVisible by viewModel.isAvatarVisible.collectAsState()
     val currentAvatar by viewModel.currentAvatar.collectAsState()
     val currentImage by viewModel.currentImage.collectAsState()
-    val currentDialogue by viewModel.currentDialogue.collectAsState()
     val isTracking by viewModel.isTracking.collectAsState()
     val detectionStatus by viewModel.detectionStatus.collectAsState()
-    val isVideoPlaying by viewModel.isVideoPlaying.collectAsState()
     
     // Show permission request UI if camera permission is not granted
     if (!hasCameraPermission) {
@@ -61,23 +59,29 @@ fun Week2ARScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Simple AR View for testing
-            SimpleARView(
+            // Enhanced camera preview (shows real camera output)
+            EnhancedCameraView(
                 modifier = Modifier.fillMaxSize(),
-                onImageDetected = { imageName ->
-                    android.util.Log.d("Week2ARScreen", "Image detected: $imageName")
+                isImageDetected = isTracking,
+                onImageRecognized = {
+                    // When wired to real AR, update the VM
+                    viewModel.onImageDetected()
+                },
+                onAugmentedImageRecognized = {
+                    // Placeholder hook if using ARCore-backed recognition
+                    android.util.Log.d("Week2ARScreen", "Augmented image recognized: ${it.name}")
+                },
+                onError = { error ->
+                    android.util.Log.e("Week2ARScreen", "Camera error: $error")
                 }
             )
             
-            // Avatar Overlay with Animations
+            // Avatar Overlay
             if (isAvatarVisible && currentAvatar != null && currentImage != null) {
-                AnimatedAvatarOverlay(
-                    isVisible = isAvatarVisible,
+                AvatarOverlayView(
+                    isVisible = true,
                     avatar = currentAvatar,
                     image = currentImage,
-                    dialogue = currentDialogue,
-                    isPlaying = isVideoPlaying,
-                    onAvatarTapped = { viewModel.onAvatarTapped() },
                     modifier = Modifier
                         .align(Alignment.Center)
                         .padding(16.dp)
@@ -101,7 +105,8 @@ fun Week2ARScreen(
                 ) {
                     Text(
                         text = "🎯 AR Status",
-                        style = MaterialTheme.typography.titleMedium
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = MaterialTheme.typography.titleMedium.fontWeight
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -119,12 +124,6 @@ fun Week2ARScreen(
                             text = "Image: ${currentImage?.name}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = if (isVideoPlaying) "▶️ Playing" else "⏸️ Paused",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isVideoPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            fontWeight = MaterialTheme.typography.bodySmall.fontWeight
                         )
                     }
                 }
@@ -144,7 +143,8 @@ fun Week2ARScreen(
                 ) {
                     Text(
                         text = "📱 Week 2 Instructions",
-                        style = MaterialTheme.typography.titleSmall
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = MaterialTheme.typography.titleSmall.fontWeight
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -152,15 +152,11 @@ fun Week2ARScreen(
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text(
-                        text = "• Tap avatar to play/pause lip-sync",
+                        text = "• Avatar overlay appears",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text(
-                        text = "• Click 'Show Script' to view dialogue text",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = "• Avatar animates smoothly on appear/disappear",
+                        text = "• Avatar should track with image movement",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Text(

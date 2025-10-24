@@ -8,7 +8,8 @@ import com.talkar.app.data.models.ImageRecognition
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -49,6 +50,9 @@ class SimpleARService(private val context: Context) {
     
     // Cache
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
+
+    // Coroutine scope for background operations
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // Throttle frequent per-frame success logs to avoid flooding logs (milliseconds)
     private var lastFrameSuccessLogTime = 0L
@@ -324,7 +328,7 @@ class SimpleARService(private val context: Context) {
      * Start simple frame processing
      */
     private fun startSimpleFrameProcessing() {
-        GlobalScope.launch(Dispatchers.IO) {
+        coroutineScope.launch {
             var glContextWaitTime = 0L
             val maxGlContextWaitTime = 10000L // 10 seconds max wait
             

@@ -26,11 +26,14 @@ import {
 } from "../store/slices/imageSlice";
 import type { Image as ImageModel } from "../store/slices/imageSlice";
 import { MultiImageUploadDialog } from "../components/MultiImageUploadDialog";
-import type { ImageSet } from "../services/multiImageService";
 
 export default function Images() {
   const dispatch = useAppDispatch();
-  const { images, error: listError } = useAppSelector((s) => s.images);
+  const {
+    images,
+    loading: listLoading,
+    error: listError,
+  } = useAppSelector((s) => s.images);
 
   const [open, setOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -145,7 +148,7 @@ export default function Images() {
     }
   };
 
-  const handleMultiImageSave = async (imageSet: ImageSet): Promise<void> => {
+  const handleMultiImageSave = async (imageSet: any) => {
     try {
       console.log("Multi-image save completed, refreshing images...");
       // Refresh the images list to show the new uploads

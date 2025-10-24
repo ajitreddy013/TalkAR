@@ -11,6 +11,8 @@ import com.talkar.app.TalkARApplication
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 
 @Composable
 fun NewARView(
@@ -218,8 +220,7 @@ private fun initializeCamera(
         android.util.Log.d("NewARView", "Using camera: $cameraId")
         
         // Check camera permissions
-        val permission = android.content.pm.PackageManager.PERMISSION_GRANTED
-        val hasPermission = textureView.context.checkSelfPermission(android.Manifest.permission.CAMERA) == permission
+        val hasPermission = textureView.context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
         
         if (!hasPermission) {
             android.util.Log.e("NewARView", "Camera permission not granted")
@@ -281,7 +282,7 @@ private fun startARFrameProcessing(
         android.util.Log.d("NewARView", "Starting optimized ARCore frame processing with error handling...")
         
         // Start ARCore processing on a background thread to avoid blocking UI
-        kotlinx.coroutines.GlobalScope.launch(Dispatchers.IO) {
+        CoroutineScope(SupervisorJob()).launch(Dispatchers.IO) {
             try {
                 // Add delay to ensure camera is fully initialized before ARCore resume
                 kotlinx.coroutines.delay(1000) // Wait 1 second for camera to stabilize

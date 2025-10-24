@@ -6,50 +6,43 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.Log
-import com.google.ar.core.Anchor
-import com.google.ar.core.AugmentedImage
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.Avatar
-import com.talkar.app.data.models.AvatarModel3D
 import kotlinx.coroutines.*
 
 /**
- * Image Anchor Manager with 3D Avatar Integration
- *
- * Manages image anchors and coordinates with AvatarManager to load
- * 3D avatars over detected images.
+ * Simplified Image Anchor Manager for testing
  */
 class ImageAnchorManager(
-    private val context: Context,
-    private val avatarManager: AvatarManager
+    private val context: Context
 ) {
     private val TAG = "ImageAnchorManager"
-
+    
     // Tracked images and their anchors
     private val trackedImages = mutableMapOf<String, String>()
     private val avatarNodes = mutableMapOf<String, String>()
-
+    
     // Coroutine scope for async operations
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-
+    
     /**
      * Initialize the image database with backend images
      */
     suspend fun initializeImageDatabase(images: List<BackendImage>) {
         try {
             Log.d(TAG, "Initializing image database with ${images.size} images")
-
+            
             // Simplified implementation for testing
             images.forEach { image ->
                 Log.d(TAG, "Added image to database: ${image.name}")
             }
-
+            
             Log.d(TAG, "Image database initialized successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize image database: ${e.message}")
         }
     }
-
+    
     /**
      * Create a placeholder bitmap for testing
      */
@@ -58,16 +51,16 @@ class ImageAnchorManager(
         val height = 512
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-
+        
         // Draw a simple pattern
         val paint = Paint().apply {
             color = Color.BLUE
             style = Paint.Style.FILL
         }
-
+        
         canvas.drawColor(Color.WHITE)
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
-
+        
         // Add text
         paint.apply {
             color = Color.WHITE
@@ -75,22 +68,30 @@ class ImageAnchorManager(
             textAlign = Paint.Align.CENTER
         }
         canvas.drawText(name, width / 2f, height / 2f, paint)
-
+        
         return bitmap
     }
-
+    
+    /**
+     * Handle detected images and create anchors
+     */
+    fun handleDetectedImages(frame: Any, avatar: Avatar?, image: BackendImage?) {
+        // Simplified implementation for testing
+        Log.d(TAG, "Handling detected images")
+    }
+    
     /**
      * Get current tracked images
      */
     fun getTrackedImages(): Map<String, String> = trackedImages.toMap()
-
+    
     /**
      * Check if an image is currently being tracked
      */
     fun isImageTracked(imageId: String): Boolean {
         return trackedImages.containsKey(imageId)
     }
-
+    
     /**
      * Clean up resources
      */

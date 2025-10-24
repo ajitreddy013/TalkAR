@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
+const jwt = require("jsonwebtoken");
 import { v4 as uuidv4 } from "uuid";
 
 export interface User {
@@ -39,7 +39,7 @@ const users = new Map<string, User>();
 // Create default admin user if none exists
 const createDefaultAdmin = () => {
   const adminExists = Array.from(users.values()).some(
-    (user) => user.role === "admin",
+    (user) => user.role === "admin"
   );
 
   if (!adminExists) {
@@ -68,7 +68,7 @@ export const registerUser = async (request: RegisterRequest): Promise<User> => {
   try {
     // Check if user already exists
     const existingUser = Array.from(users.values()).find(
-      (user) => user.email === request.email,
+      (user) => user.email === request.email
     );
     if (existingUser) {
       throw new Error("User already exists");
@@ -92,59 +92,47 @@ export const registerUser = async (request: RegisterRequest): Promise<User> => {
     users.set(userId, user);
 
     return user;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Registration error:", error);
-    // Preserve specific error message for tests (e.g., duplicate email)
-    if (error?.message) {
-      throw new Error(error.message);
-    }
     throw new Error("Failed to register user");
   }
 };
 
 export const loginUser = async (
-  request: LoginRequest,
+  request: LoginRequest
 ): Promise<LoginResponse> => {
   try {
     // Find user by email
     const user = Array.from(users.values()).find(
-      (u) => u.email === request.email,
+      (u) => u.email === request.email
     );
 
     if (!user) {
-      const error = new Error("Invalid credentials") as any;
-      error.name = "UnauthorizedError";
-      throw error;
+      throw new Error("Invalid credentials");
     }
 
     if (!user.isActive) {
-      const error = new Error("Account is deactivated") as any;
-      error.name = "UnauthorizedError";
-      throw error;
+      throw new Error("Account is deactivated");
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(
       request.password,
-      user.password,
+      user.password
     );
     if (!isValidPassword) {
-      const error = new Error("Invalid credentials") as any;
-      error.name = "UnauthorizedError";
-      throw error;
+      throw new Error("Invalid credentials");
     }
 
     // Generate JWT token
-    const jwtSecret = process.env.JWT_SECRET || "fallback-secret";
-    const jwtExpiry = process.env.JWT_EXPIRES_IN || "7d";
     const token = jwt.sign(
       {
         userId: user.id,
         email: user.email,
         role: user.role,
       },
-      jwtSecret,
-      { expiresIn: jwtExpiry } as jwt.SignOptions,
+      process.env.JWT_SECRET || "fallback-secret",
+      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
     );
 
     return {
@@ -155,14 +143,9 @@ export const loginUser = async (
         role: user.role,
       },
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error("Login error:", error);
-    if (error.name === "UnauthorizedError") {
-      throw error;
-    }
-    const genericError = new Error("Failed to login") as any;
-    genericError.name = "UnauthorizedError";
-    throw genericError;
+    throw new Error("Failed to login");
   }
 };
 
@@ -180,7 +163,7 @@ export const getUserById = (userId: string): User | undefined => {
 
 export const updateUser = (
   userId: string,
-  updates: Partial<User>,
+  updates: Partial<User>
 ): User | null => {
   const user = users.get(userId);
   if (!user) return null;
@@ -202,7 +185,7 @@ export const getAllUsers = (): User[] => {
 export const changePassword = async (
   userId: string,
   currentPassword: string,
-  newPassword: string,
+  newPassword: string
 ): Promise<boolean> => {
   try {
     const user = users.get(userId);
@@ -211,7 +194,7 @@ export const changePassword = async (
     // Verify current password
     const isValidPassword = await bcrypt.compare(
       currentPassword,
-      user.password,
+      user.password
     );
     if (!isValidPassword) {
       throw new Error("Current password is incorrect");
@@ -229,11 +212,8 @@ export const changePassword = async (
     users.set(userId, updatedUser);
 
     return true;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Change password error:", error);
-    if (error?.message) {
-      throw new Error(error.message);
-    }
     throw new Error("Failed to change password");
   }
 };

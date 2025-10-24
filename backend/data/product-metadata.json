@@ -1,0 +1,50 @@
+[
+  {
+    "image_id": "poster_01",
+    "product_name": "Sunrich Water Bottle",
+    "category": "Beverage",
+    "tone": "excited",
+    "language": "English",
+    "brand": "Sunrich",
+    "price": 29.99,
+    "currency": "USD",
+    "features": [
+      "Eco-friendly materials",
+      "Keeps drinks cold for 24 hours",
+      "Leak-proof design"
+    ],
+    "description": "Stay hydrated in style with our premium water bottle made from sustainable materials."
+  },
+  {
+    "image_id": "poster_02",
+    "product_name": "Eco-Friendly Backpack",
+    "category": "Fashion",
+    "tone": "enthusiastic",
+    "language": "English",
+    "brand": "EcoGear",
+    "price": 59.99,
+    "currency": "USD",
+    "features": [
+      "Made from recycled materials",
+      "Water-resistant",
+      "Multiple compartments"
+    ],
+    "description": "Carry your essentials sustainably with our eco-friendly backpack designed for everyday use."
+  },
+  {
+    "image_id": "poster_03",
+    "product_name": "Professional Wireless Headphones",
+    "category": "Electronics",
+    "tone": "professional",
+    "language": "English",
+    "brand": "SoundTech",
+    "price": 199.99,
+    "currency": "USD",
+    "features": [
+      "Noise cancellation technology",
+      "30-hour battery life",
+      "Premium sound quality"
+    ],
+    "description": "Experience crystal-clear audio with our professional-grade wireless headphones designed for discerning listeners."
+  }
+]

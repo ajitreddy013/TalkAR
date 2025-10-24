@@ -4,10 +4,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
 import { sequelize } from "./config/database";
-import { testSupabaseConnection } from "./config/supabase";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
-import LoggingMiddleware from "./middleware/logging";
 import { defineAssociations } from "./models/associations";
 import imageRoutes from "./routes/images";
 import syncRoutes from "./routes/sync";
@@ -19,6 +17,7 @@ import lipSyncRoutes from "./routes/lipSync";
 import scriptRoutes from "./routes/scripts";
 import enhancedLipSyncRoutes from "./routes/enhancedLipSync";
 import analyticsRoutes from "./routes/analytics";
+import aiPipelineRoutes from "./routes/aiPipeline";
 
 // Load environment variables
 dotenv.config();
@@ -53,8 +52,6 @@ app.use(
   })
 );
 app.use(morgan("combined"));
-// Enhanced logging and performance metrics
-app.use(LoggingMiddleware.logRequests);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -97,6 +94,7 @@ app.use("/api/v1/lipsync", lipSyncRoutes);
 app.use("/api/v1/scripts", scriptRoutes);
 app.use("/api/v1/enhanced-lipsync", enhancedLipSyncRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
+app.use("/api/v1/ai-pipeline", aiPipelineRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
@@ -114,16 +112,6 @@ app.use(errorHandler);
 // Database connection and server startup
 const startServer = async () => {
   try {
-    // Test Supabase connection first
-    console.log("Testing Supabase connection...");
-    const supabaseConnected = await testSupabaseConnection();
-    if (supabaseConnected) {
-      console.log("Supabase connection established successfully.");
-    } else {
-      console.warn("Supabase connection failed. Some features may not work.");
-    }
-
-    // Test Sequelize database connection
     await sequelize.authenticate();
     console.log("Database connection established successfully.");
 
@@ -140,7 +128,6 @@ const startServer = async () => {
       console.log(`Server accessible at: http://0.0.0.0:${PORT}`);
       console.log(`Local access: http://localhost:${PORT}`);
       console.log(`Network access: http://10.17.5.127:${PORT}`);
-      console.log(`Supabase connected: ${supabaseConnected}`);
     });
   } catch (error) {
     console.error("Unable to start server:", error);

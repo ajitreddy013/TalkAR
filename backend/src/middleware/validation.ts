@@ -32,6 +32,7 @@ export const validateSyncRequest = (
     text: Joi.string().required().min(1).max(1000),
     language: Joi.string().required().length(2),
     voiceId: Joi.string().optional(),
+    emotion: Joi.string().optional().valid("neutral", "happy", "surprised", "serious"), // Add emotion validation
     imageUrl: Joi.string().uri().optional(), // URL of the recognized image
   });
 
@@ -52,6 +53,7 @@ export const validateDialogue = (
     text: Joi.string().required().min(1).max(1000),
     language: Joi.string().required().length(2),
     voiceId: Joi.string().optional(),
+    emotion: Joi.string().optional().valid("neutral", "happy", "surprised", "serious"), // Add emotion validation
     isDefault: Joi.boolean().optional(),
   });
 
@@ -71,7 +73,7 @@ export const validateAuthRequest = (
   const schema = Joi.object({
     email: Joi.string().email().required(),
     password: Joi.string().min(6).required(),
-    role: Joi.string().valid("user", "admin").optional(),
+    role: Joi.string().valid("admin", "user").optional(),
   });
 
   const { error } = schema.validate(req.body);

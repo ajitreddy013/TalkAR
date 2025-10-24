@@ -20,7 +20,7 @@ interface ApiService {
     suspend fun getSyncStatus(@Path("jobId") jobId: String): Response<SyncResponse>
     
     @GET("sync/talking-head/{imageId}")
-    suspend fun getTalkingHeadVideo(@Path("imageId") imageId: String): Response<TalkingHeadVideo>
+    suspend fun getTalkingHeadVideo(@Path("imageId") imageId: String, @Query("language") language: String?): Response<TalkingHeadVideo>
     
     // Avatar endpoints
     @GET("avatars")
@@ -35,25 +35,6 @@ interface ApiService {
     @GET("avatars/complete/{imageId}")
     suspend fun getCompleteImageData(@Path("imageId") imageId: String): Response<CompleteImageData>
     
-    // Update avatar mapping with script and generated media URLs
-    @PUT("avatars/mapping/{mappingId}")
-    suspend fun updateAvatarMapping(
-        @Path("mappingId") mappingId: String,
-        @Body request: UpdateMappingRequest
-    ): Response<MappingUpdateResponse>
-    
-    // Get all avatar-image mappings
-    @GET("avatars/mappings")
-    suspend fun getAllMappings(): Response<List<ImageAvatarMappingWithDetails>>
-    
-    // Map avatar to image with script
-    @POST("avatars/{avatarId}/map/{imageId}")
-    suspend fun mapAvatarToImage(
-        @Path("avatarId") avatarId: String,
-        @Path("imageId") imageId: String,
-        @Body request: MapAvatarRequest
-    ): Response<MappingUpdateResponse>
-    
     // Lip-sync endpoints
     @POST("lipsync/generate")
     suspend fun generateLipSyncVideo(@Body request: LipSyncRequest): Response<LipSyncResponse>
@@ -66,6 +47,13 @@ interface ApiService {
     
     @POST("lipsync/talking-head")
     suspend fun generateTalkingHeadVideo(@Body request: TalkingHeadRequest): Response<LipSyncResponse>
+    
+    // AI Pipeline endpoints
+    @POST("ai-pipeline/generate_script")
+    suspend fun generateScript(@Body request: ScriptGenerationRequest): Response<ScriptGenerationResponse>
+    
+    @POST("ai-pipeline/generate_ad_content")
+    suspend fun generateAdContent(@Body request: AdContentGenerationRequest): Response<AdContentGenerationResponse>
 }
 
 object ApiClient {
@@ -87,10 +75,6 @@ data class CompleteImageData(
 
 data class ImageAvatarMapping(
     val id: String,
-    val script: String? = null,
-    val audioUrl: String? = null,
-    val videoUrl: String? = null,
-    val visemeDataUrl: String? = null,
     val isActive: Boolean
 )
 
@@ -126,39 +110,34 @@ data class TalkingHeadRequest(
     val voiceId: String? = null
 )
 
-// Update mapping request
-data class UpdateMappingRequest(
-    val script: String? = null,
-    val audioUrl: String? = null,
-    val videoUrl: String? = null,
-    val visemeDataUrl: String? = null
-)
-
-// Map avatar request
-data class MapAvatarRequest(
-    val script: String? = null,
-    val audioUrl: String? = null,
-    val videoUrl: String? = null,
-    val visemeDataUrl: String? = null
-)
-
-// Mapping update response
-data class MappingUpdateResponse(
-    val message: String,
-    val mapping: ImageAvatarMapping
-)
-
-// Image-avatar mapping with full details
-data class ImageAvatarMappingWithDetails(
-    val id: String,
+// AI Pipeline data models
+data class ScriptGenerationRequest(
     val imageId: String,
-    val avatarId: String,
-    val script: String? = null,
-    val audioUrl: String? = null,
-    val videoUrl: String? = null,
-    val visemeDataUrl: String? = null,
-    val isActive: Boolean,
-    val avatar: Avatar? = null,
-    val image: BackendImage? = null
+    val language: String? = null,
+    val emotion: String? = null,
+    val userPreferences: UserPreferences? = null
 )
 
+data class ScriptGenerationResponse(
+    val success: Boolean,
+    val script: String? = null,
+    val language: String? = null,
+    val emotion: String? = null
+)
+
+data class UserPreferences(
+    val language: String? = null,
+    val preferredTone: String? = null
+)
+
+// Ad Content Generation models
+data class AdContentGenerationRequest(
+    val product: String
+)
+
+data class AdContentGenerationResponse(
+    val success: Boolean,
+    val script: String? = null,
+    val audio_url: String? = null,
+    val video_url: String? = null
+)

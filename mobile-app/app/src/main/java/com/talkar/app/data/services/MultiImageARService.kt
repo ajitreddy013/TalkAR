@@ -8,7 +8,8 @@ import com.talkar.app.data.models.ImageRecognition
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -59,6 +60,9 @@ class MultiImageARService(private val context: Context) {
     
     // Multi-image database
     private val referenceImageGroups = ConcurrentHashMap<String, List<String>>()
+
+    // Coroutine scope for background operations
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     data class RecognitionStats(
         val totalRecognitions: Int = 0,
@@ -576,7 +580,7 @@ class MultiImageARService(private val context: Context) {
      * Start monitoring for multi-image recognition
      */
     private fun startMultiImageMonitoring() {
-        GlobalScope.launch(Dispatchers.IO) {
+        coroutineScope.launch {
             while (_isTracking.value) {
                 try {
                     session?.let { session ->

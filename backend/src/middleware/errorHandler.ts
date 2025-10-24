@@ -1,13 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 
-export const errorHandler = (
-  error: any,
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const errorHandler = (error: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('Error:', error);
+  
+  // Default error
   let status = 500;
-  let message = "Internal Server Error";
+  let message = 'Internal Server Error';
   
   // Handle specific error types
   if (error.name === 'ValidationError') {

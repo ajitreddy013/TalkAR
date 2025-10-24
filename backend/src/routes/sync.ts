@@ -12,20 +12,19 @@ const router = express.Router();
 // Generate sync video
 router.post("/generate", validateSyncRequest, async (req, res, next) => {
   try {
-    const { text, language, voiceId, imageUrl } = req.body;
+    const { text, language, voiceId, emotion, imageUrl } = req.body;
 
     const result = await generateSyncVideo({
       text,
       language,
       voiceId,
+      emotion, // Include emotion parameter
       imageUrl, // Include the recognized image URL
     });
 
     return res.json(result);
   } catch (error) {
-    console.error("/sync/generate error:", error);
-    next(error);
-    return;
+    return next(error);
   }
 });
 
@@ -37,12 +36,8 @@ router.get("/status/:jobId", async (req, res, next) => {
     const status = await getSyncStatus(jobId);
 
     return res.json(status);
-  } catch (error: any) {
-    if (error.message === "Job not found") {
-      return res.status(404).json({ error: "Job not found" });
-    }
-    next(error);
-    return;
+  } catch (error) {
+    return next(error);
   }
 });
 
@@ -52,8 +47,7 @@ router.get("/voices", async (req, res, next) => {
     const voices = await getAvailableVoices();
     return res.json(voices);
   } catch (error) {
-    next(error);
-    return;
+    return next(error);
   }
 });
 
@@ -61,14 +55,14 @@ router.get("/voices", async (req, res, next) => {
 router.get("/talking-head/:imageId", async (req, res, next) => {
   try {
     const { imageId } = req.params;
+    const { language, emotion } = req.query;
 
     // Get the talking head video for this specific image
-    const talkingHeadVideo = await getTalkingHeadVideo(imageId);
+    const talkingHeadVideo = await getTalkingHeadVideo(imageId, language as string, emotion as string);
 
     return res.json(talkingHeadVideo);
   } catch (error) {
-    next(error);
-    return;
+    return next(error);
   }
 });
 

@@ -2,8 +2,6 @@ package com.talkar.app.ui.components
 
 import android.content.Context
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -13,6 +11,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.VideoView
 import com.google.ar.core.AugmentedImage
 import com.talkar.app.data.models.SyncResponse
@@ -22,15 +21,16 @@ import com.talkar.app.data.models.TalkingHeadVideo
 fun AROverlay(
     recognizedImage: AugmentedImage?,
     talkingHeadVideo: TalkingHeadVideo?,
+    lightEstimate: com.google.ar.core.LightEstimate?,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     
     if (recognizedImage != null && talkingHeadVideo != null) {
-        // Create AR overlay positioned over the recognized image
+        // Create AR overlay positioned over the recognized image with shadow
         AndroidView(
             factory = { ctx ->
-                createAROverlayView(ctx, recognizedImage, talkingHeadVideo)
+                createAROverlayView(ctx, recognizedImage, talkingHeadVideo, lightEstimate)
             },
             modifier = modifier
         )
@@ -40,13 +40,26 @@ fun AROverlay(
 private fun createAROverlayView(
     context: Context,
     augmentedImage: AugmentedImage,
-    talkingHeadVideo: TalkingHeadVideo
+    talkingHeadVideo: TalkingHeadVideo,
+    lightEstimate: com.google.ar.core.LightEstimate?
 ): android.view.View {
-    return android.widget.FrameLayout(context).apply {
+    return FrameLayout(context).apply {
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
+        
+        // Create shadow plane below the avatar
+        val shadowPlane = ShadowPlane(context).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+        
+        // Update shadow properties based on image and lighting
+        shadowPlane.updateShadowProperties(augmentedImage, lightEstimate)
+        addView(shadowPlane)
         
         // Create video overlay positioned over the recognized image
         val videoView = VideoView(context).apply {
@@ -97,27 +110,8 @@ private fun positionOverlayOnImage(
 fun ARVideoOverlay(
     videoUrl: String,
     isVisible: Boolean,
-    isPlaying: Boolean = false,
-    onPlayPause: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    var videoViewRef by remember { mutableStateOf<VideoView?>(null) }
-    
-    // Control video playback
-    LaunchedEffect(isPlaying, videoViewRef) {
-        videoViewRef?.let { videoView ->
-            if (isPlaying) {
-                if (!videoView.isPlaying) {
-                    videoView.start()
-                }
-            } else {
-                if (videoView.isPlaying) {
-                    videoView.pause()
-                }
-            }
-        }
-    }
-    
     if (isVisible) {
         Card(
             modifier = modifier,
@@ -148,15 +142,9 @@ fun ARVideoOverlay(
                             setVideoPath(videoUrl)
                             setOnPreparedListener { mediaPlayer ->
                                 mediaPlayer.isLooping = true
-                                videoViewRef = this
-                                if (isPlaying) {
-                                    mediaPlayer.start()
-                                }
+                                mediaPlayer.start()
                             }
                         }
-                    },
-                    update = { videoView ->
-                        videoViewRef = videoView
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -170,39 +158,23 @@ fun ARVideoOverlay(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
-                        onClick = onPlayPause,
+                        onClick = { /* Play video */ },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Filled.PlayArrow else Icons.Filled.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(if (isPlaying) "Pause" else "Play", color = Color.White)
+                        Text("Play", color = Color.White)
                     }
                     
                     OutlinedButton(
-                        onClick = { 
-                            videoViewRef?.seekTo(0)
-                            if (isPlaying) {
-                                videoViewRef?.start()
-                            }
-                        },
+                        onClick = { /* Pause video */ },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = Color.White
                         )
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Restart"
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Restart")
+                        Text("Pause")
                     }
                 }
             }

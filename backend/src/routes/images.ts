@@ -1,7 +1,5 @@
 import express from "express";
 import { Image, Dialogue } from "../models/Image";
-import { Avatar } from "../models/Avatar";
-import { ImageAvatarMapping } from "../models/ImageAvatarMapping";
 import { uploadImage, uploadToS3 } from "../services/uploadService";
 import { validateImageUpload } from "../middleware/validation";
 import path from "path";
@@ -25,7 +23,6 @@ router.get("/", async (req, res, next) => {
     res.json(images);
   } catch (error) {
     next(error);
-    return;
   }
 });
 
@@ -33,8 +30,6 @@ router.get("/", async (req, res, next) => {
 router.get("/:id", async (req, res, next) => {
   try {
     const { id } = req.params;
-    const includeAvatar = req.query.includeAvatar === "true";
-
     const image = await Image.findByPk(id, {
       include: [
         {
@@ -48,53 +43,9 @@ router.get("/:id", async (req, res, next) => {
       return res.status(404).json({ error: "Image not found" });
     }
 
-    // Include avatar mapping if requested
-    if (includeAvatar) {
-      const mapping = await ImageAvatarMapping.findOne({
-        where: { imageId: id, isActive: true },
-        include: [
-          {
-            model: Avatar,
-            as: "avatar",
-            where: { isActive: true },
-            required: false,
-          },
-        ],
-      });
-
-      const avatar = mapping ? await Avatar.findByPk(mapping.avatarId) : null;
-
-      return res.json({
-        ...image.toJSON(),
-        avatarMapping: mapping
-          ? {
-              id: mapping.id,
-              avatarId: mapping.avatarId,
-              script: mapping.script,
-              audioUrl: mapping.audioUrl,
-              videoUrl: mapping.videoUrl,
-              visemeDataUrl: mapping.visemeDataUrl,
-              avatar: avatar
-                ? {
-                    id: avatar.id,
-                    name: avatar.name,
-                    description: avatar.description,
-                    avatarImageUrl: avatar.avatarImageUrl,
-                    avatarVideoUrl: avatar.avatarVideoUrl,
-                    avatar3DModelUrl: avatar.avatar3DModelUrl,
-                    voiceId: avatar.voiceId,
-                    idleAnimationType: avatar.idleAnimationType,
-                  }
-                : null,
-            }
-          : null,
-      });
-    }
-
     return res.json(image);
   } catch (error) {
-    next(error);
-    return;
+    return next(error);
   }
 });
 
@@ -133,8 +84,7 @@ router.post(
 
       return res.status(201).json(image);
     } catch (error) {
-      next(error);
-      return;
+      return next(error);
     }
   }
 );
@@ -158,8 +108,7 @@ router.put("/:id", async (req, res, next) => {
 
     return res.json(image);
   } catch (error) {
-    next(error);
-    return;
+    return next(error);
   }
 });
 
@@ -176,8 +125,7 @@ router.delete("/:id", async (req, res, next) => {
     await image.destroy();
     return res.status(204).send();
   } catch (error) {
-    next(error);
-    return;
+    return next(error);
   }
 });
 
@@ -199,14 +147,11 @@ router.post("/:id/dialogues", async (req, res, next) => {
       voiceId,
       isDefault: isDefault || false,
       isActive: true,
-      orderIndex: 0,
-      chunkSize: 1,
     });
 
     return res.status(201).json(dialogue);
   } catch (error) {
-    next(error);
-    return;
+    return next(error);
   }
 });
 
@@ -233,8 +178,7 @@ router.put("/:imageId/dialogues/:dialogueId", async (req, res, next) => {
 
     return res.json(dialogue);
   } catch (error) {
-    next(error);
-    return;
+    return next(error);
   }
 });
 
@@ -254,25 +198,7 @@ router.delete("/:imageId/dialogues/:dialogueId", async (req, res, next) => {
     await dialogue.destroy();
     return res.status(204).send();
   } catch (error) {
-    next(error);
-    return;
-  }
-});
-
-// Get all dialogues for an image
-router.get("/:id/dialogues", async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    const dialogues = await Dialogue.findAll({
-      where: { imageId: id, isActive: true },
-      order: [["orderIndex", "ASC"]],
-    });
-
-    res.json(dialogues);
-  } catch (error) {
-    next(error);
-    return;
+    return next(error);
   }
 });
 

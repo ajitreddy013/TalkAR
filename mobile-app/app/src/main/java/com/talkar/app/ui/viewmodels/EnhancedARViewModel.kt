@@ -3,13 +3,12 @@ package com.talkar.app.ui.viewmodels
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.talkar.app.TalkARApplication
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.repository.ImageRepository
-import com.talkar.app.utils.HapticFeedbackUtil
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import com.talkar.app.TalkARApplication
+import com.talkar.app.data.services.EnhancedARService
+import com.google.ar.core.LightEstimate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +23,9 @@ class EnhancedARViewModel(
     
     private val TAG = "EnhancedARViewModel"
     
+    // AR Service
+    private val arService = EnhancedARService(TalkARApplication.instance)
+    
     // UI State
     private val _isAvatarVisible = MutableStateFlow(false)
     val isAvatarVisible: StateFlow<Boolean> = _isAvatarVisible.asStateFlow()
@@ -34,33 +36,24 @@ class EnhancedARViewModel(
     private val _currentImage = MutableStateFlow<BackendImage?>(null)
     val currentImage: StateFlow<BackendImage?> = _currentImage.asStateFlow()
     
-    private val _currentDialogue = MutableStateFlow<com.talkar.app.data.models.Dialogue?>(null)
-    val currentDialogue: StateFlow<com.talkar.app.data.models.Dialogue?> = _currentDialogue.asStateFlow()
-    
     private val _isTracking = MutableStateFlow(false)
     val isTracking: StateFlow<Boolean> = _isTracking.asStateFlow()
     
     private val _detectionStatus = MutableStateFlow("Ready")
     val detectionStatus: StateFlow<String> = _detectionStatus.asStateFlow()
     
-    // Video playback state
-    private val _isVideoPlaying = MutableStateFlow(false)
-    val isVideoPlaying: StateFlow<Boolean> = _isVideoPlaying.asStateFlow()
+    // Enhanced tracking metrics
+    private val _trackingQuality = MutableStateFlow(com.talkar.app.data.services.EnhancedARService.TrackingQuality.UNKNOWN)
+    val trackingQuality: StateFlow<com.talkar.app.data.services.EnhancedARService.TrackingQuality> = _trackingQuality.asStateFlow()
     
-    private val _currentVideoUrl = MutableStateFlow<String?>(null)
-    val currentVideoUrl: StateFlow<String?> = _currentVideoUrl.asStateFlow()
+    private val _lightingQuality = MutableStateFlow(com.talkar.app.data.services.EnhancedARService.LightingQuality.UNKNOWN)
+    val lightingQuality: StateFlow<com.talkar.app.data.services.EnhancedARService.LightingQuality> = _lightingQuality.asStateFlow()
     
-    private val _isLoadingVideo = MutableStateFlow(false)
-    val isLoadingVideo: StateFlow<Boolean> = _isLoadingVideo.asStateFlow()
+    private val _lightEstimate = MutableStateFlow<LightEstimate?>(null)
+    val lightEstimate: StateFlow<LightEstimate?> = _lightEstimate.asStateFlow()
     
-    // Bug fix: Avatar disappearing incorrectly
-    // Track image loss with debounce to prevent flickering
-    private var imageLossJob: Job? = null
-    private val imageLossDebounceMs = 500L // Wait 500ms before hiding avatar
-    
-    // Bug fix: Anchor stability
-    private val _anchorStable = MutableStateFlow(false)
-    val anchorStable: StateFlow<Boolean> = _anchorStable.asStateFlow()
+    private val _isAvatarSpeaking = MutableStateFlow(false)
+    val isAvatarSpeaking: StateFlow<Boolean> = _isAvatarSpeaking.asStateFlow()
     
     // Backend data
     private val _images = MutableStateFlow<List<BackendImage>>(emptyList())
@@ -71,6 +64,68 @@ class EnhancedARViewModel(
     
     init {
         loadBackendData()
+        initializeARService()
+    }
+    
+    /**
+     * Initialize AR service
+     */
+    private fun initializeARService() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Initializing AR service...")
+                val initialized = arService.initialize()
+                if (initialized) {
+                    Log.d(TAG, "AR service initialized successfully")
+                    // Start observing AR service state
+                    observeARServiceState()
+                } else {
+                    Log.e(TAG, "Failed to initialize AR service")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing AR service: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Observe AR service state changes
+     */
+    private fun observeARServiceState() {
+        viewModelScope.launch {
+            // Observe tracking state
+            arService.isTracking.collect { isTracking ->
+                _isTracking.value = isTracking
+            }
+        }
+        
+        viewModelScope.launch {
+            // Observe tracking quality
+            arService.trackingQuality.collect { quality ->
+                _trackingQuality.value = quality
+            }
+        }
+        
+        viewModelScope.launch {
+            // Observe lighting quality
+            arService.lightingQuality.collect { quality ->
+                _lightingQuality.value = quality
+            }
+        }
+        
+        viewModelScope.launch {
+            // Observe light estimate
+            arService.lightEstimate.collect { estimate ->
+                _lightEstimate.value = estimate
+            }
+        }
+        
+        viewModelScope.launch {
+            // Observe avatar speaking state
+            arService.isAvatarSpeaking.collect { isSpeaking ->
+                _isAvatarSpeaking.value = isSpeaking
+            }
+        }
     }
     
     /**
@@ -96,117 +151,44 @@ class EnhancedARViewModel(
     }
     
     /**
-     * Handle image detection with stability check
-     * Bug fix: Prevents avatar from appearing/disappearing rapidly
+     * Handle image detection
      */
     fun onImageDetected() {
         Log.d(TAG, "Image detected")
-        
-        // Trigger haptic feedback
-        try {
-            HapticFeedbackUtil.onImageDetected(TalkARApplication.instance.applicationContext)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to trigger haptic feedback: ${e.message}")
-        }
-        
-        // Cancel any pending image loss
-        imageLossJob?.cancel()
-        imageLossJob = null
-        
         _isTracking.value = true
-        _anchorStable.value = true
         _detectionStatus.value = "Image Detected"
         
         // Show avatar if we have one
         if (_currentAvatar.value != null) {
             _isAvatarVisible.value = true
-            // Auto-play video when image detected
-            _isVideoPlaying.value = true
-            Log.d(TAG, "Avatar shown with auto-play")
         }
     }
     
     /**
-     * Handle image loss with debounce
-     * Bug fix: Adds delay before hiding to prevent flickering
+     * Handle image loss
      */
     fun onImageLost() {
-        Log.d(TAG, "Image lost - starting debounce timer")
-        
-        // Cancel previous job if exists
-        imageLossJob?.cancel()
-        
-        // Start debounced hide
-        imageLossJob = viewModelScope.launch {
-            delay(imageLossDebounceMs)
-            
-            Log.d(TAG, "Image loss confirmed after debounce")
-            _isTracking.value = false
-            _isAvatarVisible.value = false
-            _anchorStable.value = false
-            _detectionStatus.value = "Searching..."
-            // Pause video when image lost
-            _isVideoPlaying.value = false
-        }
-    }
-    
-    /**
-     * Reset image loss (called when image is re-detected quickly)
-     * Bug fix: Prevents unnecessary hiding
-     */
-    fun resetImageLoss() {
-        imageLossJob?.cancel()
-        imageLossJob = null
-        Log.d(TAG, "Image loss cancelled - image still visible")
+        Log.d(TAG, "Image lost")
+        _isTracking.value = false
+        _isAvatarVisible.value = false
+        _detectionStatus.value = "Searching..."
     }
     
     /**
      * Set current image and avatar
      */
-    fun setCurrentImageAndAvatar(image: BackendImage, avatar: Avatar, videoUrl: String? = null) {
+    fun setCurrentImageAndAvatar(image: BackendImage, avatar: Avatar) {
         Log.d(TAG, "Setting current image: ${image.name} with avatar: ${avatar.name}")
         _currentImage.value = image
         _currentAvatar.value = avatar
-        
-        if (videoUrl != null) {
-            _currentVideoUrl.value = videoUrl
-            _isLoadingVideo.value = false
-        } else {
-            // Indicate loading if no video URL yet
-            _isLoadingVideo.value = true
-        }
-        
-        // Set first dialogue if available
-        // Note: BackendImage doesn't have dialogues field in the current model
-        // You may need to fetch dialogues separately or add to BackendImage model
     }
     
     /**
-     * Handle avatar tap - Toggle play/pause
+     * Handle avatar tap
      */
     fun onAvatarTapped() {
-        Log.d(TAG, "Avatar tapped - toggling playback")
-        
-        // Trigger haptic feedback
-        try {
-            HapticFeedbackUtil.onAvatarTapped(TalkARApplication.instance.applicationContext)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to trigger haptic feedback: ${e.message}")
-        }
-        
-        _isVideoPlaying.value = !_isVideoPlaying.value
-        
-        if (_isVideoPlaying.value) {
-            Log.d(TAG, "Video playing")
-            // Trigger playback start haptic
-            try {
-                HapticFeedbackUtil.onVideoPlaybackStart(TalkARApplication.instance.applicationContext)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to trigger playback haptic: ${e.message}")
-            }
-        } else {
-            Log.d(TAG, "Video paused")
-        }
+        Log.d(TAG, "Avatar tapped")
+        // TODO: Implement avatar interaction (play script, lip-sync, etc.)
     }
     
     /**
@@ -216,10 +198,15 @@ class EnhancedARViewModel(
         Log.d(TAG, "Starting AR tracking")
         _detectionStatus.value = "Starting AR..."
         
-        // Simulate AR initialization
+        // Start AR service
         viewModelScope.launch {
-            kotlinx.coroutines.delay(1000)
-            _detectionStatus.value = "Searching for images..."
+            try {
+                arService.resumeTracking()
+                _detectionStatus.value = "Searching for images..."
+            } catch (e: Exception) {
+                Log.e(TAG, "Error starting AR tracking: ${e.message}")
+                _detectionStatus.value = "Error: ${e.message}"
+            }
         }
     }
     
@@ -231,6 +218,51 @@ class EnhancedARViewModel(
         _isTracking.value = false
         _isAvatarVisible.value = false
         _detectionStatus.value = "Stopped"
+        
+        // Stop AR service
+        viewModelScope.launch {
+            try {
+                arService.stopTracking()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping AR tracking: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Set avatar speaking state
+     */
+    fun setAvatarSpeaking(isSpeaking: Boolean) {
+        _isAvatarSpeaking.value = isSpeaking
+        arService.setAvatarSpeaking(isSpeaking)
+    }
+    
+    /**
+     * Start ambient audio
+     */
+    fun startAmbientAudio() {
+        arService.startAmbientAudio()
+    }
+    
+    /**
+     * Stop ambient audio
+     */
+    fun stopAmbientAudio() {
+        arService.stopAmbientAudio()
+    }
+    
+    /**
+     * Pause ambient audio
+     */
+    fun pauseAmbientAudio() {
+        arService.pauseAmbientAudio()
+    }
+    
+    /**
+     * Resume ambient audio
+     */
+    fun resumeAmbientAudio() {
+        arService.resumeAmbientAudio()
     }
     
     /**
@@ -264,48 +296,20 @@ class EnhancedARViewModel(
                 setCurrentImageAndAvatar(randomImage, randomAvatar)
                 onImageDetected()
                 
-                // Simulate image loss after 5 seconds
-                kotlinx.coroutines.delay(5000)
-                onImageLost()
-            } else {
-                // Create mock data for testing
-                val mockImage = BackendImage(
-                    id = "test-image-1",
-                    name = "Test Product",
-                    description = "Test product for AR",
-                    imageUrl = "https://example.com/test.jpg",
-                    thumbnailUrl = "https://example.com/test-thumb.jpg",
-                    isActive = true,
-                    createdAt = System.currentTimeMillis().toString(),
-                    updatedAt = System.currentTimeMillis().toString()
-                )
-                
-                val mockAvatar = Avatar(
-                    id = "test-avatar-1",
-                    name = "Demo Avatar",
-                    description = "Demo avatar for testing",
-                    avatarImageUrl = "https://example.com/avatar.jpg",
-                    avatarVideoUrl = null,
-                    voiceId = "voice_001",
-                    isActive = true
-                )
-                
-                setCurrentImageAndAvatar(mockImage, mockAvatar)
-                onImageDetected()
-                
-                // Simulate image loss after 5 seconds
-                kotlinx.coroutines.delay(5000)
+                // Simulate image loss after 3 seconds
+                kotlinx.coroutines.delay(3000)
                 onImageLost()
             }
         }
     }
     
     /**
-     * Clean up resources
+     * Cleanup when ViewModel is cleared
      */
     override fun onCleared() {
         super.onCleared()
-        imageLossJob?.cancel()
-        Log.d(TAG, "ViewModel cleared, jobs cancelled")
+        viewModelScope.launch {
+            arService.stopTracking()
+        }
     }
 }

@@ -106,8 +106,12 @@ class ARViewModel : ViewModel() {
             try {
                 android.util.Log.d("ARViewModel", "Fetching talking head video for image: $imageId")
                 
-                // Call the API to get the pre-saved talking head video
-                val response = TalkARApplication.instance.apiClient.getTalkingHeadVideo(imageId)
+                // Find the image in our local cache to get the language
+                val image = _uiState.value.images.find { it.id == imageId }
+                val language = image?.dialogues?.firstOrNull()?.language ?: "en"
+                
+                // Call the API to get the pre-saved talking head video with language support
+                val response = TalkARApplication.instance.apiClient.getTalkingHeadVideo(imageId, language)
                 
                 if (response.isSuccessful) {
                     val talkingHeadVideo = response.body()

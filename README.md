@@ -1,20 +1,6 @@
-# TalkAR
+# TalkAR - AR-Powered Talking Head App
 
-[![Security](https://github.com/ajitreddy013/TalkAR/actions/workflows/security.yml/badge.svg)](https://github.com/ajitreddy013/TalkAR/actions/workflows/security.yml)
-
-## Project Overview
-
-TalkAR is an innovative augmented reality application that enables interactive storytelling through animated avatars. The app uses advanced computer vision to track images and overlay dynamic 3D avatars with synchronized lip-sync animations, creating an immersive storytelling experience.
-
-## Security
-
-This repository has security measures in place to prevent secret leaks:
-
-- Pre-commit hooks to detect secrets before committing
-- GitHub secret scanning enabled
-- Regular security audits
-
-For security guidelines, see [SECURITY_GUIDELINES.md](SECURITY_GUIDELINES.md).
+An innovative AR-powered mobile application that recognizes images and generates lip-synced talking heads in the user's chosen language, creating immersive interactive experiences.
 
 ## 🎯 App Vision
 
@@ -152,6 +138,10 @@ cp backend/env.example backend/.env
 
 # Admin dashboard environment
 echo "REACT_APP_API_URL=http://localhost:3000/api/v1" > admin-dashboard/.env
+
+# Root environment (for Docker)
+cp .env.example .env
+# Edit .env with your configuration
 ```
 
 ### 3. Start with Docker (Recommended)
@@ -228,6 +218,51 @@ cd admin-dashboard && npm install && npm start
 - **AWS S3**: Store images, videos, and assets
 - **CDN Integration**: Fast content delivery
 - **Security**: Secure access controls
+
+## 🔒 Security Best Practices
+
+### Environment Variables and Secrets Management
+
+This project uses environment variables to manage sensitive configuration data. Never commit actual secrets to the repository.
+
+#### Docker Development
+
+For local development with Docker, use the `.env` file:
+
+1. Copy `.env.example` to `.env`:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` with your actual values (never commit this file)
+
+3. Docker Compose will automatically load these variables
+
+#### Manual Development
+
+For manual development setup:
+
+1. **Backend**:
+
+   ```bash
+   cd backend
+   cp env.example .env
+   # Edit .env with your configuration
+   ```
+
+2. **Frontend**:
+   ```bash
+   cd admin-dashboard
+   echo "REACT_APP_API_URL=http://localhost:3000/api/v1" > .env
+   ```
+
+### Secret Rotation
+
+- Rotate JWT secrets periodically
+- Rotate AWS credentials using IAM roles where possible
+- Update Sync API keys through their dashboard
+- Change database passwords regularly
 
 ## 📚 Documentation
 

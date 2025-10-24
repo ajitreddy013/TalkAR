@@ -40,11 +40,10 @@ export interface DialogueAttributes {
   text: string;
   language: string;
   voiceId?: string;
+  emotion?: string; // Add emotion parameter
+  tone?: string; // Add tone parameter
   isActive: boolean;
   isDefault: boolean;
-  orderIndex: number; // For script sequence
-  chunkSize: number; // Number of lines in this chunk
-  estimatedDuration?: number; // Estimated seconds to speak
   createdAt: Date;
   updatedAt: Date;
 }
@@ -61,11 +60,10 @@ export class Dialogue
   public text!: string;
   public language!: string;
   public voiceId?: string;
+  public emotion?: string; // Add emotion parameter
+  public tone?: string; // Add tone parameter
   public isActive!: boolean;
   public isDefault!: boolean;
-  public orderIndex!: number;
-  public chunkSize!: number;
-  public estimatedDuration?: number;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -141,6 +139,22 @@ Dialogue.init(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    emotion: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: "neutral",
+      validate: {
+        isIn: [["neutral", "happy", "surprised", "serious"]]
+      }
+    },
+    tone: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+      defaultValue: "friendly",
+      validate: {
+        isIn: [["friendly", "excited", "professional", "casual", "enthusiastic", "persuasive"]]
+      }
+    },
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
@@ -148,20 +162,6 @@ Dialogue.init(
     isDefault: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
-    },
-    orderIndex: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 0,
-    },
-    chunkSize: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      defaultValue: 1,
-    },
-    estimatedDuration: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
     },
     createdAt: {
       type: DataTypes.DATE,
@@ -176,14 +176,6 @@ Dialogue.init(
     sequelize,
     tableName: "dialogues",
     timestamps: true,
-    indexes: [
-      {
-        fields: ["imageId", "orderIndex"],
-      },
-      {
-        fields: ["imageId", "isActive", "isDefault"],
-      },
-    ],
   }
 );
 

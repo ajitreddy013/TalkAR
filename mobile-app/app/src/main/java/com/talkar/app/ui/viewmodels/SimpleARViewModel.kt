@@ -1,20 +1,14 @@
 package com.talkar.app.ui.viewmodels
 
-import com.talkar.app.utils.HapticFeedbackUtil
-import com.talkar.app.performance.PerformanceMetrics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.talkar.app.TalkARApplication
-import com.talkar.app.ar.AvatarManager
-import com.talkar.app.data.models.AvatarModel3D
-import com.talkar.app.data.models.AvatarType
-import com.talkar.app.data.models.Gender
-import com.talkar.app.data.models.IdleAnimation
 import android.content.pm.ApplicationInfo
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.SyncRequest
 import com.talkar.app.data.models.SyncResponse
 import com.talkar.app.data.models.TalkingHeadVideo
+import com.talkar.app.data.models.AdContent
 import com.talkar.app.data.config.ApiConfig
 import com.google.ar.core.AugmentedImage
 import kotlinx.coroutines.flow.*
@@ -24,14 +18,6 @@ class SimpleARViewModel : ViewModel() {
     
     private val imageRepository = TalkARApplication.instance.imageRepository
     private val syncRepository = TalkARApplication.instance.syncRepository
-    private val videoCacheManager = TalkARApplication.instance.videoCacheManager
-    
-    // 3D Avatar Manager (lazy initialization)
-    private var _avatarManager: AvatarManager? = null
-    
-    // Avatar loading state
-    private val _avatarLoadingState = MutableStateFlow<AvatarLoadState>(AvatarLoadState.Idle)
-    val avatarLoadingState: StateFlow<AvatarLoadState> = _avatarLoadingState.asStateFlow()
     
     private val _uiState = MutableStateFlow(SimpleARUiState())
     val uiState: StateFlow<SimpleARUiState> = _uiState.asStateFlow()
@@ -45,14 +31,15 @@ class SimpleARViewModel : ViewModel() {
     private val _talkingHeadVideo = MutableStateFlow<TalkingHeadVideo?>(null)
     val talkingHeadVideo: StateFlow<TalkingHeadVideo?> = _talkingHeadVideo.asStateFlow()
     
-    private val _currentVideoUrl = MutableStateFlow<String?>(null)
-    val currentVideoUrl: StateFlow<String?> = _currentVideoUrl.asStateFlow()
-    
-    private val _isLoadingVideo = MutableStateFlow(false)
-    val isLoadingVideo: StateFlow<Boolean> = _isLoadingVideo.asStateFlow()
-    
     private val _recognizedAugmentedImage = MutableStateFlow<AugmentedImage?>(null)
     val recognizedAugmentedImage: StateFlow<AugmentedImage?> = _recognizedAugmentedImage.asStateFlow()
+    
+    // Ad Content state
+    private val _adContent = MutableStateFlow<AdContent?>(null)
+    val adContent: StateFlow<AdContent?> = _adContent.asStateFlow()
+    
+    private val _showAdContent = MutableStateFlow(false)
+    val showAdContent: StateFlow<Boolean> = _showAdContent.asStateFlow()
 
     // Simple debounce/deduplication to avoid repeated detection events flooding logs
     // and triggering duplicate backend work when AR repeatedly detects the same target.
@@ -69,123 +56,15 @@ class SimpleARViewModel : ViewModel() {
             try {
                 // Pre-warm repositories in background
                 android.util.Log.d("SimpleARViewModel", "Pre-warming repositories in background")
-                
-                // Initialize default avatar configurations
-                initializeDefaultAvatars()
-                
+                // No heavy initialization here - just logging
             } catch (e: Exception) {
                 android.util.Log.e("SimpleARViewModel", "Error in background initialization", e)
             }
         }
     }
     
-    /**
-     * Initialize AvatarManager (called when AR scene is ready)
-     */
-    fun initializeAvatarManager(context: android.content.Context) {
-        if (_avatarManager == null) {
-            _avatarManager = AvatarManager(context)
-            android.util.Log.d("SimpleARViewModel", "AvatarManager initialized")
-            
-            // Register default avatars
-            registerDefaultAvatars()
-        }
-    }
-    
-    /**
-     * Get AvatarManager instance
-     */
-    fun getAvatarManager(): AvatarManager? {
-        return _avatarManager
-    }
-    
-    /**
-     * Initialize default avatar configurations
-     */
-    private suspend fun initializeDefaultAvatars() {
-        android.util.Log.d("SimpleARViewModel", "Initializing default avatar configurations...")
-        // Avatars will be registered when AvatarManager is created
-    }
-    
-    /**
-     * Register default avatars in the manager
-     */
-    private fun registerDefaultAvatars() {
-        val avatarManager = _avatarManager ?: return
-        
-        // Define sample avatar configurations
-        val avatars = listOf(
-            // Generic male presenter
-            AvatarModel3D(
-                id = "avatar_generic_male_1",
-                name = "Generic Male Presenter",
-                description = "Professional male presenter avatar",
-                modelUrl = null, // Will be loaded from res/raw when models are added
-                scale = 0.3f, // Scale down for AR scene
-                idleAnimation = IdleAnimation.BREATHING_AND_BLINKING,
-                avatarType = AvatarType.GENERIC,
-                gender = Gender.MALE,
-                isActive = true
-            ),
-            
-            // Generic female presenter
-            AvatarModel3D(
-                id = "avatar_generic_female_1",
-                name = "Generic Female Presenter",
-                description = "Professional female presenter avatar",
-                modelUrl = null,
-                scale = 0.3f,
-                idleAnimation = IdleAnimation.BREATHING_AND_BLINKING,
-                avatarType = AvatarType.GENERIC,
-                gender = Gender.FEMALE,
-                isActive = true
-            ),
-            
-            // Celebrity-style male avatar (e.g., SRK-style)
-            AvatarModel3D(
-                id = "avatar_celebrity_male_srk",
-                name = "Celebrity Male Avatar (SRK Style)",
-                description = "Celebrity-style male avatar inspired by Bollywood",
-                modelUrl = null,
-                scale = 0.3f,
-                idleAnimation = IdleAnimation.BREATHING_AND_BLINKING,
-                avatarType = AvatarType.CELEBRITY,
-                gender = Gender.MALE,
-                isActive = true
-            )
-        )
-        
-        avatarManager.registerAvatars(avatars)
-        android.util.Log.d("SimpleARViewModel", "Registered ${avatars.size} default avatars")
-    }
-    
-    /**
-     * Map detected image to appropriate avatar
-     */
-    private fun mapImageToAvatar(imageId: String, imageName: String) {
-        val avatarManager = _avatarManager ?: return
-        
-        // Map based on image name/type
-        val avatarId = when {
-            imageName.contains("srk", ignoreCase = true) || 
-            imageName.contains("celebrity", ignoreCase = true) -> {
-                "avatar_celebrity_male_srk"
-            }
-            imageName.contains("female", ignoreCase = true) -> {
-                "avatar_generic_female_1"
-            }
-            else -> {
-                "avatar_generic_male_1"
-            }
-        }
-        
-        avatarManager.mapImageToAvatar(imageId, avatarId)
-        android.util.Log.d("SimpleARViewModel", "Mapped image '$imageName' to avatar '$avatarId'")
-    }
-    
     fun recognizeImage(imageRecognition: ImageRecognition) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-            val detectionStartTime = PerformanceMetrics.startTiming()
             android.util.Log.d("SimpleARViewModel", "recognizeImage called for: ${imageRecognition.name}")
             // Deduplicate rapid repeated detections for the same image
             val now = System.currentTimeMillis()
@@ -224,9 +103,6 @@ class SimpleARViewModel : ViewModel() {
             
             // Trigger haptic feedback for image detection
             triggerHapticFeedback()
-            
-            // Record image detection latency
-            PerformanceMetrics.recordImageDetectionLatency(detectionStartTime)
             
             // Check if detected image matches any backend image
             viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -267,22 +143,21 @@ class SimpleARViewModel : ViewModel() {
                         if (matchingImage != null) {
                             android.util.Log.d("SimpleARViewModel", "✅ Image MATCHED in backend: ${matchingImage.name}")
                             
-                            // Map image to avatar for 3D rendering
-                            mapImageToAvatar(matchingImage.id, matchingImage.name)
-                            
                             // Update UI on main thread
                             viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                                 _uiState.value = _uiState.value.copy(
-                                    isLoading = true,
+                                    isLoading = false,
                                     error = null
                                 )
-                                _isLoadingVideo.value = true
-                                _avatarLoadingState.value = AvatarLoadState.LoadingAvatar(matchingImage.id)
                             }
                             
                             // Generate lip sync video only if image exists in backend
                             android.util.Log.d("SimpleARViewModel", "Generating lip sync video for matched image: ${matchingImage.name}")
                             generateLipSyncVideoForMatchedImage(matchingImage)
+                            
+                            // Generate ad content for the matched image
+                            android.util.Log.d("SimpleARViewModel", "Generating ad content for matched image: ${matchingImage.name}")
+                            generateAdContentForImage(matchingImage)
                             
                         } else {
                             android.util.Log.d("SimpleARViewModel", "❌ Image NOT FOUND in backend: ${imageRecognition.name}")
@@ -319,12 +194,76 @@ class SimpleARViewModel : ViewModel() {
     }
     
     private fun triggerHapticFeedback() {
-        // Trigger haptic feedback when an image is detected
+        // This would trigger haptic feedback when an image is detected
         android.util.Log.d("SimpleARViewModel", "Image detected - triggering haptic feedback")
-        try {
-            HapticFeedbackUtil.onImageDetected(TalkARApplication.instance.applicationContext)
-        } catch (e: Exception) {
-            android.util.Log.w("SimpleARViewModel", "Failed to trigger haptic feedback: ${e.message}")
+    }
+    
+    private fun generateAdContentForImage(backendImage: com.talkar.app.data.models.BackendImage) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                android.util.Log.d("SimpleARViewModel", "Generating ad content for backend image: ${backendImage.name}")
+                
+                // Update UI state to show loading
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(
+                        isGeneratingAdContent = true,
+                        adContentError = null
+                    )
+                }
+                
+                // Use the image name as the product name for ad content generation
+                val productName = backendImage.name
+                
+                // Get the EnhancedARService instance
+                val arService = TalkARApplication.instance.arImageRecognitionService as com.talkar.app.data.services.EnhancedARService
+                
+                // Generate ad content
+                val result = arService.generateAdContentForImage(backendImage.id, productName)
+                
+                if (result.isSuccess) {
+                    val adContent = result.getOrNull()
+                    if (adContent != null) {
+                        // Update UI on main thread
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _adContent.value = adContent
+                            _showAdContent.value = true
+                            _uiState.value = _uiState.value.copy(
+                                isGeneratingAdContent = false,
+                                adContentError = null
+                            )
+                            android.util.Log.d("SimpleARViewModel", "Ad content generated successfully for: ${backendImage.name}")
+                        }
+                    } else {
+                        android.util.Log.e("SimpleARViewModel", "Ad content is null")
+                        // Update UI state to show error
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _uiState.value = _uiState.value.copy(
+                                isGeneratingAdContent = false,
+                                adContentError = "Ad content is null"
+                            )
+                        }
+                    }
+                } else {
+                    android.util.Log.e("SimpleARViewModel", "Failed to generate ad content: ${result.exceptionOrNull()?.message}")
+                    // Update UI state to show error
+                    viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(
+                            isGeneratingAdContent = false,
+                            adContentError = result.exceptionOrNull()?.message ?: "Failed to generate ad content"
+                        )
+                    }
+                }
+                
+            } catch (e: Exception) {
+                android.util.Log.e("SimpleARViewModel", "Error generating ad content", e)
+                // Update UI state to show error
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(
+                        isGeneratingAdContent = false,
+                        adContentError = e.message ?: "Error generating ad content"
+                    )
+                }
+            }
         }
     }
     
@@ -333,8 +272,12 @@ class SimpleARViewModel : ViewModel() {
             try {
                 android.util.Log.d("SimpleARViewModel", "Fetching talking head video for image: $imageId")
                 
-                // Make real API call to backend for lip sync video generation
-                val response = TalkARApplication.instance.apiClient.getTalkingHeadVideo(imageId)
+                // Find the image in our local cache to get the language
+                val image = _uiState.value.images.find { it.id == imageId }
+                val language = image?.dialogues?.firstOrNull()?.language ?: "en"
+                
+                // Make real API call to backend for lip sync video generation with language support
+                val response = TalkARApplication.instance.apiClient.getTalkingHeadVideo(imageId, language)
                 
                 if (response.isSuccessful) {
                     val talkingHeadVideo = response.body()
@@ -367,7 +310,6 @@ class SimpleARViewModel : ViewModel() {
     
     private fun generateLipSyncVideoForMatchedImage(backendImage: com.talkar.app.data.models.BackendImage) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val apiStartTime = PerformanceMetrics.startTiming()
             try {
                 android.util.Log.d("SimpleARViewModel", "Generating lip sync video for backend image: ${backendImage.name}")
                 
@@ -393,29 +335,12 @@ class SimpleARViewModel : ViewModel() {
                 // Call the sync API to generate lip sync video
                 val response = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
                 
-                // Record API call latency
-                PerformanceMetrics.recordApiCallLatency(apiStartTime, "/sync/generate")
-                
                 if (response.isSuccessful) {
-                    val videoLoadStartTime = PerformanceMetrics.startTiming()
                     val syncResponse = response.body()
                     if (syncResponse != null && syncResponse.videoUrl != null && syncResponse.duration != null) {
                         android.util.Log.d("SimpleARViewModel", "✅ Lip sync video generated successfully!")
                         android.util.Log.d("SimpleARViewModel", "Video URL: ${syncResponse.videoUrl}")
                         android.util.Log.d("SimpleARViewModel", "Duration: ${syncResponse.duration}s")
-                        
-                        // Cache the video in background
-                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            try {
-                                videoCacheManager.cacheVideo(syncResponse.videoUrl, backendImage.id)
-                                android.util.Log.d("SimpleARViewModel", "Video cached successfully")
-                                
-                                // Preload next script's video if available
-                                preloadNextScriptVideo(backendImage)
-                            } catch (e: Exception) {
-                                android.util.Log.w("SimpleARViewModel", "Failed to cache video: ${e.message}")
-                            }
-                        }
                         
                         // Create talking head video from sync response
                         val talkingHeadVideo = TalkingHeadVideo(
@@ -425,33 +350,16 @@ class SimpleARViewModel : ViewModel() {
                             title = "${backendImage.name} Lip Sync Video",
                             description = "AI-generated lip sync video for ${backendImage.name}",
                             language = language,
+                            emotion = null, // Default emotion
                             voiceId = voiceId,
                             createdAt = System.currentTimeMillis().toString()
                         )
                         
                         // Update UI on main thread
                         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                            // Check if video is cached, use cached version if available
-                            val cachedPath = videoCacheManager.getCachedVideoPath(syncResponse.videoUrl)
-                            val videoUrl = if (cachedPath != null) {
-                                android.util.Log.d("SimpleARViewModel", "Using cached video: $cachedPath")
-                                PerformanceMetrics.recordCacheHit("video")
-                                "file://$cachedPath"
-                            } else {
-                                PerformanceMetrics.recordCacheMiss("video")
-                                syncResponse.videoUrl
-                            }
-                            
-                            // Record video load latency
-                            PerformanceMetrics.recordVideoLoadLatency(videoLoadStartTime, videoUrl)
-                            
                             _talkingHeadVideo.value = talkingHeadVideo
                             _syncVideo.value = syncResponse
-                            _currentVideoUrl.value = videoUrl
-                            _isLoadingVideo.value = false
-                            _uiState.value = _uiState.value.copy(isLoading = false)
                             android.util.Log.d("SimpleARViewModel", "Talking head video loaded: ${talkingHeadVideo.title}")
-                            android.util.Log.d("SimpleARViewModel", "Video URL set for playback: $videoUrl")
                         }
                     } else {
                         android.util.Log.e("SimpleARViewModel", "Sync response body is null")
@@ -475,17 +383,21 @@ class SimpleARViewModel : ViewModel() {
             try {
                 android.util.Log.d("SimpleARViewModel", "Generating lip sync video for: ${imageRecognition.name}")
                 
-                // Get the first dialogue text for lip sync
-                val dialogueText = imageRecognition.dialogues.firstOrNull()?.text ?: "Hello! I'm a ${imageRecognition.name}."
+                // Get the first dialogue text and language for lip sync
+                val dialogue = imageRecognition.dialogues.firstOrNull()
+                val dialogueText = dialogue?.text ?: "Hello! I'm a ${imageRecognition.name}."
+                val language = dialogue?.language ?: "en"
+                val voiceId = dialogue?.voiceId ?: "voice_001"
                 
                 // Create sync request for lip sync video generation
                 val syncRequest = SyncRequest(
                     text = dialogueText,
-                    language = "en",
-                    voiceId = "voice_001"
+                    language = language,
+                    voiceId = voiceId,
+                    emotion = null // Default emotion
                 )
                 
-                android.util.Log.d("SimpleARViewModel", "Sending sync request: $dialogueText")
+                android.util.Log.d("SimpleARViewModel", "Sending sync request: $dialogueText in language: $language")
                 
                 // Call the sync API to generate lip sync video
                 val response = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
@@ -504,8 +416,9 @@ class SimpleARViewModel : ViewModel() {
                             duration = syncResponse.duration.toInt(),
                             title = "${imageRecognition.name} Lip Sync Video",
                             description = "AI-generated lip sync video for ${imageRecognition.name}",
-                            language = "en",
-                            voiceId = "voice_001",
+                            language = language,
+                            emotion = null, // Default emotion
+                            voiceId = voiceId,
                             createdAt = System.currentTimeMillis().toString()
                         )
                         
@@ -541,51 +454,12 @@ class SimpleARViewModel : ViewModel() {
                 title = "Water Bottle Talking Head (Mock)",
                 description = "AI-generated talking head video for water bottle",
                 language = "en",
+                emotion = null, // Default emotion
                 voiceId = "voice_001",
                 createdAt = System.currentTimeMillis().toString()
             )
             _talkingHeadVideo.value = mockVideo
-            _currentVideoUrl.value = mockVideo.videoUrl
             android.util.Log.d("SimpleARViewModel", "Using mock video: ${mockVideo.title}")
-        }
-    }
-    
-    /**
-     * Preload next script's video in background
-     * Fetches the next dialogue and generates/caches its lip-sync video
-     */
-    private suspend fun preloadNextScriptVideo(backendImage: com.talkar.app.data.models.BackendImage) {
-        try {
-            if (backendImage.dialogues.size > 1) {
-                // Get the next dialogue (assuming sequential order)
-                val nextDialogue = backendImage.dialogues.getOrNull(1)
-                if (nextDialogue != null) {
-                    android.util.Log.d("SimpleARViewModel", "Preloading next script video...")
-                    
-                    // Create sync request for next dialogue
-                    val syncRequest = SyncRequest(
-                        text = nextDialogue.text,
-                        language = nextDialogue.language,
-                        voiceId = nextDialogue.voiceId,
-                        imageUrl = ApiConfig.getFullImageUrl(backendImage.imageUrl)
-                    )
-                    
-                    // Generate video (this will be async on backend)
-                    val response = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
-                    
-                    if (response.isSuccessful) {
-                        val syncResponse = response.body()
-                        if (syncResponse != null && syncResponse.videoUrl != null) {
-                            android.util.Log.d("SimpleARViewModel", "Preloading video URL: ${syncResponse.videoUrl}")
-                            // Cache the preloaded video
-                            videoCacheManager.preloadVideo(syncResponse.videoUrl, backendImage.id)
-                            android.util.Log.d("SimpleARViewModel", "✅ Next script video preloaded and cached")
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("SimpleARViewModel", "Failed to preload next video: ${e.message}")
         }
     }
     
@@ -600,7 +474,8 @@ class SimpleARViewModel : ViewModel() {
             val request = SyncRequest(
                 text = text,
                 language = language,
-                voiceId = voiceId
+                voiceId = voiceId,
+                emotion = null // Default emotion
             )
             
             try {
@@ -639,6 +514,8 @@ class SimpleARViewModel : ViewModel() {
         _recognizedAugmentedImage.value = null
         _talkingHeadVideo.value = null
         _syncVideo.value = null
+        _adContent.value = null
+        _showAdContent.value = false
         _uiState.value = _uiState.value.copy(
             recognizedImage = null,
             syncVideo = null,
@@ -647,46 +524,8 @@ class SimpleARViewModel : ViewModel() {
         )
     }
     
-    /**
-     * Preload videos for popular/frequently detected images
-     * Call this on app startup or after loading images
-     */
-    fun preloadPopularVideos() {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                android.util.Log.d("SimpleARViewModel", "Preloading videos for popular images...")
-                
-                // Get all images from backend
-                val response = TalkARApplication.instance.apiClient.getImages()
-                
-                if (response.isSuccessful) {
-                    val images = response.body()?.take(2) // Preload first 2 images
-                    
-                    images?.forEach { backendImage ->
-                        val firstDialogue = backendImage.dialogues.firstOrNull()
-                        if (firstDialogue != null) {
-                            val syncRequest = SyncRequest(
-                                text = firstDialogue.text,
-                                language = firstDialogue.language,
-                                voiceId = firstDialogue.voiceId,
-                                imageUrl = ApiConfig.getFullImageUrl(backendImage.imageUrl)
-                            )
-                            
-                            val syncResponse = TalkARApplication.instance.apiClient.generateSyncVideo(syncRequest)
-                            if (syncResponse.isSuccessful && syncResponse.body()?.videoUrl != null) {
-                                val videoUrl = syncResponse.body()!!.videoUrl!!
-                                videoCacheManager.preloadVideo(videoUrl, backendImage.id)
-                                android.util.Log.d("SimpleARViewModel", "Preloaded video for: ${backendImage.name}")
-                            }
-                        }
-                    }
-                    
-                    android.util.Log.d("SimpleARViewModel", "✅ Popular videos preloaded")
-                }
-            } catch (e: Exception) {
-                android.util.Log.w("SimpleARViewModel", "Failed to preload popular videos: ${e.message}")
-            }
-        }
+    fun hideAdContent() {
+        _showAdContent.value = false
     }
 }
 
@@ -697,15 +536,7 @@ data class SimpleARUiState(
     val recognizedImage: ImageRecognition? = null,
     val syncVideo: SyncResponse? = null,
     val error: String? = null,
-    val arError: String? = null
+    val arError: String? = null,
+    val isGeneratingAdContent: Boolean = false,
+    val adContentError: String? = null
 )
-
-/**
- * Avatar loading states for 3D avatar rendering
- */
-sealed class AvatarLoadState {
-    object Idle : AvatarLoadState()
-    data class LoadingAvatar(val imageId: String) : AvatarLoadState()
-    data class AvatarLoaded(val imageId: String, val avatarId: String) : AvatarLoadState()
-    data class AvatarError(val imageId: String, val error: String) : AvatarLoadState()
-}

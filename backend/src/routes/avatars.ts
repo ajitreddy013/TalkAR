@@ -19,117 +19,24 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// Get all image-avatar mappings (MUST be before /:id route)
-router.get("/mappings", async (req: Request, res: Response) => {
+// Get avatar by ID
+router.get("/:id", async (req: Request, res: Response) => {
   try {
-    const mappings = await ImageAvatarMapping.findAll({
-      where: { isActive: true },
-      include: [
-        {
-          model: Avatar,
-          as: "avatar",
-          where: { isActive: true },
-          required: false,
-        },
-        {
-          model: Image,
-          as: "image",
-          where: { isActive: true },
-          required: false,
-        },
-      ],
-      order: [["createdAt", "DESC"]],
-    });
+    const { id } = req.params;
+    const avatar = await Avatar.findByPk(id);
 
-    return res.json(mappings);
-  } catch (error) {
-    console.error("Error fetching mappings:", error);
-    return res.status(500).json({ error: "Failed to fetch mappings" });
-  }
-});
-
-// Get complete image data with avatar and scripts (MUST be before /:id route)
-router.get("/complete/:imageId", async (req: Request, res: Response) => {
-  try {
-    const { imageId } = req.params;
-
-    // Get image with dialogues
-    const image = await Image.findByPk(imageId, {
-      include: [
-        {
-          model: Dialogue,
-          as: "dialogues",
-          where: { isActive: true },
-          required: false,
-        },
-      ],
-    });
-
-    if (!image) {
-      return res.status(404).json({ error: "Image not found" });
+    if (!avatar) {
+      return res.status(404).json({ error: "Avatar not found" });
     }
 
-    // Get avatar mapping with full details
-    const mapping = await ImageAvatarMapping.findOne({
-      where: {
-        imageId,
-        isActive: true,
-      },
-      include: [
-        {
-          model: Avatar,
-          as: "avatar",
-          where: { isActive: true },
-          required: false,
-        },
-      ],
-    });
-
-    const avatar = mapping ? await Avatar.findByPk(mapping.avatarId) : null;
-
-    const response = {
-      image: {
-        id: image.id,
-        name: image.name,
-        description: image.description,
-        imageUrl: image.imageUrl,
-        thumbnailUrl: image.thumbnailUrl,
-        dialogues: image.getDialogues ? await image.getDialogues() : [],
-      },
-      avatar: avatar
-        ? {
-            id: avatar.id,
-            name: avatar.name,
-            description: avatar.description,
-            avatarImageUrl: avatar.avatarImageUrl,
-            avatarVideoUrl: avatar.avatarVideoUrl,
-            avatar3DModelUrl: avatar.avatar3DModelUrl,
-            voiceId: avatar.voiceId,
-            idleAnimationType: avatar.idleAnimationType,
-          }
-        : null,
-      mapping: mapping
-        ? {
-            id: mapping.id,
-            script: mapping.script,
-            audioUrl: mapping.audioUrl,
-            videoUrl: mapping.videoUrl,
-            visemeDataUrl: mapping.visemeDataUrl,
-            isActive: mapping.isActive,
-          }
-        : null,
-    };
-
-    return res.json(response);
+    return res.json(avatar);
   } catch (error) {
-    console.error("Error fetching complete image data:", error);
-    return res
-      .status(500)
-      .json({ error: "Failed to fetch complete image data" });
+    console.error("Error fetching avatar:", error);
+    return res.status(500).json({ error: "Failed to fetch avatar" });
   }
 });
 
-// Get avatar for specific image (MUST be before /:id route)
+// Get avatar for specific image
 router.get("/image/:imageId", async (req: Request, res: Response) => {
   try {
     const { imageId } = req.params;
@@ -163,44 +70,18 @@ router.get("/image/:imageId", async (req: Request, res: Response) => {
   }
 });
 
-// Get avatar by ID (MUST be after specific routes)
-router.get("/:id", async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const avatar = await Avatar.findByPk(id);
-
-    if (!avatar) {
-      return res.status(404).json({ error: "Avatar not found" });
-    }
-
-    return res.json(avatar);
-  } catch (error) {
-    console.error("Error fetching avatar:", error);
-    return res.status(500).json({ error: "Failed to fetch avatar" });
-  }
-});
-
 // Create new avatar
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const {
-      name,
-      description,
-      avatarImageUrl,
-      avatarVideoUrl,
-      avatar3DModelUrl,
-      voiceId,
-      idleAnimationType,
-    } = req.body;
+    const { name, description, avatarImageUrl, avatarVideoUrl, voiceId } =
+      req.body;
 
     const avatar = await Avatar.create({
       name,
       description,
       avatarImageUrl,
       avatarVideoUrl,
-      avatar3DModelUrl,
       voiceId,
-      idleAnimationType: idleAnimationType || "breathing",
       isActive: true,
     });
 
@@ -211,11 +92,10 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
-// Map avatar to image with script
+// Map avatar to image
 router.post("/:avatarId/map/:imageId", async (req: Request, res: Response) => {
   try {
     const { avatarId, imageId } = req.params;
-    const { script, audioUrl, videoUrl, visemeDataUrl } = req.body;
 
     // Check if avatar and image exist
     const avatar = await Avatar.findByPk(avatarId);
@@ -232,27 +112,12 @@ router.post("/:avatarId/map/:imageId", async (req: Request, res: Response) => {
     // Create or update mapping
     const [mapping, created] = await ImageAvatarMapping.findOrCreate({
       where: { imageId, avatarId },
-      defaults: {
-        imageId,
-        avatarId,
-        script,
-        audioUrl,
-        videoUrl,
-        visemeDataUrl,
-        isActive: true,
-      },
+      defaults: { imageId, avatarId, isActive: true },
     });
 
     if (!created) {
-      // Update existing mapping
-      await mapping.update({
-        script: script !== undefined ? script : mapping.script,
-        audioUrl: audioUrl !== undefined ? audioUrl : mapping.audioUrl,
-        videoUrl: videoUrl !== undefined ? videoUrl : mapping.videoUrl,
-        visemeDataUrl:
-          visemeDataUrl !== undefined ? visemeDataUrl : mapping.visemeDataUrl,
-        isActive: true,
-      });
+      mapping.isActive = true;
+      await mapping.save();
     }
 
     return res.json({
@@ -265,33 +130,65 @@ router.post("/:avatarId/map/:imageId", async (req: Request, res: Response) => {
   }
 });
 
-// Update mapping with generated media URLs
-router.put("/mapping/:mappingId", async (req: Request, res: Response) => {
+// Get complete image data with avatar and scripts
+router.get("/complete/:imageId", async (req: Request, res: Response) => {
   try {
-    const { mappingId } = req.params;
-    const { script, audioUrl, videoUrl, visemeDataUrl } = req.body;
+    const { imageId } = req.params;
 
-    const mapping = await ImageAvatarMapping.findByPk(mappingId);
+    // Get image with dialogues
+    const image = await Image.findByPk(imageId, {
+      include: [
+        {
+          model: Dialogue,
+          as: "dialogues",
+          where: { isActive: true },
+        },
+      ],
+    });
 
-    if (!mapping) {
-      return res.status(404).json({ error: "Mapping not found" });
+    if (!image) {
+      return res.status(404).json({ error: "Image not found" });
     }
 
-    await mapping.update({
-      script: script !== undefined ? script : mapping.script,
-      audioUrl: audioUrl !== undefined ? audioUrl : mapping.audioUrl,
-      videoUrl: videoUrl !== undefined ? videoUrl : mapping.videoUrl,
-      visemeDataUrl:
-        visemeDataUrl !== undefined ? visemeDataUrl : mapping.visemeDataUrl,
+    // Get avatar mapping
+    const mapping = await ImageAvatarMapping.findOne({
+      where: {
+        imageId,
+        isActive: true,
+      },
+      include: [
+        {
+          model: Avatar,
+          as: "avatar",
+          where: { isActive: true },
+        },
+      ],
     });
 
-    return res.json({
-      message: "Mapping updated successfully",
-      mapping,
-    });
+    const response = {
+      image: {
+        id: image.id,
+        name: image.name,
+        description: image.description,
+        imageUrl: image.imageUrl,
+        thumbnailUrl: image.thumbnailUrl,
+        dialogues: image.getDialogues ? await image.getDialogues() : [],
+      },
+      avatar: mapping ? await Avatar.findByPk(mapping.avatarId) : null,
+      mapping: mapping
+        ? {
+            id: mapping.id,
+            isActive: mapping.isActive,
+          }
+        : null,
+    };
+
+    return res.json(response);
   } catch (error) {
-    console.error("Error updating mapping:", error);
-    return res.status(500).json({ error: "Failed to update mapping" });
+    console.error("Error fetching complete image data:", error);
+    return res
+      .status(500)
+      .json({ error: "Failed to fetch complete image data" });
   }
 });
 

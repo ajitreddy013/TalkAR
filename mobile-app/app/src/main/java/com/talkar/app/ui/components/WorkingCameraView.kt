@@ -21,7 +21,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.talkar.app.data.models.ImageRecognition
-import com.talkar.app.data.services.ARImageRecognitionService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -44,10 +43,8 @@ fun WorkingCameraView(
             try {
                 Log.d("WorkingCameraView", "Initializing camera...")
                 delay(100) // Small delay to ensure context is ready
-                withContext(Dispatchers.Main) {
-                    cameraInitialized = true
-                    Log.d("WorkingCameraView", "Camera initialization completed")
-                }
+                cameraInitialized = true
+                Log.d("WorkingCameraView", "Camera initialization completed")
             } catch (e: Exception) {
                 Log.e("WorkingCameraView", "Failed to initialize camera", e)
                 withContext(Dispatchers.Main) {

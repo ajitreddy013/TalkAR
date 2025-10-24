@@ -17,8 +17,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.talkar.app.ui.screens.ARScreen
 import com.talkar.app.ui.screens.Week2ARScreen
-import com.talkar.app.ui.screens.Week4ARScreen
-import com.talkar.app.ui.screens.Week5TestingScreen
 import com.talkar.app.ui.theme.TalkARTheme
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
@@ -88,9 +86,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     
-                    // Week 5 Testing & Optimization Screen
-                    // Features: Performance monitoring, accuracy tracking, bug fixes
-                    Week5TestingScreen(
+                    // Week 2 AR Screen with Avatar Overlay
+                    Week2ARScreen(
                         viewModel = enhancedViewModel,
                         hasCameraPermission = hasCameraPermission,
                         onPermissionCheck = {

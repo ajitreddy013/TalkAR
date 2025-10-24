@@ -282,22 +282,19 @@ export async function populateTestData() {
       createdImages.push(image);
 
       // Create dialogues for this image
-      for (let scriptIndex = 0; scriptIndex < scripts.length; scriptIndex++) {
-        const script = scripts[scriptIndex];
+      for (const script of scripts) {
         await Dialogue.create({
           imageId: image.id,
           text: script.text,
           language: script.language,
           voiceId: script.voiceId,
           isDefault: script.isDefault,
-          orderIndex: scriptIndex,
-          chunkSize: 1,
           isActive: true,
         });
       }
 
       console.log(
-        `Created image: ${image.name} with ${scripts.length} scripts`,
+        `Created image: ${image.name} with ${scripts.length} scripts`
       );
     }
 

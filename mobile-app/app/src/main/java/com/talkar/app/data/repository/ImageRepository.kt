@@ -5,6 +5,7 @@ import com.talkar.app.data.local.ImageDatabase
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.Avatar
+import com.talkar.app.data.models.TalkingHeadVideo
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -146,6 +147,29 @@ class ImageRepository(
         } catch (e: Exception) {
             android.util.Log.e("ImageRepository", "Error fetching complete data", e)
             Result.failure(e)
+        }
+    }
+    
+    /**
+     * Get talking head video for specific image with language support
+     */
+    suspend fun getTalkingHeadVideo(imageId: String, language: String? = null): Result<TalkingHeadVideo?> {
+        return try {
+            android.util.Log.d("ImageRepository", "Fetching talking head video for image: $imageId with language: $language")
+            val response = apiClient.getTalkingHeadVideo(imageId, language)
+            android.util.Log.d("ImageRepository", "Talking head video API response: ${response.code()}")
+            
+            if (response.isSuccessful) {
+                val video = response.body()
+                android.util.Log.d("ImageRepository", "Loaded talking head video: ${video?.title}")
+                return Result.success(video)
+            } else {
+                android.util.Log.e("ImageRepository", "Talking head video API failed: ${response.code()}")
+                Result.failure(Exception("API failed: ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ImageRepository", "Error fetching talking head video", e)
+            return Result.failure(e)
         }
     }
 }

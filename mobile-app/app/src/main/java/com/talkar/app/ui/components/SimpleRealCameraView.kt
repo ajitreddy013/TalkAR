@@ -169,53 +169,60 @@ private fun initializeCamera(
         
         Log.d("SimpleRealCameraView", "Opening camera: $cameraId")
         
-        cameraManager.openCamera(cameraId, java.util.concurrent.Executors.newSingleThreadExecutor(), object : CameraDevice.StateCallback() {
-            override fun onOpened(camera: CameraDevice) {
-                Log.d("SimpleRealCameraView", "Camera opened successfully")
+        // Check for camera permission before opening
+        val context = textureView.context
+        if (context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            cameraManager.openCamera(cameraId, object : CameraDevice.StateCallback() {
+                override fun onOpened(camera: CameraDevice) {
+                    Log.d("SimpleRealCameraView", "Camera opened successfully")
 
-                try {
-                    // Create capture session
-                    val surface = Surface(textureView.surfaceTexture)
-                    val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-                    captureRequest.addTarget(surface)
+                    try {
+                        // Create capture session
+                        val surface = Surface(textureView.surfaceTexture)
+                        val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+                        captureRequest.addTarget(surface)
 
-                    // populate holder
-                    cameraHolder.cameraDevice = camera
-                    cameraHolder.surface = surface
+                        // populate holder
+                        cameraHolder.cameraDevice = camera
+                        cameraHolder.surface = surface
 
-                    camera.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
-                        override fun onConfigured(session: CameraCaptureSession) {
-                            Log.d("SimpleRealCameraView", "Camera session configured")
-                            try {
-                                cameraHolder.captureSession = session
-                                session.setRepeatingRequest(captureRequest.build(), null, null)
-                                Log.d("SimpleRealCameraView", "Camera preview started")
-                            } catch (e: Exception) {
-                                Log.e("SimpleRealCameraView", "Failed to start repeating request", e)
-                                onError("Failed to start camera preview: ${e.message}")
+                        camera.createCaptureSession(listOf(surface), object : CameraCaptureSession.StateCallback() {
+                            override fun onConfigured(session: CameraCaptureSession) {
+                                Log.d("SimpleRealCameraView", "Camera session configured")
+                                try {
+                                    cameraHolder.captureSession = session
+                                    session.setRepeatingRequest(captureRequest.build(), null, null)
+                                    Log.d("SimpleRealCameraView", "Camera preview started")
+                                } catch (e: Exception) {
+                                    Log.e("SimpleRealCameraView", "Failed to start repeating request", e)
+                                    onError("Failed to start camera preview: ${e.message}")
+                                }
                             }
-                        }
 
-                        override fun onConfigureFailed(session: CameraCaptureSession) {
-                            Log.e("SimpleRealCameraView", "Camera session configuration failed")
-                            onError("Camera session configuration failed")
-                        }
-                    }, null)
-                } catch (e: Exception) {
-                    Log.e("SimpleRealCameraView", "Failed to create capture session", e)
-                    onError("Failed to create capture session: ${e.message}")
+                            override fun onConfigureFailed(session: CameraCaptureSession) {
+                                Log.e("SimpleRealCameraView", "Camera session configuration failed")
+                                onError("Camera session configuration failed")
+                            }
+                        }, android.os.Handler(android.os.Looper.getMainLooper()))
+                    } catch (e: Exception) {
+                        Log.e("SimpleRealCameraView", "Failed to create capture session", e)
+                        onError("Failed to create capture session: ${e.message}")
+                    }
                 }
-            }
 
-            override fun onDisconnected(camera: CameraDevice) {
-                Log.d("SimpleRealCameraView", "Camera disconnected")
-            }
+                override fun onDisconnected(camera: CameraDevice) {
+                    Log.d("SimpleRealCameraView", "Camera disconnected")
+                }
 
-            override fun onError(camera: CameraDevice, error: Int) {
-                Log.e("SimpleRealCameraView", "Camera error: $error")
-                onError("Camera error: $error")
-            }
-        })
+                override fun onError(camera: CameraDevice, error: Int) {
+                    Log.e("SimpleRealCameraView", "Camera error: $error")
+                    onError("Camera error: $error")
+                }
+            }, android.os.Handler(android.os.Looper.getMainLooper()))
+        } else {
+            Log.e("SimpleRealCameraView", "Camera permission not granted")
+            onError("Camera permission not granted")
+        }
         
     } catch (e: Exception) {
         Log.e("SimpleRealCameraView", "Failed to initialize camera", e)
@@ -238,7 +245,8 @@ private fun simulateImageDetection(onImageRecognized: (ImageRecognition) -> Unit
                     id = "dialogue_001",
                     text = "Hello! I'm a test object. This is a simulated detection.",
                     language = "en",
-                    voiceId = "voice_001"
+                    voiceId = "voice_001",
+                    emotion = null // Default emotion
                 )
             ),
             createdAt = System.currentTimeMillis().toString(),

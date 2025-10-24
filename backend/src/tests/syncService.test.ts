@@ -3,7 +3,6 @@ import {
   getSyncStatus,
   getAvailableVoices,
 } from "../services/syncService";
-import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 
 // Mock axios
 jest.mock("axios");
@@ -34,20 +33,21 @@ describe("SyncService", () => {
 
       expect(result).toBeDefined();
       expect(result.jobId).toBeDefined();
-      expect(result.status).toBe("pending");
+      expect(result.status).toBe("processing");
       expect(mockedAxios.post).toHaveBeenCalledWith(
         "https://api.sync.com/v1/generate",
-        expect.objectContaining({
+        {
           text: request.text,
           language: request.language,
           voice_id: request.voiceId,
-          job_id: expect.any(String),
-        }),
-        expect.objectContaining({
-          headers: expect.objectContaining({
+          job_id: result.jobId,
+        },
+        {
+          headers: {
             Authorization: "Bearer test-api-key",
-          }),
-        }),
+            "Content-Type": "application/json",
+          },
+        }
       );
     });
 
@@ -62,11 +62,11 @@ describe("SyncService", () => {
       mockedAxios.post.mockRejectedValue(new Error("API Error"));
 
       await expect(generateSyncVideo(request)).rejects.toThrow(
-        "Failed to generate sync video",
+        "Failed to generate sync video"
       );
     });
 
-    it("should work in mock mode when API key is not configured", async () => {
+    it("should throw error when API key is not configured", async () => {
       delete process.env.SYNC_API_KEY;
 
       const request = {
@@ -75,10 +75,9 @@ describe("SyncService", () => {
         voiceId: "voice-1",
       };
 
-      const result = await generateSyncVideo(request);
-      expect(result).toBeDefined();
-      expect(result.status).toBe("pending");
-      expect(result.jobId).toBeDefined();
+      await expect(generateSyncVideo(request)).rejects.toThrow(
+        "Failed to generate sync video"
+      );
     });
 
     it("should handle missing voiceId", async () => {
@@ -99,7 +98,7 @@ describe("SyncService", () => {
         expect.objectContaining({
           voice_id: undefined,
         }),
-        expect.any(Object),
+        expect.any(Object)
       );
     });
   });
@@ -126,7 +125,6 @@ describe("SyncService", () => {
 
       expect(status).toBeDefined();
       expect(status.jobId).toBe(jobId);
-      // initial status should be pending for the created jobId
       expect(status.status).toBe("pending");
     });
 
@@ -162,7 +160,7 @@ describe("SyncService", () => {
           headers: {
             Authorization: "Bearer test-api-key",
           },
-        },
+        }
       );
     });
 
@@ -206,13 +204,13 @@ describe("SyncService", () => {
       });
 
       const result = await generateSyncVideo(request);
-      const jobId = "test-job-id"; // use API-provided jobId for status checks
+      const jobId = result.jobId;
 
       // Fast-forward time to trigger job completion
-      jest.advanceTimersByTime(3000);
+      jest.advanceTimersByTime(5000);
 
-      // Flush pending microtasks so the timeout callback runs in fake timers context
-      await Promise.resolve();
+      // Wait for async operations
+      await new Promise((resolve) => setImmediate(resolve));
 
       const status = await getSyncStatus(jobId);
 
