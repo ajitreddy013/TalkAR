@@ -14,6 +14,7 @@ import com.talkar.app.ui.viewmodels.SimpleARViewModel
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.Avatar
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,6 +28,14 @@ fun ARScreen(
     val recognizedImage by viewModel.recognizedImage.collectAsState()
     val talkingHeadVideo by viewModel.talkingHeadVideo.collectAsState()
     val recognizedAugmentedImage by viewModel.recognizedAugmentedImage.collectAsState()
+    
+    // Enhanced AR ViewModel
+    val enhancedARViewModel: EnhancedARViewModel = viewModel()
+    
+    // Observe ad content state
+    val currentAdContent by enhancedARViewModel.currentAdContent.collectAsState()
+    val isAdContentLoading by enhancedARViewModel.isAdContentLoading.collectAsState()
+    val adContentError by enhancedARViewModel.adContentError.collectAsState()
     
     // Show permission request UI if camera permission is not granted
     if (!hasCameraPermission) {
@@ -111,9 +120,13 @@ fun ARScreen(
                 .padding(paddingValues),
             onImageDetected = { image, avatar ->
                 android.util.Log.d("ARScreen", "Image detected: ${image.name} with avatar: ${avatar?.name}")
+                // Generate ad content when image is detected
+                enhancedARViewModel.generateAdContentForImage(image.id, image.name)
             },
             onImageLost = { imageId ->
                 android.util.Log.d("ARScreen", "Image lost: $imageId")
+                // Clear ad content when image is lost
+                enhancedARViewModel.clearAdContent()
             }
         )
     }
