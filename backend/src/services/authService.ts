@@ -61,92 +61,102 @@ const createDefaultAdmin = () => {
   }
 };
 
+// Helper function to clear users (for testing)
+export const clearUsers = () => {
+  users.clear();
+};
+
+// Helper function to get all users (for testing/admin)
+export const getAllUsersMap = () => {
+  return users;
+};
+
 // Initialize default admin
-createDefaultAdmin();
+if (process.env.NODE_ENV !== "test") {
+  createDefaultAdmin();
+}
 
 export const registerUser = async (request: RegisterRequest): Promise<User> => {
-  try {
-    // Check if user already exists
-    const existingUser = Array.from(users.values()).find(
-      (user) => user.email === request.email
-    );
-    if (existingUser) {
-      throw new Error("User already exists");
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(request.password, 10);
-
-    // Create user
-    const userId = uuidv4();
-    const user: User = {
-      id: userId,
-      email: request.email,
-      password: hashedPassword,
-      role: request.role || "user",
-      isActive: true,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    users.set(userId, user);
-
-    return user;
-  } catch (error) {
-    console.error("Registration error:", error);
-    throw new Error("Failed to register user");
+  // Check if user already exists
+  const existingUser = Array.from(users.values()).find(
+    (user) => user.email === request.email
+  );
+  if (existingUser) {
+    const error: any = new Error("User already exists");
+    error.status = 400;
+    throw error;
   }
+
+  // Hash password
+  const hashedPassword = await bcrypt.hash(request.password, 10);
+
+  // Create user
+  const userId = uuidv4();
+  const user: User = {
+    id: userId,
+    email: request.email,
+    password: hashedPassword,
+    role: request.role || "user",
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  users.set(userId, user);
+
+  return user;
 };
 
 export const loginUser = async (
   request: LoginRequest
 ): Promise<LoginResponse> => {
-  try {
-    // Find user by email
-    const user = Array.from(users.values()).find(
-      (u) => u.email === request.email
-    );
+  // Find user by email
+  const user = Array.from(users.values()).find(
+    (u) => u.email === request.email
+  );
 
-    if (!user) {
-      throw new Error("Invalid credentials");
-    }
-
-    if (!user.isActive) {
-      throw new Error("Account is deactivated");
-    }
-
-    // Verify password
-    const isValidPassword = await bcrypt.compare(
-      request.password,
-      user.password
-    );
-    if (!isValidPassword) {
-      throw new Error("Invalid credentials");
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      process.env.JWT_SECRET || "fallback-secret",
-      { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
-    );
-
-    return {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      },
-    };
-  } catch (error) {
-    console.error("Login error:", error);
-    throw new Error("Failed to login");
+  if (!user) {
+    const error: any = new Error("Invalid credentials");
+    error.status = 401;
+    throw error;
   }
+
+  if (!user.isActive) {
+    const error: any = new Error("Account is deactivated");
+    error.status = 403;
+    throw error;
+  }
+
+  // Verify password
+  const isValidPassword = await bcrypt.compare(
+    request.password,
+    user.password
+  );
+  if (!isValidPassword) {
+    const error: any = new Error("Invalid credentials");
+    error.status = 401;
+    throw error;
+  }
+
+  // Generate JWT token
+  const token = jwt.sign(
+    {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    },
+    process.env.JWT_SECRET || "fallback-secret",
+    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+  );
+
+  return {
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    },
+  };
 };
 
 export const verifyToken = (token: string): any => {
@@ -214,6 +224,10 @@ export const changePassword = async (
     return true;
   } catch (error) {
     console.error("Change password error:", error);
+    // Preserve specific validation error messages expected by tests/clients
+    if ((error as any)?.message) {
+      throw new Error((error as any).message);
+    }
     throw new Error("Failed to change password");
   }
 };

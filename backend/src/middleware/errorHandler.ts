@@ -4,7 +4,7 @@ export const errorHandler = (error: any, req: Request, res: Response, next: Next
   console.error('Error:', error);
   
   // Default error
-  let status = 500;
+  let status = error.status || 500;
   let message = 'Internal Server Error';
   
   // Handle specific error types

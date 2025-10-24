@@ -15,11 +15,12 @@ router.get("/images", async (req, res, next) => {
     const { page = 1, limit = 10, search } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
 
+    const likeOp = sequelize.getDialect() === "sqlite" ? Op.like : (Op as any).iLike || Op.like;
     const whereClause = search
       ? {
           [Op.or]: [
-            { name: { [Op.iLike]: `%${search}%` } },
-            { description: { [Op.iLike]: `%${search}%` } },
+            { name: { [likeOp]: `%${search}%` } },
+            { description: { [likeOp]: `%${search}%` } },
           ],
         }
       : {};
