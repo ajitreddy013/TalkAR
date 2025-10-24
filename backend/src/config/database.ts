@@ -6,13 +6,18 @@ dotenv.config();
 export const sequelize = new Sequelize({
   dialect: process.env.NODE_ENV === "production" ? "postgres" : "sqlite",
   storage:
-    process.env.NODE_ENV === "production" ? undefined : "./database.sqlite",
+    process.env.NODE_ENV === "production" 
+      ? undefined 
+      : process.env.NODE_ENV === "test"
+      ? ":memory:"
+      : "./database.sqlite",
   host: process.env.DB_HOST || "localhost",
   port: parseInt(process.env.DB_PORT || "5432"),
   database: process.env.DB_NAME || "talkar_db",
   username: process.env.DB_USER || "postgres",
   password: process.env.DB_PASSWORD || "password",
-  logging: process.env.NODE_ENV === "development" ? console.log : false,
+  // Enable SQL logging in test to aid debugging; keep quiet otherwise
+  logging: process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test" ? console.log : false,
   pool:
     process.env.NODE_ENV === "production"
       ? {
