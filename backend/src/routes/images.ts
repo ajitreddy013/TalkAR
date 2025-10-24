@@ -1,7 +1,7 @@
 import express from "express";
 import { Image, Dialogue } from "../models/Image";
 import { uploadImage, uploadToS3 } from "../services/uploadService";
-import { validateImageUpload } from "../middleware/validation";
+import { validateImageUpload, validateDialogue } from "../middleware/validation";
 import path from "path";
 
 const router = express.Router();
@@ -130,7 +130,7 @@ router.delete("/:id", async (req, res, next) => {
 });
 
 // Add dialogue to image
-router.post("/:id/dialogues", async (req, res, next) => {
+router.post("/:id/dialogues", validateDialogue, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { text, language, voiceId, isDefault } = req.body;

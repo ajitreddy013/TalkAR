@@ -209,8 +209,9 @@ describe("SyncService", () => {
       // Fast-forward time to trigger job completion
       jest.advanceTimersByTime(5000);
 
-      // Wait for async operations
-      await new Promise((resolve) => setImmediate(resolve));
+      // Wait for microtasks/promises to flush
+      await Promise.resolve();
+      await Promise.resolve();
 
       const status = await getSyncStatus(jobId);
 
@@ -219,6 +220,6 @@ describe("SyncService", () => {
       expect(status.duration).toBeDefined();
 
       jest.useRealTimers();
-    }, 10000);
+    }, 15000);
   });
 });

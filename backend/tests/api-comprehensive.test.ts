@@ -57,9 +57,22 @@ describe('TalkAR API Test Suite', () => {
         description: 'Test image for dialogue and script tests',
         imageUrl: '/uploads/test.jpg',
         thumbnailUrl: '/uploads/test-thumb.jpg',
-        isActive: true
-      });
+        isActive: true,
+        // Sequelize timestamps auto-managed
+      } as any);
       testImageId = testImage.id;
+
+      // Create initial dialogue for scripts API tests to avoid 404/500
+      const dialogue = await Dialogue.create({
+        imageId: testImageId,
+        text: 'Welcome to our store! This product is amazing.',
+        language: 'en',
+        voiceId: 'voice-1',
+        isDefault: true,
+        isActive: true,
+        // Sequelize timestamps auto-managed
+      } as any);
+      testDialogueId = dialogue.id;
     } catch (error) {
       console.error('Database setup error:', error);
     }
@@ -338,20 +351,15 @@ describe('TalkAR API Test Suite', () => {
 
     describe('DELETE /api/v1/images/:id', () => {
       it('should delete image successfully', async () => {
-        let image;
-        try {
-          image = await Image.create({
-            name: 'Delete Test',
-            description: 'To be deleted',
-            imageUrl: '/uploads/delete.jpg',
-            thumbnailUrl: '/uploads/delete-thumb.jpg',
-            isActive: true
-          });
-        } catch (err) {
-          const util = require('util');
-          console.error('Image.create error:', util.inspect(err, { depth: null }));
-          throw err;
-        }
+        // Create image inline with explicit timestamps (Sequelize auto-manages them)
+        const image = await Image.create({
+          name: 'Delete Test',
+          description: 'To be deleted',
+          imageUrl: '/uploads/delete.jpg',
+          thumbnailUrl: '/uploads/delete-thumb.jpg',
+          isActive: true,
+          // createdAt and updatedAt will be auto-set by Sequelize
+        } as any);
 
         const response = await request(app)
           .delete(`/api/v1/images/${image.id}`);
@@ -475,8 +483,9 @@ describe('TalkAR API Test Suite', () => {
           language: 'en',
           voiceId: 'voice-1',
           isDefault: false,
-          isActive: true
-        });
+          isActive: true,
+          // Sequelize timestamps auto-managed
+        } as any);
 
         const response = await request(app)
           .delete(`/api/v1/images/${testImageId}/dialogues/${dialogue.id}`);
