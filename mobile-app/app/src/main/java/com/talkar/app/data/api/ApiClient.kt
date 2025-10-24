@@ -54,6 +54,9 @@ interface ApiService {
     
     @POST("ai-pipeline/generate_ad_content")
     suspend fun generateAdContent(@Body request: AdContentGenerationRequest): Response<AdContentGenerationResponse>
+    
+    @POST("ai-pipeline/generate_ad_content_streaming")
+    suspend fun generateAdContentStreaming(@Body request: AdContentGenerationRequest): Response<AdContentGenerationResponse>
 }
 
 object ApiClient {

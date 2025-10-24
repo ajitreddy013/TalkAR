@@ -20,6 +20,7 @@ import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.AdContent
 import com.talkar.app.ui.components.EmotionalAvatarView // Add import for EmotionalAvatarView
+import com.talkar.app.ui.components.StreamingAvatarView // Add import for StreamingAvatarView
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.ui.components.AvatarPlaceholder
 import kotlinx.coroutines.delay
@@ -84,7 +85,7 @@ fun EnhancedARView(
     )
     
     // Avatar Overlay UI
-    AvatarOverlayUI(
+    StreamingAvatarView(
         isVisible = viewModel.isAvatarVisible.collectAsState().value,
         avatar = currentAvatar,
         image = currentImage,
@@ -97,196 +98,6 @@ fun EnhancedARView(
 }
 
 // ARCore functions removed for simplified implementation
-
-/**
- * Avatar Overlay UI Component
- */
-@Composable
-private fun AvatarOverlayUI(
-    isVisible: Boolean,
-    avatar: Avatar?,
-    image: BackendImage?,
-    adContent: AdContent? = null,
-    isAdContentLoading: Boolean = false,
-    adContentError: String? = null,
-    onAvatarTapped: () -> Unit,
-    isTracking: Boolean = false
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        if (isVisible && image != null) {
-            // Show avatar when available
-            if (avatar != null) {
-                // Emotional Avatar Overlay
-                EmotionalAvatarView(
-                    isVisible = true,
-                    avatar = avatar,
-                    image = image,
-                    emotion = "neutral", // This will be updated based on dialogue emotion
-                    isTalking = true, // This will be controlled by video playback
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .size(200.dp)
-                )
-            } else {
-                // Avatar placeholder
-                AvatarPlaceholder(
-                    isVisible = true,
-                    modifier = Modifier
-                        .size(150.dp)
-                        .padding(16.dp)
-                )
-            }
-            
-            // Detection Status
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Text(
-                        text = "🎯 ${image?.name ?: "Image"} Detected",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-            }
-            
-            // Ad Content Overlay
-            if (isAdContentLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 72.dp),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Generating ad content...",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                }
-            } else if (adContentError != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 72.dp),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Text(
-                            text = "Error: $adContentError",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(16.dp)
-                        )
-                    }
-                }
-            } else if (adContent != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 72.dp),
-                    contentAlignment = Alignment.TopCenter
-                ) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Text(
-                                text = "📢 Ad Script",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = adContent.script,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            if (adContent.audioUrl != null) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Audio: ${adContent.audioUrl}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                )
-                            }
-                            if (adContent.videoUrl != null) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Video: ${adContent.videoUrl}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Info text below avatar
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 32.dp),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Text(
-                    text = "Tap to replay dialogue",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-        
-        // Show scanning animation when not tracking
-        if (!isTracking) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                // Simple scanning indicator
-                CircularProgressIndicator(
-                    modifier = Modifier.size(100.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 8.dp
-                )
-            }
-        }
-    }
-}
 
 /**
  * Simple AR Camera View for testing
