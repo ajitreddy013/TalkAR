@@ -8,7 +8,8 @@ import com.talkar.app.data.models.ImageRecognition
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -67,6 +68,9 @@ class OptimalImageARService(private val context: Context) {
     // Cache and statistics
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
     private val recognitionStats = ConcurrentHashMap<String, Int>()
+
+    // Coroutine scope for background operations
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     enum class RecognitionQuality {
         EXCELLENT, GOOD, FAIR, POOR, UNKNOWN
@@ -585,7 +589,7 @@ class OptimalImageARService(private val context: Context) {
      * Start optimal monitoring
      */
     private fun startOptimalMonitoring() {
-        GlobalScope.launch(Dispatchers.IO) {
+        coroutineScope.launch {
             while (_isTracking.value) {
                 try {
                     session?.let { session ->

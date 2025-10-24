@@ -11,8 +11,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import com.talkar.app.ui.components.EnhancedCameraView
+import com.talkar.app.ui.components.AdContentOverlay
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
 import com.talkar.app.data.services.EnhancedARService
+import com.talkar.app.data.models.AdContent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +28,8 @@ fun EnhancedARScreen(
     val recognizedImage by viewModel.recognizedImage.collectAsState()
     val talkingHeadVideo by viewModel.talkingHeadVideo.collectAsState()
     val recognizedAugmentedImage by viewModel.recognizedAugmentedImage.collectAsState()
+    val adContent by viewModel.adContent.collectAsState()
+    val showAdContent by viewModel.showAdContent.collectAsState()
     
     // Show permission request UI if camera permission is not granted
     if (!hasCameraPermission) {
@@ -96,21 +100,36 @@ fun EnhancedARScreen(
             )
         }
     ) { paddingValues ->
-        // Enhanced Camera View with AR Overlay and real-time feedback
-        EnhancedCameraView(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            onImageRecognized = { imageRecognition ->
-                viewModel.recognizeImage(imageRecognition)
-            },
-            onAugmentedImageRecognized = { augmentedImage ->
-                viewModel.setRecognizedAugmentedImage(augmentedImage)
-            },
-            onError = { errorMessage ->
-                viewModel.setArError(errorMessage)
-            },
-            isImageDetected = recognizedImage != null
-        )
+        Box(modifier = modifier.fillMaxSize()) {
+            // Enhanced Camera View with AR Overlay and real-time feedback
+            EnhancedCameraView(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                onImageRecognized = { imageRecognition ->
+                    viewModel.recognizeImage(imageRecognition)
+                },
+                onAugmentedImageRecognized = { augmentedImage ->
+                    viewModel.setRecognizedAugmentedImage(augmentedImage)
+                },
+                onError = { errorMessage ->
+                    viewModel.setArError(errorMessage)
+                },
+                isImageDetected = recognizedImage != null
+            )
+            
+            // Ad Content Overlay
+            AdContentOverlay(
+                adContent = adContent,
+                isVisible = showAdContent,
+                isLoading = uiState.isGeneratingAdContent,
+                error = uiState.adContentError,
+                onDismiss = { viewModel.hideAdContent() },
+                onRetry = { 
+                    // TODO: Implement retry logic
+                    viewModel.hideAdContent()
+                }
+            )
+        }
     }
 }

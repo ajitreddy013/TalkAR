@@ -7,7 +7,10 @@ import com.google.ar.core.LightEstimate.State
 import com.talkar.app.data.services.EnhancedARService
 import com.talkar.app.data.services.EnhancedARService.LightingQuality
 
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
@@ -19,6 +22,7 @@ class EnvironmentalRealismTest(private val context: Context) {
     
     private val tag = "EnvironmentalRealismTest"
     private val arService = EnhancedARService(context)
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     /**
      * Test light estimation under different simulated conditions
@@ -26,7 +30,7 @@ class EnvironmentalRealismTest(private val context: Context) {
     fun testLightEstimation() {
         Log.d(tag, "Starting light estimation tests...")
         
-        GlobalScope.launch {
+        coroutineScope.launch {
             try {
                 // Initialize AR service
                 val initialized = arService.initialize()
@@ -193,5 +197,14 @@ class EnvironmentalRealismTest(private val context: Context) {
         Log.d(tag, "Testing ambient audio pipeline...")
         
         Log.d(tag, "Complete environmental realism pipeline test finished")
+    }
+    
+    /**
+     * Clean up resources and cancel coroutines
+     */
+    fun cleanup() {
+        // Cancel any running coroutines
+        coroutineScope.cancel()
+        Log.d(tag, "Environmental realism test resources cleaned up")
     }
 }

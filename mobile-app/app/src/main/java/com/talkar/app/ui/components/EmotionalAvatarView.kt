@@ -6,16 +6,27 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.ui.graphics.StrokeCap
+// ARCore imports removed for now - using simplified implementation
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
 import kotlinx.coroutines.*
-
 
 /**
  * Emotional Avatar View with facial expression animations
@@ -29,7 +40,21 @@ fun EmotionalAvatarView(
     isTalking: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    if (!isVisible || avatar == null || image == null) {
+    // Fade animation state
+    var showAvatar by remember { mutableStateOf(false) }
+    val alpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = 500)
+    ) { if (!isVisible) showAvatar = false }
+    
+    // Update showAvatar when isVisible changes
+    LaunchedEffect(isVisible) {
+        if (isVisible) {
+            showAvatar = true
+        }
+    }
+    
+    if (!showAvatar || avatar == null || image == null) {
         return
     }
 
@@ -84,7 +109,8 @@ fun EmotionalAvatarView(
     Card(
         modifier = modifier
             .size(200.dp)
-            .padding(16.dp),
+            .padding(16.dp)
+            .alpha(alpha), // Apply fade animation
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Box(
@@ -115,8 +141,42 @@ fun EmotionalAvatarView(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+            
+            // Progress bar during speech
+            if (isTalking) {
+                SpeechProgressBar(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp)
+                )
+            }
         }
     }
+}
+
+/**
+ * Speech progress bar visualization
+ */
+@Composable
+fun SpeechProgressBar(modifier: Modifier = Modifier) {
+    var progress by remember { mutableStateOf(0f) }
+    
+    LaunchedEffect(Unit) {
+        while (true) {
+            progress = (progress + 0.05f) % 1f
+            delay(100)
+        }
+    }
+    
+    LinearProgressIndicator(
+        progress = progress,
+        modifier = modifier
+            .width(120.dp)
+            .height(4.dp)
+            .clip(RoundedCornerShape(2.dp)),
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.surfaceVariant
+    )
 }
 
 /**

@@ -6,6 +6,7 @@ import com.talkar.app.data.repository.SyncRepository
 import com.talkar.app.data.api.ApiClient
 import com.talkar.app.data.local.ImageDatabase
 import com.talkar.app.data.services.ARImageRecognitionService
+import com.talkar.app.data.services.UserPreferencesService
 
 class TalkARApplication : Application() {
     
@@ -31,6 +32,10 @@ class TalkARApplication : Application() {
         ARImageRecognitionService(this)
     }
     
+    val userPreferencesService by lazy {
+        UserPreferencesService.getInstance(this)
+    }
+    
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -41,4 +46,3 @@ class TalkARApplication : Application() {
             private set
     }
 }
-

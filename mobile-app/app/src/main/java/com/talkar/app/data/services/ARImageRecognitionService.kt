@@ -8,9 +8,10 @@ import com.talkar.app.data.models.ImageRecognition
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import java.util.concurrent.ConcurrentHashMap
 
@@ -31,6 +32,9 @@ class ARImageRecognitionService(private val context: Context) {
     
     // Cache for recognized images to avoid duplicate processing
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
+    
+    // Coroutine scope for background operations
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     /**
      * Initialize ARCore session and image database
@@ -105,7 +109,7 @@ class ARImageRecognitionService(private val context: Context) {
             Log.d(tag, "Starting to load images from backend on background thread...")
             
             // Move heavy image processing to background thread to avoid ANR
-            GlobalScope.launch(Dispatchers.IO) {
+            coroutineScope.launch {
                 try {
                     Log.d(tag, "Creating test images for AR recognition on background thread")
                     
@@ -730,7 +734,7 @@ class ARImageRecognitionService(private val context: Context) {
      * Start frame processing loop on background thread
      */
     private fun startFrameProcessing() {
-        GlobalScope.launch(Dispatchers.IO) {
+        coroutineScope.launch {
             Log.d(tag, "Starting frame processing loop on background thread")
             
             while (_isTracking.value) {
