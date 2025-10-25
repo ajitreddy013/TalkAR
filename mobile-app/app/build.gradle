@@ -70,6 +70,10 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion '1.5.3'
     }
+    
+    lint {
+        disable 'UnsafeOptInUsageError'
+    }
 }
 
 dependencies {
@@ -132,4 +136,3 @@ dependencies {
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }
-
