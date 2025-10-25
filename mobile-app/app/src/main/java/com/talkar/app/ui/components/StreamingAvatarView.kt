@@ -27,6 +27,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import android.view.ViewGroup
 import androidx.compose.runtime.DisposableEffect
+import com.talkar.app.ui.components.EmotionalAvatarView
+import androidx.compose.animation.Crossfade
 
 /**
  * Streaming Avatar View that handles partial playback
@@ -52,6 +54,8 @@ fun StreamingAvatarView(
     var isPlaying by remember { mutableStateOf(false) }
     var hasError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showVideo by remember { mutableStateOf(false) }
+    var audioLevel by remember { mutableStateOf(0f) }
     
     // Fade animation for transitions
     val avatarAlpha by animateFloatAsState(
@@ -65,8 +69,19 @@ fun StreamingAvatarView(
             if (audioUrl.isNotEmpty()) {
                 Log.d("StreamingAvatarView", "Initializing audio streaming for URL: $audioUrl")
                 @Suppress("UnsafeOptInUsageError")
-                initializeAudioStreaming(context, audioUrl)
+                initializeAudioStreaming(context, audioUrl, isPlaying) { playing ->
+                    isPlaying = playing
+                }
             }
+        }
+    }
+    
+    // Check if video is ready and switch to video view
+    LaunchedEffect(adContent?.videoUrl) {
+        if (!adContent?.videoUrl.isNullOrEmpty()) {
+            // Add a small delay to ensure smooth transition
+            kotlinx.coroutines.delay(500)
+            showVideo = true
         }
     }
     
@@ -78,52 +93,55 @@ fun StreamingAvatarView(
     ) {
         if (isVisible && image != null) {
             // Show different views based on state
-            when {
-                isAdContentLoading -> {
-                    // Loading state
-                    LoadingAvatarView()
-                }
-                adContentError != null -> {
-                    // Error state
-                    ErrorAvatarView(error = adContentError)
-                }
-                isBuffering -> {
-                    // Buffering state with placeholder
-                    BufferingAvatarView(
-                        avatar = avatar,
-                        image = image
-                    )
-                }
-                adContent?.videoUrl != null && adContent.videoUrl.isNotEmpty() -> {
-                    // Show lipsync video when available
-                    LipSyncVideoView(
-                        videoUrl = adContent.videoUrl,
-                        isPlaying = isPlaying,
-                        avatar = avatar,
-                        image = image
-                    )
-                }
-                adContent?.audioUrl != null && adContent.audioUrl.isNotEmpty() -> {
-                    // Show emotional avatar with audio playback
-                    EmotionalAvatarView(
-                        isVisible = true,
-                        avatar = avatar,
-                        image = image,
-                        emotion = "neutral",
-                        isTalking = isPlaying,
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .size(200.dp)
-                    )
-                }
-                else -> {
-                    // Default placeholder
-                    AvatarPlaceholder(
-                        isVisible = true,
-                        modifier = Modifier
-                            .size(150.dp)
-                            .padding(16.dp)
-                    )
+            Crossfade(targetState = showVideo, animationSpec = tween(durationMillis = 500)) { showVideoState ->
+                when {
+                    isAdContentLoading -> {
+                        // Loading state
+                        LoadingAvatarView()
+                    }
+                    adContentError != null -> {
+                        // Error state
+                        ErrorAvatarView(error = adContentError)
+                    }
+                    isBuffering -> {
+                        // Buffering state with placeholder
+                        BufferingAvatarView(
+                            avatar = avatar,
+                            image = image
+                        )
+                    }
+                    showVideoState && adContent?.videoUrl != null && adContent.videoUrl.isNotEmpty() -> {
+                        // Show lipsync video when available with smooth transition
+                        LipSyncVideoView(
+                            videoUrl = adContent.videoUrl,
+                            isPlaying = isPlaying,
+                            avatar = avatar,
+                            image = image
+                        )
+                    }
+                    adContent?.audioUrl != null && adContent.audioUrl.isNotEmpty() -> {
+                        // Show emotional avatar with audio playback
+                        EmotionalAvatarView(
+                            isVisible = true,
+                            avatar = avatar,
+                            image = image,
+                            emotion = "neutral",
+                            isTalking = isPlaying,
+                            audioLevel = audioLevel,
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .size(200.dp)
+                        )
+                    }
+                    else -> {
+                        // Default placeholder
+                        AvatarPlaceholder(
+                            isVisible = true,
+                            modifier = Modifier
+                                .size(150.dp)
+                                .padding(16.dp)
+                        )
+                    }
                 }
             }
         }
@@ -290,7 +308,7 @@ private fun LipSyncVideoView(
                             val mediaItem = MediaItem.fromUri(Uri.parse(videoUrl))
                             player.setMediaItem(mediaItem)
                             player.prepare()
-                            player.playWhenReady = isPlaying
+                            player.playWhenReady = true // Start playing immediately when video is shown
                         }
                         
                         this.player = exoPlayer
@@ -302,7 +320,7 @@ private fun LipSyncVideoView(
                     }
                 },
                 update = { playerView ->
-                    exoPlayer?.playWhenReady = isPlaying
+                    exoPlayer?.playWhenReady = true // Ensure video keeps playing
                 },
                 modifier = Modifier.fillMaxSize()
             )
@@ -330,11 +348,10 @@ private fun LipSyncVideoView(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Video",
+                            text = "Live",
                             style = MaterialTheme.typography.bodySmall
                         )
-                    }
-                }
+                    }\n                }
             }
         }
     }
@@ -351,14 +368,14 @@ private fun LipSyncVideoView(
  * Initialize audio streaming service for partial playback
  */
 @androidx.media3.common.util.UnstableApi
-private fun initializeAudioStreaming(context: Context, audioUrl: String) {
+private fun initializeAudioStreaming(context: Context, audioUrl: String, isPlaying: Boolean, onPlayingStateChange: (Boolean) -> Unit) {
     try {
         val streamingService = AudioStreamingService.getInstance(context)
         
         streamingService.startStreaming(audioUrl, object : AudioStreamingService.PlaybackListener {
             override fun onPlaybackStarted() {
                 Log.d("StreamingAvatarView", "Audio playback started")
-                // Update UI to show playing state
+                onPlayingStateChange(true)
             }
             
             override fun onBufferingStarted() {
@@ -373,12 +390,12 @@ private fun initializeAudioStreaming(context: Context, audioUrl: String) {
             
             override fun onPlaybackCompleted() {
                 Log.d("StreamingAvatarView", "Audio playback completed")
-                // Update UI to show completion state
+                onPlayingStateChange(false)
             }
             
             override fun onPlaybackError(error: Exception) {
                 Log.e("StreamingAvatarView", "Audio playback error", error)
-                // Update UI to show error state
+                onPlayingStateChange(false)
             }
         })
     } catch (e: Exception) {
