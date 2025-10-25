@@ -6,16 +6,18 @@ import androidx.room.RoomDatabase
 import android.content.Context
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.models.ScannedProduct
+import com.talkar.app.data.models.Feedback
 
 @Database(
-    entities = [ImageRecognition::class, ScannedProduct::class],
-    version = 2,
+    entities = [ImageRecognition::class, ScannedProduct::class, Feedback::class],
+    version = 3,
     exportSchema = false
 )
 abstract class ImageDatabase : RoomDatabase() {
     
     abstract fun imageDao(): ImageDao
     abstract fun scannedProductDao(): ScannedProductDao
+    abstract fun feedbackDao(): FeedbackDao
     
     companion object {
         @Volatile

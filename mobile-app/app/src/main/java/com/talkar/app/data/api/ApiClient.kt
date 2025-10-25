@@ -57,6 +57,10 @@ interface ApiService {
     
     @POST("ai-pipeline/generate_ad_content_streaming")
     suspend fun generateAdContentStreaming(@Body request: AdContentGenerationRequest): Response<AdContentGenerationResponse>
+    
+    // Feedback endpoint
+    @POST("feedback")
+    suspend fun sendFeedback(@Body request: FeedbackRequest): Response<FeedbackResponse>
 }
 
 object ApiClient {
@@ -144,4 +148,17 @@ data class AdContentGenerationResponse(
     val script: String? = null,
     val audio_url: String? = null,
     val video_url: String? = null
+)
+
+// Feedback models
+data class FeedbackRequest(
+    val adContentId: String,
+    val productName: String,
+    val isPositive: Boolean,
+    val timestamp: Long
+)
+
+data class FeedbackResponse(
+    val success: Boolean,
+    val message: String?
 )

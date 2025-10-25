@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.talkar.app.data.models.AdContent
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
+import com.talkar.app.data.models.Feedback
 import com.talkar.app.data.repository.ImageRepository
 import com.talkar.app.TalkARApplication
 import com.talkar.app.data.services.AdContentGenerationService
 import com.talkar.app.data.services.EnhancedARService
+import com.talkar.app.data.services.FeedbackSyncService
 import com.google.ar.core.LightEstimate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -88,10 +90,12 @@ class EnhancedARViewModel(
     
     // Services
     private val adContentService = AdContentGenerationService.getInstance()
+    private val feedbackSyncService = FeedbackSyncService.getInstance()
     
     init {
         loadBackendData()
         initializeARService()
+        startFeedbackSync()
     }
     
     /**
@@ -111,6 +115,23 @@ class EnhancedARViewModel(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error initializing AR service: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Start periodic feedback sync
+     */
+    private fun startFeedbackSync() {
+        viewModelScope.launch {
+            try {
+                // Sync feedback periodically
+                while (true) {
+                    feedbackSyncService.syncFeedback()
+                    kotlinx.coroutines.delay(30000) // Sync every 30 seconds
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in feedback sync loop", e)
             }
         }
     }
@@ -239,6 +260,42 @@ class EnhancedARViewModel(
     fun onAvatarTapped() {
         Log.d(TAG, "Avatar tapped")
         // TODO: Implement avatar interaction (play script, lip-sync, etc.)
+    }
+    
+    /**
+     * Handle feedback from user
+     */
+    fun onFeedbackReceived(isPositive: Boolean) {
+        Log.d(TAG, "Feedback received: ${if (isPositive) "positive" else "negative"}")
+        
+        // Save feedback to local database
+        viewModelScope.launch {
+            try {
+                val feedback = Feedback(
+                    id = UUID.randomUUID().toString(),
+                    adContentId = _currentAdContent.value?.productName ?: "unknown",
+                    productName = _currentImage.value?.name ?: "unknown",
+                    isPositive = isPositive,
+                    timestamp = System.currentTimeMillis(),
+                    synced = false
+                )
+                
+                val database = com.talkar.app.data.local.ImageDatabase.getDatabase(TalkARApplication.instance)
+                database.feedbackDao().insert(feedback)
+                
+                Log.d(TAG, "Feedback saved locally: ${feedback.id}")
+                
+                // Try to sync immediately
+                val synced = feedbackSyncService.syncFeedbackItem(feedback)
+                if (synced) {
+                    Log.d(TAG, "Feedback synced immediately: ${feedback.id}")
+                } else {
+                    Log.d(TAG, "Feedback will be synced later: ${feedback.id}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving feedback", e)
+            }
+        }
     }
     
     /**
