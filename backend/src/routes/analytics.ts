@@ -178,6 +178,23 @@ router.post("/log-performance", async (req, res, next) => {
   }
 });
 
+// Get recent AI pipeline events
+router.get("/ai-pipeline-events", async (req, res, next) => {
+  try {
+    const analytics = AnalyticsService.getAnalytics();
+    
+    console.log(`[ANALYTICS] AI pipeline events requested`);
+
+    res.json({
+      success: true,
+      aiPipelineEvents: analytics.aiPipelineEvents,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Cleanup old events (admin endpoint)
 router.post("/cleanup", async (req, res, next) => {
   try {

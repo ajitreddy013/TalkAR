@@ -1,9 +1,11 @@
 import { Image, Dialogue } from "./Image";
 import { Avatar } from "./Avatar";
 import { ImageAvatarMapping } from "./ImageAvatarMapping";
+import { AIConfig } from "./AIConfig";
 
 // Define all model associations
 export function defineAssociations() {
+  // AIConfig model doesn't need associations
   // Image associations are already defined in Image.ts
 
   // Avatar associations

@@ -6,6 +6,7 @@ import { ImageAvatarMapping } from "../models/ImageAvatarMapping";
 import fs from "fs";
 import path from "path";
 import { PerformanceMetricsService } from "./performanceMetricsService";
+import { AnalyticsService } from "./analyticsService";
 
 interface ScriptGenerationRequest {
   imageId: string;
@@ -126,6 +127,15 @@ export class AIPipelineService {
     const requestId = uuidv4();
     const startTime = Date.now();
     
+    // Log AI pipeline event
+    AnalyticsService.logAIPipelineEvent({
+      jobId: requestId,
+      eventType: 'ad_content_generation',
+      details: `Starting ad content generation for product: ${productName}`,
+      status: 'started',
+      productName: productName
+    });
+    
     // Start performance tracking
     PerformanceMetricsService.startTracking(requestId, productName);
     
@@ -179,6 +189,15 @@ export class AIPipelineService {
       console.error("Ad content generation error:", error);
       PerformanceMetricsService.recordFailure(requestId, error instanceof Error ? error.message : "Unknown error");
       
+      // Log AI pipeline error
+      AnalyticsService.logAIPipelineEvent({
+        jobId: requestId,
+        eventType: 'error',
+        details: `Ad content generation failed for product: ${productName} - ${error instanceof Error ? error.message : "Unknown error"}`,
+        status: 'failed',
+        productName: productName
+      });
+      
       // Re-throw with more context
       if (error instanceof Error) {
         throw new Error(`Failed to generate ad content for product "${productName}": ${error.message}`);
@@ -201,6 +220,15 @@ export class AIPipelineService {
     const requestId = uuidv4();
     const startTime = Date.now();
     
+    // Log AI pipeline event
+    AnalyticsService.logAIPipelineEvent({
+      jobId: requestId,
+      eventType: 'ad_content_generation',
+      details: `Starting streaming ad content generation for product: ${productName}`,
+      status: 'started',
+      productName: productName
+    });
+    
     // Start performance tracking
     PerformanceMetricsService.startTracking(requestId, productName);
     
@@ -216,9 +244,29 @@ export class AIPipelineService {
 
       // Step 1: Generate script for the product
       const scriptStartTime = Date.now();
+      
+      // Log script generation start
+      AnalyticsService.logAIPipelineEvent({
+        jobId: requestId,
+        eventType: 'script_generation',
+        details: `Starting script generation for product: ${productName}`,
+        status: 'started',
+        productName: productName
+      });
+      
       const script = await this.generateProductScript(productName);
       const scriptDuration = Date.now() - scriptStartTime;
       PerformanceMetricsService.recordScriptGeneration(requestId, scriptDuration);
+      
+      // Log script generation completion
+      AnalyticsService.logAIPipelineEvent({
+        jobId: requestId,
+        eventType: 'script_generation',
+        details: `Script generation completed for product: ${productName}`,
+        status: 'completed',
+        productName: productName,
+        duration: scriptDuration
+      });
       
       // Step 2: Implement async/await + parallel API calls for reduced latency
       // Use Promise.all to start audio generation with streaming optimization
@@ -237,14 +285,43 @@ export class AIPipelineService {
       // In a real streaming implementation, we would start a process here
       // that can be updated when the audio URL becomes available
       
+      // Log audio generation start
+      AnalyticsService.logAIPipelineEvent({
+        jobId: requestId,
+        eventType: 'audio_generation',
+        details: `Starting audio generation for product: ${productName}`,
+        status: 'started',
+        productName: productName
+      });
+      
       // Wait for audio generation to complete
       const audioResponse = await audioPromise;
       const audioDuration = Date.now() - audioStartTime;
       PerformanceMetricsService.recordAudioGeneration(requestId, audioDuration);
       
+      // Log audio generation completion
+      AnalyticsService.logAIPipelineEvent({
+        jobId: requestId,
+        eventType: 'audio_generation',
+        details: `Audio generation completed for product: ${productName}`,
+        status: 'completed',
+        productName: productName,
+        duration: audioDuration
+      });
+      
       // Step 3: Generate lip-sync video as soon as audio is available
       // This enables streaming by starting lipsync immediately after audio generation completes
       const videoStartTime = Date.now();
+      
+      // Log lipsync generation start
+      AnalyticsService.logAIPipelineEvent({
+        jobId: requestId,
+        eventType: 'lipsync_generation',
+        details: `Starting lipsync generation for product: ${productName}`,
+        status: 'started',
+        productName: productName
+      });
+      
       const lipSyncResponse = await this.generateLipSyncStreaming({
         imageId: "default",
         audioUrl: audioResponse.audioUrl,
@@ -255,6 +332,16 @@ export class AIPipelineService {
       const totalDuration = Date.now() - startTime;
       PerformanceMetricsService.recordVideoCompletion(requestId, videoDuration, totalDuration);
       
+      // Log lipsync generation completion
+      AnalyticsService.logAIPipelineEvent({
+        jobId: requestId,
+        eventType: 'lipsync_generation',
+        details: `Lipsync generation completed for product: ${productName}`,
+        status: 'completed',
+        productName: productName,
+        duration: videoDuration
+      });
+      
       // Return the complete ad content
       return {
         script,
@@ -264,6 +351,15 @@ export class AIPipelineService {
     } catch (error) {
       console.error("Ad content generation error:", error);
       PerformanceMetricsService.recordFailure(requestId, error instanceof Error ? error.message : "Unknown error");
+      
+      // Log AI pipeline error
+      AnalyticsService.logAIPipelineEvent({
+        jobId: requestId,
+        eventType: 'error',
+        details: `Ad content generation failed for product: ${productName} - ${error instanceof Error ? error.message : "Unknown error"}`,
+        status: 'failed',
+        productName: productName
+      });
       
       // Re-throw with more context
       if (error instanceof Error) {
