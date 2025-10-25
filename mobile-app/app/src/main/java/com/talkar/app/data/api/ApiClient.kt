@@ -58,6 +58,10 @@ interface ApiService {
     @POST("ai-pipeline/generate_ad_content_streaming")
     suspend fun generateAdContentStreaming(@Body request: AdContentGenerationRequest): Response<AdContentGenerationResponse>
     
+    // Conversational Context endpoint
+    @POST("ai-pipeline/conversational_query")
+    suspend fun processConversationalQuery(@Body request: ConversationalQueryRequest): Response<ConversationalQueryResponse>
+    
     // Feedback endpoint
     @POST("feedback")
     suspend fun sendFeedback(@Body request: FeedbackRequest): Response<FeedbackResponse>
@@ -135,6 +139,20 @@ data class ScriptGenerationResponse(
 data class UserPreferences(
     val language: String? = null,
     val preferredTone: String? = null
+)
+
+// Conversational Context models
+data class ConversationalQueryRequest(
+    val query: String,
+    val imageId: String? = null,
+    val context: Map<String, Any>? = null
+)
+
+data class ConversationalQueryResponse(
+    val success: Boolean,
+    val response: String,
+    val audioUrl: String? = null,
+    val emotion: String? = null
 )
 
 // Ad Content Generation models
