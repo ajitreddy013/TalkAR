@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -39,6 +40,7 @@ class AudioStreamingService private constructor(private val context: Context) {
     /**
      * Initialize the ExoPlayer instance
      */
+    @androidx.media3.common.util.UnstableApi
     private fun initializePlayer() {
         if (player == null) {
             player = ExoPlayer.Builder(context)
@@ -103,6 +105,7 @@ class AudioStreamingService private constructor(private val context: Context) {
     /**
      * Start streaming audio from URL
      */
+    @androidx.media3.common.util.UnstableApi
     fun startStreaming(audioUrl: String, listener: PlaybackListener) {
         try {
             Log.d(tag, "Starting streaming for URL: $audioUrl")
@@ -134,6 +137,7 @@ class AudioStreamingService private constructor(private val context: Context) {
     /**
      * Stop streaming and release resources
      */
+    @androidx.media3.common.util.UnstableApi
     fun stopStreaming() {
         Log.d(tag, "Stopping streaming")
         bufferingJob?.cancel()
@@ -145,6 +149,7 @@ class AudioStreamingService private constructor(private val context: Context) {
     /**
      * Pause streaming
      */
+    @androidx.media3.common.util.UnstableApi
     fun pauseStreaming() {
         player?.playWhenReady = false
     }
@@ -152,6 +157,7 @@ class AudioStreamingService private constructor(private val context: Context) {
     /**
      * Resume streaming
      */
+    @androidx.media3.common.util.UnstableApi
     fun resumeStreaming() {
         player?.playWhenReady = true
     }
@@ -159,6 +165,7 @@ class AudioStreamingService private constructor(private val context: Context) {
     /**
      * Check if audio is currently playing
      */
+    @androidx.media3.common.util.UnstableApi
     fun isPlaying(): Boolean {
         return player?.isPlaying ?: false
     }
@@ -166,6 +173,7 @@ class AudioStreamingService private constructor(private val context: Context) {
     /**
      * Get current playback position in milliseconds
      */
+    @androidx.media3.common.util.UnstableApi
     fun getCurrentPosition(): Long {
         return player?.currentPosition ?: 0
     }
@@ -173,6 +181,7 @@ class AudioStreamingService private constructor(private val context: Context) {
     /**
      * Get buffered position in milliseconds
      */
+    @androidx.media3.common.util.UnstableApi
     fun getBufferedPosition(): Long {
         return player?.bufferedPosition ?: 0
     }

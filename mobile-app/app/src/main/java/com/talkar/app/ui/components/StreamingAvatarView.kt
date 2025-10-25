@@ -64,6 +64,7 @@ fun StreamingAvatarView(
         adContent?.audioUrl?.let { audioUrl ->
             if (audioUrl.isNotEmpty()) {
                 Log.d("StreamingAvatarView", "Initializing audio streaming for URL: $audioUrl")
+                @Suppress("UnsafeOptInUsageError")
                 initializeAudioStreaming(context, audioUrl)
             }
         }
@@ -347,8 +348,9 @@ private fun LipSyncVideoView(
 }
 
 /**
- * Initialize audio streaming service
+ * Initialize audio streaming service for partial playback
  */
+@androidx.media3.common.util.UnstableApi
 private fun initializeAudioStreaming(context: Context, audioUrl: String) {
     try {
         val streamingService = AudioStreamingService.getInstance(context)

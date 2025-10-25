@@ -17,6 +17,7 @@ fun AdContentOverlay(
     adContent: AdContent?,
     isVisible: Boolean,
     isLoading: Boolean,
+    isVideoLoading: Boolean, // New parameter for video loading state
     error: String?,
     onDismiss: () -> Unit,
     onRetry: () -> Unit,
@@ -52,7 +53,7 @@ fun AdContentOverlay(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                // Loading state
+                // Loading state for ad content generation
                 if (isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(48.dp),
@@ -64,6 +65,46 @@ fun AdContentOverlay(
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                }
+                // Video loading state (new)
+                else if (isVideoLoading && adContent != null) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(48.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Loading video...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Show partial content while loading
+                    // Product name
+                    Text(
+                        text = adContent.productName,
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Script content
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Text(
+                            text = adContent.script,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
                 }
                 // Error state
                 else if (error != null) {

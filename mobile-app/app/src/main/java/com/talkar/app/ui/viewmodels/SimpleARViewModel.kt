@@ -538,5 +538,6 @@ data class SimpleARUiState(
     val error: String? = null,
     val arError: String? = null,
     val isGeneratingAdContent: Boolean = false,
+    val isVideoLoading: Boolean = false, // New state for video loading
     val adContentError: String? = null
 )

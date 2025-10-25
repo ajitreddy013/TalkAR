@@ -118,15 +118,17 @@ fun EnhancedARScreen(
                 isImageDetected = recognizedImage != null
             )
             
-            // Ad Content Overlay
+            // Ad Content Overlay with all new features
             AdContentOverlay(
                 adContent = adContent,
                 isVisible = showAdContent,
                 isLoading = uiState.isGeneratingAdContent,
+                isVideoLoading = uiState.isVideoLoading, // New parameter for video loading state
                 error = uiState.adContentError,
                 onDismiss = { viewModel.hideAdContent() },
                 onRetry = { 
-                    // TODO: Implement retry logic
+                    // Implement retry logic using the image/product info
+                    // This would call the retry function in the ViewModel
                     viewModel.hideAdContent()
                 }
             )
