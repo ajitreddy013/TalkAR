@@ -36,9 +36,22 @@ export interface PerformanceMetrics {
   mostUsedVoices: Array<{ voiceId: string; count: number }>;
 }
 
+export interface AIPipelineEvent {
+  id: string;
+  jobId: string;
+  eventType: 'script_generation' | 'audio_generation' | 'lipsync_generation' | 'ad_content_generation' | 'error';
+  details: string;
+  timestamp: Date;
+  duration?: number;
+  status: 'started' | 'completed' | 'failed';
+  productId?: string;
+  productName?: string;
+}
+
 // In-memory storage for demo (in production, use database)
 const imageTriggerEvents = new Map<string, ImageTriggerEvent>();
 const avatarPlayEvents = new Map<string, AvatarPlayEvent>();
+const aiPipelineEvents = new Map<string, AIPipelineEvent>();
 const performanceMetrics = {
   responseTimes: [] as number[],
   totalRequests: 0,
@@ -48,6 +61,37 @@ const performanceMetrics = {
 };
 
 export class AnalyticsService {
+  /**
+   * Log AI pipeline event
+   */
+  static logAIPipelineEvent(data: {
+    jobId: string;
+    eventType: 'script_generation' | 'audio_generation' | 'lipsync_generation' | 'ad_content_generation' | 'error';
+    details: string;
+    duration?: number;
+    status: 'started' | 'completed' | 'failed';
+    productId?: string;
+    productName?: string;
+  }): string {
+    const eventId = uuidv4();
+    const event: AIPipelineEvent = {
+      id: eventId,
+      jobId: data.jobId,
+      eventType: data.eventType,
+      details: data.details,
+      timestamp: new Date(),
+      duration: data.duration,
+      status: data.status,
+      productId: data.productId,
+      productName: data.productName
+    };
+
+    aiPipelineEvents.set(eventId, event);
+
+    console.log(`[ANALYTICS] AI Pipeline event: ${data.eventType} - Job: ${data.jobId} - Status: ${data.status}`);
+
+    return eventId;
+  }
   /**
    * Log image trigger event
    */
@@ -175,6 +219,12 @@ export class AnalyticsService {
       averageDuration: number;
       recent: AvatarPlayEvent[];
     };
+    aiPipelineEvents: {
+      total: number;
+      recent: AIPipelineEvent[];
+      byType: Array<{ eventType: string; count: number }>;
+      errors: number;
+    };
     performance: PerformanceMetrics;
   } {
     const now = new Date();
@@ -189,6 +239,11 @@ export class AnalyticsService {
     const recentAvatarPlays = Array.from(avatarPlayEvents.values())
       .filter(event => event.startTime > oneHourAgo)
       .sort((a, b) => b.startTime.getTime() - a.startTime.getTime())
+      .slice(0, 50);
+
+    const recentAIPipelineEvents = Array.from(aiPipelineEvents.values())
+      .filter(event => event.timestamp > oneHourAgo)
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, 50);
 
     // Count by image
@@ -216,6 +271,22 @@ export class AnalyticsService {
       ? completedPlays.reduce((sum, event) => sum + (event.duration || 0), 0) / completedPlays.length
       : 0;
 
+    // AI Pipeline event statistics
+    const aiPipelineEventTypes = new Map<string, { eventType: string; count: number }>();
+    let aiPipelineErrors = 0;
+    aiPipelineEvents.forEach(event => {
+      // Count by event type
+      const typeKey = event.eventType;
+      const existingType = aiPipelineEventTypes.get(typeKey) || { eventType: event.eventType, count: 0 };
+      existingType.count++;
+      aiPipelineEventTypes.set(typeKey, existingType);
+      
+      // Count errors
+      if (event.status === 'failed') {
+        aiPipelineErrors++;
+      }
+    });
+
     // Performance metrics
     const averageResponseTime = performanceMetrics.responseTimes.length > 0
       ? performanceMetrics.responseTimes.reduce((sum, time) => sum + time, 0) / performanceMetrics.responseTimes.length
@@ -238,6 +309,12 @@ export class AnalyticsService {
         interrupted: interruptedPlays.length,
         averageDuration: Math.round(averageDuration),
         recent: recentAvatarPlays,
+      },
+      aiPipelineEvents: {
+        total: aiPipelineEvents.size,
+        recent: recentAIPipelineEvents,
+        byType: Array.from(aiPipelineEventTypes.values()).sort((a, b) => b.count - a.count),
+        errors: aiPipelineErrors,
       },
       performance: {
         averageResponseTime: Math.round(averageResponseTime),
@@ -272,6 +349,14 @@ export class AnalyticsService {
     for (const [id, event] of avatarPlayEvents.entries()) {
       if (event.startTime < oneDayAgo) {
         avatarPlayEvents.delete(id);
+        cleanedCount++;
+      }
+    }
+
+    // Clean AI pipeline events
+    for (const [id, event] of aiPipelineEvents.entries()) {
+      if (event.timestamp < oneDayAgo) {
+        aiPipelineEvents.delete(id);
         cleanedCount++;
       }
     }

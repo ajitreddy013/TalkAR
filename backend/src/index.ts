@@ -18,6 +18,7 @@ import scriptRoutes from "./routes/scripts";
 import enhancedLipSyncRoutes from "./routes/enhancedLipSync";
 import analyticsRoutes from "./routes/analytics";
 import aiPipelineRoutes from "./routes/aiPipeline";
+import aiConfigRoutes from "./routes/aiConfig";
 import performanceRoutes from "./routes/performance";
 
 // Load environment variables
@@ -96,6 +97,7 @@ app.use("/api/v1/scripts", scriptRoutes);
 app.use("/api/v1/enhanced-lipsync", enhancedLipSyncRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/ai-pipeline", aiPipelineRoutes);
+app.use("/api/v1/ai-config", aiConfigRoutes);
 app.use("/api/v1/performance", performanceRoutes);
 
 // Health check

@@ -15,8 +15,10 @@ import {
 import {
   Dashboard as DashboardIcon,
   Image as ImageIcon,
+  Settings as SettingsIcon,
 } from "@mui/icons-material";
 import ImagesPage from "./pages/Images";
+import AIConfigPage from "./pages/AIConfig";
 
 function App() {
   const [currentView, setCurrentView] = useState("dashboard");
@@ -56,6 +58,17 @@ function App() {
                 <ListItemText primary="Images" />
               </ListItemButton>
             </ListItem>
+            <ListItem disablePadding>
+              <ListItemButton
+                selected={currentView === "ai-config"}
+                onClick={() => setCurrentView("ai-config")}
+              >
+                <ListItemIcon>
+                  <SettingsIcon />
+                </ListItemIcon>
+                <ListItemText primary="AI Config" />
+              </ListItemButton>
+            </ListItem>
           </List>
         </Box>
 
@@ -76,10 +89,18 @@ function App() {
               >
                 Manage Images
               </Button>
+              <Button
+                variant="outlined"
+                onClick={() => setCurrentView("ai-config")}
+                sx={{ mr: 2 }}
+              >
+                AI Configuration
+              </Button>
             </Paper>
           )}
 
           {currentView === "images" && <ImagesPage />}
+          {currentView === "ai-config" && <AIConfigPage />}
         </Box>
       </Box>
     </Box>
