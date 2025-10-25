@@ -76,9 +76,9 @@ fun Week2ARScreen(
             EnhancedCameraView(
                 modifier = Modifier.fillMaxSize(),
                 isImageDetected = isTracking,
-                onImageRecognized = {
-                    // When wired to real AR, update the VM
-                    viewModel.onImageDetected()
+                onImageRecognized = { imageRecognition ->
+                    // When wired to real AR, update the VM with the recognized image
+                    viewModel.onImageRecognized(imageRecognition)
                 },
                 onAugmentedImageRecognized = {
                     // Placeholder hook if using ARCore-backed recognition

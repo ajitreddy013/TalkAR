@@ -135,7 +135,8 @@ data class UserPreferences(
 
 // Ad Content Generation models
 data class AdContentGenerationRequest(
-    val product: String
+    val product: String,
+    val previous_products: List<String>? = null
 )
 
 data class AdContentGenerationResponse(

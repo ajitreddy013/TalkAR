@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
 
 /**
  * ViewModel for Enhanced AR functionality
@@ -188,6 +189,29 @@ class EnhancedARViewModel(
         if (_currentAvatar.value != null) {
             _isAvatarVisible.value = true
         }
+    }
+    
+    /**
+     * Handle image recognition with product saving
+     */
+    fun onImageRecognized(imageRecognition: com.talkar.app.data.models.ImageRecognition) {
+        Log.d(TAG, "Image recognized: ${imageRecognition.name}")
+        
+        // Save the scanned product to the database
+        viewModelScope.launch {
+            try {
+                adContentService.saveScannedProduct(
+                    productId = imageRecognition.id,
+                    productName = imageRecognition.name
+                )
+                Log.d(TAG, "Saved scanned product: ${imageRecognition.name}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving scanned product: ${imageRecognition.name}", e)
+            }
+        }
+        
+        // Continue with normal image detection handling
+        onImageDetected()
     }
     
     /**
@@ -399,41 +423,10 @@ class EnhancedARViewModel(
     }
     
     /**
-     * Refresh backend data
-     */
-    fun refreshData() {
-        loadBackendData()
-    }
-    
-    /**
-     * Simulate image detection for testing
+     * Simulate image detection for testing purposes
      */
     fun simulateImageDetection() {
-        viewModelScope.launch {
-            val images = _images.value
-            val avatars = _avatars.value
-            
-            if (images.isNotEmpty() && avatars.isNotEmpty()) {
-                val randomImage = images.random()
-                val randomAvatar = avatars.random()
-                
-                setCurrentImageAndAvatar(randomImage, randomAvatar)
-                onImageDetected()
-                
-                // Simulate image loss after 3 seconds
-                kotlinx.coroutines.delay(3000)
-                onImageLost()
-            }
-        }
-    }
-    
-    /**
-     * Cleanup when ViewModel is cleared
-     */
-    override fun onCleared() {
-        super.onCleared()
-        viewModelScope.launch {
-            arService.stopTracking()
-        }
+        Log.d(TAG, "Simulating image detection")
+        onImageDetected()
     }
 }

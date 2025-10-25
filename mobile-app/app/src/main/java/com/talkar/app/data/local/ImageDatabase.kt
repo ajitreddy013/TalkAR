@@ -5,15 +5,17 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import android.content.Context
 import com.talkar.app.data.models.ImageRecognition
+import com.talkar.app.data.models.ScannedProduct
 
 @Database(
-    entities = [ImageRecognition::class],
-    version = 1,
+    entities = [ImageRecognition::class, ScannedProduct::class],
+    version = 2,
     exportSchema = false
 )
 abstract class ImageDatabase : RoomDatabase() {
     
     abstract fun imageDao(): ImageDao
+    abstract fun scannedProductDao(): ScannedProductDao
     
     companion object {
         @Volatile
@@ -25,11 +27,10 @@ abstract class ImageDatabase : RoomDatabase() {
                     context.applicationContext,
                     ImageDatabase::class.java,
                     "image_database"
-                ).build()
+                ).fallbackToDestructiveMigration().build()
                 INSTANCE = instance
                 instance
             }
         }
     }
 }
-
