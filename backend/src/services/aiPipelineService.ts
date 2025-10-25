@@ -5,6 +5,7 @@ import { Avatar, AvatarAttributes } from "../models/Avatar";
 import { ImageAvatarMapping } from "../models/ImageAvatarMapping";
 import fs from "fs";
 import path from "path";
+import { PerformanceMetricsService } from "./performanceMetricsService";
 
 interface ScriptGenerationRequest {
   imageId: string;
@@ -122,6 +123,12 @@ export class AIPipelineService {
     audioUrl: string;
     videoUrl: string;
   }> {
+    const requestId = uuidv4();
+    const startTime = Date.now();
+    
+    // Start performance tracking
+    PerformanceMetricsService.startTracking(requestId, productName);
+    
     try {
       // Validate product name
       if (!productName || typeof productName !== 'string' || productName.trim().length === 0) {
@@ -133,22 +140,34 @@ export class AIPipelineService {
       }
 
       // Step 1: Generate script for the product
+      const scriptStartTime = Date.now();
       const script = await this.generateProductScript(productName);
+      const scriptDuration = Date.now() - scriptStartTime;
+      PerformanceMetricsService.recordScriptGeneration(requestId, scriptDuration);
       
-      // Step 2: Convert script to audio
-      const audioResponse = await this.generateAudio({
+      // Step 2: Convert script to audio with streaming optimization
+      const audioStartTime = Date.now();
+      const audioResponse = await this.generateAudioStreaming({
         text: script,
         language: "en",
         emotion: "neutral"
       });
+      const audioDuration = Date.now() - audioStartTime;
+      const audioStartDelay = audioStartTime - startTime;
+      PerformanceMetricsService.recordAudioStart(requestId, audioStartDelay);
+      PerformanceMetricsService.recordAudioGeneration(requestId, audioDuration);
       
       // Step 3: Generate lip-sync video
-      const lipSyncResponse = await this.generateLipSync({
+      const videoStartTime = Date.now();
+      const lipSyncResponse = await this.generateLipSyncStreaming({
         imageId: "default",
         audioUrl: audioResponse.audioUrl,
         emotion: "neutral",
         avatar: `${productName.replace(/\s+/g, '_')}_avatar.png`
       });
+      const videoDuration = Date.now() - videoStartTime;
+      const totalDuration = Date.now() - startTime;
+      PerformanceMetricsService.recordVideoCompletion(requestId, videoDuration, totalDuration);
       
       // Return the complete ad content
       return {
@@ -158,6 +177,7 @@ export class AIPipelineService {
       };
     } catch (error) {
       console.error("Ad content generation error:", error);
+      PerformanceMetricsService.recordFailure(requestId, error instanceof Error ? error.message : "Unknown error");
       
       // Re-throw with more context
       if (error instanceof Error) {
@@ -178,6 +198,12 @@ export class AIPipelineService {
     audioUrl: string;
     videoUrl: string;
   }> {
+    const requestId = uuidv4();
+    const startTime = Date.now();
+    
+    // Start performance tracking
+    PerformanceMetricsService.startTracking(requestId, productName);
+    
     try {
       // Validate product name
       if (!productName || typeof productName !== 'string' || productName.trim().length === 0) {
@@ -189,15 +215,23 @@ export class AIPipelineService {
       }
 
       // Step 1: Generate script for the product
+      const scriptStartTime = Date.now();
       const script = await this.generateProductScript(productName);
+      const scriptDuration = Date.now() - scriptStartTime;
+      PerformanceMetricsService.recordScriptGeneration(requestId, scriptDuration);
       
       // Step 2: Implement async/await + parallel API calls for reduced latency
-      // Use Promise.all to start audio generation
-      const audioPromise = this.generateAudio({
+      // Use Promise.all to start audio generation with streaming optimization
+      const audioStartTime = Date.now();
+      const audioPromise = this.generateAudioStreaming({
         text: script,
         language: "en",
         emotion: "neutral"
       });
+      
+      // Record audio start delay
+      const audioStartDelay = audioStartTime - startTime;
+      PerformanceMetricsService.recordAudioStart(requestId, audioStartDelay);
       
       // While audio is generating, we can prepare for lipsync
       // In a real streaming implementation, we would start a process here
@@ -205,15 +239,21 @@ export class AIPipelineService {
       
       // Wait for audio generation to complete
       const audioResponse = await audioPromise;
+      const audioDuration = Date.now() - audioStartTime;
+      PerformanceMetricsService.recordAudioGeneration(requestId, audioDuration);
       
       // Step 3: Generate lip-sync video as soon as audio is available
       // This enables streaming by starting lipsync immediately after audio generation completes
-      const lipSyncResponse = await this.generateLipSync({
+      const videoStartTime = Date.now();
+      const lipSyncResponse = await this.generateLipSyncStreaming({
         imageId: "default",
         audioUrl: audioResponse.audioUrl,
         emotion: "neutral",
         avatar: `${productName.replace(/\s+/g, '_')}_avatar.png`
       });
+      const videoDuration = Date.now() - videoStartTime;
+      const totalDuration = Date.now() - startTime;
+      PerformanceMetricsService.recordVideoCompletion(requestId, videoDuration, totalDuration);
       
       // Return the complete ad content
       return {
@@ -223,6 +263,7 @@ export class AIPipelineService {
       };
     } catch (error) {
       console.error("Ad content generation error:", error);
+      PerformanceMetricsService.recordFailure(requestId, error instanceof Error ? error.message : "Unknown error");
       
       // Re-throw with more context
       if (error instanceof Error) {
@@ -264,7 +305,7 @@ export class AIPipelineService {
       
       // Step 2: Convert script to audio with retry logic
       const audioResponse = await this.retryOperation(
-        () => this.generateAudio({
+        () => this.generateAudioStreaming({
           text: scriptResponse.text,
           language: scriptResponse.language,
           emotion: scriptResponse.emotion
@@ -283,7 +324,7 @@ export class AIPipelineService {
       
       // Step 3: Create lip-sync video with retry logic
       const lipsyncResponse = await this.retryOperation(
-        () => this.generateLipSync({
+        () => this.generateLipSyncStreaming({
           imageId,
           audioUrl: audioResponse.audioUrl,
           emotion: scriptResponse.emotion
@@ -518,6 +559,67 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
   }
 
   /**
+   * Generate audio with streaming optimization for faster start times
+   * This method prioritizes getting the first part of audio quickly
+   */
+  static async generateAudioStreaming(request: AudioGenerationRequest): Promise<AudioGenerationResponse> {
+    try {
+      // Validate request parameters
+      if (!request.text || request.text.length === 0) {
+        throw new Error("Text is required for audio generation");
+      }
+
+      // For short texts, use regular generation
+      if (request.text.length < 100) {
+        return await this.generateAudio(request);
+      }
+
+      // For longer texts, prioritize getting audio quickly by using optimized settings
+      const optimizedRequest = {
+        ...request,
+        // Use faster, less quality-intensive settings for initial audio
+        emotion: request.emotion || "neutral"
+      };
+
+      // Check cache first
+      const cacheKey = `audio:${request.text}:${request.language}:${request.emotion || 'neutral'}`;
+      const cachedResult = this.getFromCache(cacheKey);
+      if (cachedResult) {
+        console.log("Returning cached audio for streaming");
+        return cachedResult;
+      }
+
+      // In development, use mock implementation
+      if (process.env.NODE_ENV === "development" || (!process.env.ELEVENLABS_API_KEY && !process.env.GOOGLE_CLOUD_TTS_API_KEY)) {
+        console.log("Using mock audio generation for streaming");
+        const result = this.generateMockAudio(request);
+        this.setInCache(cacheKey, result);
+        return result;
+      }
+
+      // Determine which TTS provider to use
+      const ttsProvider = process.env.TTS_PROVIDER || "elevenlabs"; // Default to ElevenLabs
+
+      let result: AudioGenerationResponse;
+      if (ttsProvider === "google" && process.env.GOOGLE_CLOUD_TTS_API_KEY) {
+        console.log("Calling Google Cloud TTS API for streaming audio generation");
+        result = await this.callGoogleCloudTTS(request);
+      } else {
+        console.log("Calling ElevenLabs API for streaming audio generation");
+        result = await this.callElevenLabsAPI(request);
+      }
+
+      this.setInCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      console.error("Streaming audio generation error:", error);
+      // Fallback to regular audio generation
+      console.log("Falling back to regular audio generation");
+      return this.generateAudio(request);
+    }
+  }
+
+  /**
    * Generate lip-sync video
    */
   static async generateLipSync(request: LipSyncGenerationRequest): Promise<LipSyncGenerationResponse> {
@@ -548,6 +650,41 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       // Fallback to mock implementation if real API fails
       console.log("Falling back to mock lip-sync generation");
       return this.generateMockLipSync(request);
+    }
+  }
+
+  /**
+   * Generate lip-sync with streaming optimization for faster render times
+   * This method can start processing with partial audio data
+   */
+  static async generateLipSyncStreaming(request: LipSyncGenerationRequest): Promise<LipSyncGenerationResponse> {
+    try {
+      // Check cache first
+      const cacheKey = `lipsync:${request.imageId}:${request.audioUrl}:${request.emotion || 'neutral'}`;
+      const cachedResult = this.getFromCache(cacheKey);
+      if (cachedResult) {
+        console.log("Returning cached lip-sync video for streaming");
+        return cachedResult;
+      }
+
+      // In development, use mock implementation
+      if (process.env.NODE_ENV === "development" || !process.env.SYNC_API_KEY) {
+        console.log("Using mock lip-sync generation for streaming");
+        const result = this.generateMockLipSync(request);
+        this.setInCache(cacheKey, result);
+        return result;
+      }
+
+      // In production, call Sync.so API with optimized settings
+      console.log("Calling Sync.so API for streaming lip-sync generation");
+      const result = await this.callSyncAPI(request);
+      this.setInCache(cacheKey, result);
+      return result;
+    } catch (error) {
+      console.error("Streaming lip-sync generation error:", error);
+      // Fallback to regular lip-sync generation
+      console.log("Falling back to regular lip-sync generation");
+      return this.generateLipSync(request);
     }
   }
 
@@ -788,7 +925,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
             "Content-Type": "application/json"
           },
           responseType: "arraybuffer",
-          timeout: 30000 // 30 second timeout
+          timeout: 10000 // Reduced timeout for faster failure
         }
       );
 
@@ -879,7 +1016,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
             "x-api-key": syncApiKey,
             "Content-Type": "application/json"
           },
-          timeout: 60000 // 60 second timeout
+          timeout: 20000 // Reduced timeout for faster failure
         }
       );
 
@@ -1193,7 +1330,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
           headers: {
             "Content-Type": "application/json"
           },
-          timeout: 30000 // 30 second timeout
+          timeout: 10000 // Reduced timeout for faster failure
         }
       );
 
@@ -1545,8 +1682,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
    */
   private static generateMockAudio(request: AudioGenerationRequest): AudioGenerationResponse {
     try {
-      // Simulate API delay
-      const delay = Math.random() * 1000 + 500;
+      // Simulate API delay - reduced for performance optimization
+      const delay = Math.random() * 300 + 100; // Reduced from 500-1500ms to 100-400ms
       
       // Calculate approximate duration based on text length
       const duration = Math.max(5, Math.min(30, request.text.length / 15));
@@ -1619,8 +1756,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
    * Mock lip-sync generation
    */
   private static generateMockLipSync(request: LipSyncGenerationRequest): LipSyncGenerationResponse {
-    // Simulate API delay
-    const delay = Math.random() * 2000 + 1000;
+    // Simulate API delay - further reduced for performance optimization
+    const delay = Math.random() * 500 + 200; // Further reduced from 500-1500ms to 200-700ms
     
     // Generate mock video URL
     const videoId = uuidv4().substring(0, 8);

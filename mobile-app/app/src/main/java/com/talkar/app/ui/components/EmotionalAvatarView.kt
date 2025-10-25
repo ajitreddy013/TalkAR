@@ -23,10 +23,13 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 // ARCore imports removed for now - using simplified implementation
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
 import kotlinx.coroutines.*
+import kotlin.math.abs
+import kotlin.math.sin
 
 /**
  * Emotional Avatar View with facial expression animations
@@ -38,6 +41,7 @@ fun EmotionalAvatarView(
     image: BackendImage?,
     emotion: String = "neutral",
     isTalking: Boolean = false,
+    audioLevel: Float = 0f, // Real-time audio level for more responsive animations
     modifier: Modifier = Modifier
 ) {
     // Fade animation state
@@ -60,28 +64,33 @@ fun EmotionalAvatarView(
 
     var mouthProgress by remember { mutableStateOf(0f) }
     var blinkProgress by remember { mutableStateOf(0f) }
+    var headTilt by remember { mutableStateOf(0f) }
     val emotionState by rememberUpdatedState(emotion)
     
     val coroutineScope = rememberCoroutineScope()
     var mouthAnimationJob by remember { mutableStateOf<Job?>(null) }
     var blinkAnimationJob by remember { mutableStateOf<Job?>(null) }
+    var headTiltJob by remember { mutableStateOf<Job?>(null) }
     
     // Cancel previous jobs when composable is disposed
     DisposableEffect(Unit) {
         onDispose {
             mouthAnimationJob?.cancel()
             blinkAnimationJob?.cancel()
+            headTiltJob?.cancel()
         }
     }
     
-    // Animate mouth for talking
-    LaunchedEffect(isTalking, emotionState) {
+    // Animate mouth for talking with audio level sensitivity
+    LaunchedEffect(isTalking, emotionState, audioLevel) {
         mouthAnimationJob?.cancel()
         if (isTalking) {
             mouthAnimationJob = coroutineScope.launch {
+                val baseMouth = 0.3f
                 while (isActive && isTalking) {
-                    mouthProgress = Math.random().toFloat()
-                    delay(100)
+                    // Use audio level to drive mouth animation for more realistic lip-sync
+                    mouthProgress = baseMouth + (audioLevel * 0.7f)
+                    delay(50) // Faster updates for smoother animation
                 }
             }
         } else {
@@ -105,6 +114,26 @@ fun EmotionalAvatarView(
             }
         }
     }
+    
+    // Head tilt animation based on emotion and audio
+    LaunchedEffect(emotionState, audioLevel) {
+        headTiltJob?.cancel()
+        headTiltJob = coroutineScope.launch {
+            val time = System.currentTimeMillis()
+            while (isActive) {
+                // Subtle head tilt that responds to audio and emotion
+                val audioInfluence = audioLevel * 0.2f
+                val emotionInfluence = when (emotionState) {
+                    "happy" -> 0.1f
+                    "surprised" -> 0.15f
+                    "serious" -> -0.1f
+                    else -> 0f
+                }
+                headTilt = sin(time.toFloat() / 1000) * 0.05f + audioInfluence + emotionInfluence
+                delay(100)
+            }
+        }
+    }
 
     Card(
         modifier = modifier
@@ -117,13 +146,20 @@ fun EmotionalAvatarView(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            // Avatar face with emotional expressions
-            AvatarFace(
-                emotion = emotionState,
-                mouthProgress = mouthProgress,
-                blinkProgress = blinkProgress,
-                modifier = Modifier.size(150.dp)
-            )
+            // Avatar face with emotional expressions and head tilt
+            Box(modifier = Modifier
+                .size(150.dp)
+                .graphicsLayer(
+                    rotationZ = headTilt * 10 // Apply subtle head tilt
+                )
+            ) {
+                AvatarFace(
+                    emotion = emotionState,
+                    mouthProgress = mouthProgress,
+                    blinkProgress = blinkProgress,
+                    modifier = Modifier.size(150.dp)
+                )
+            }
             
             // Avatar name and image info
             Column(
@@ -150,6 +186,18 @@ fun EmotionalAvatarView(
                         .padding(top = 8.dp)
                 )
             }
+            
+            // Live indicator
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(12.dp)
+                    .background(
+                        color = if (isTalking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(50)
+                    )
+            )
         }
     }
 }
