@@ -6,16 +6,19 @@ import androidx.lifecycle.viewModelScope
 import com.talkar.app.data.models.AdContent
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.models.BackendImage
+import com.talkar.app.data.models.Feedback
 import com.talkar.app.data.repository.ImageRepository
 import com.talkar.app.TalkARApplication
 import com.talkar.app.data.services.AdContentGenerationService
 import com.talkar.app.data.services.EnhancedARService
+import com.talkar.app.data.services.FeedbackSyncService
 import com.google.ar.core.LightEstimate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
 
 /**
  * ViewModel for Enhanced AR functionality
@@ -87,10 +90,12 @@ class EnhancedARViewModel(
     
     // Services
     private val adContentService = AdContentGenerationService.getInstance()
+    private val feedbackSyncService = FeedbackSyncService.getInstance()
     
     init {
         loadBackendData()
         initializeARService()
+        startFeedbackSync()
     }
     
     /**
@@ -110,6 +115,23 @@ class EnhancedARViewModel(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error initializing AR service: ${e.message}")
+            }
+        }
+    }
+    
+    /**
+     * Start periodic feedback sync
+     */
+    private fun startFeedbackSync() {
+        viewModelScope.launch {
+            try {
+                // Sync feedback periodically
+                while (true) {
+                    feedbackSyncService.syncFeedback()
+                    kotlinx.coroutines.delay(30000) // Sync every 30 seconds
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in feedback sync loop", e)
             }
         }
     }
@@ -191,6 +213,29 @@ class EnhancedARViewModel(
     }
     
     /**
+     * Handle image recognition with product saving
+     */
+    fun onImageRecognized(imageRecognition: com.talkar.app.data.models.ImageRecognition) {
+        Log.d(TAG, "Image recognized: ${imageRecognition.name}")
+        
+        // Save the scanned product to the database
+        viewModelScope.launch {
+            try {
+                adContentService.saveScannedProduct(
+                    productId = imageRecognition.id,
+                    productName = imageRecognition.name
+                )
+                Log.d(TAG, "Saved scanned product: ${imageRecognition.name}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving scanned product: ${imageRecognition.name}", e)
+            }
+        }
+        
+        // Continue with normal image detection handling
+        onImageDetected()
+    }
+    
+    /**
      * Handle image loss
      */
     fun onImageLost() {
@@ -215,6 +260,42 @@ class EnhancedARViewModel(
     fun onAvatarTapped() {
         Log.d(TAG, "Avatar tapped")
         // TODO: Implement avatar interaction (play script, lip-sync, etc.)
+    }
+    
+    /**
+     * Handle feedback from user
+     */
+    fun onFeedbackReceived(isPositive: Boolean) {
+        Log.d(TAG, "Feedback received: ${if (isPositive) "positive" else "negative"}")
+        
+        // Save feedback to local database
+        viewModelScope.launch {
+            try {
+                val feedback = Feedback(
+                    id = UUID.randomUUID().toString(),
+                    adContentId = _currentAdContent.value?.productName ?: "unknown",
+                    productName = _currentImage.value?.name ?: "unknown",
+                    isPositive = isPositive,
+                    timestamp = System.currentTimeMillis(),
+                    synced = false
+                )
+                
+                val database = com.talkar.app.data.local.ImageDatabase.getDatabase(TalkARApplication.instance)
+                database.feedbackDao().insert(feedback)
+                
+                Log.d(TAG, "Feedback saved locally: ${feedback.id}")
+                
+                // Try to sync immediately
+                val synced = feedbackSyncService.syncFeedbackItem(feedback)
+                if (synced) {
+                    Log.d(TAG, "Feedback synced immediately: ${feedback.id}")
+                } else {
+                    Log.d(TAG, "Feedback will be synced later: ${feedback.id}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error saving feedback", e)
+            }
+        }
     }
     
     /**
@@ -399,41 +480,10 @@ class EnhancedARViewModel(
     }
     
     /**
-     * Refresh backend data
-     */
-    fun refreshData() {
-        loadBackendData()
-    }
-    
-    /**
-     * Simulate image detection for testing
+     * Simulate image detection for testing purposes
      */
     fun simulateImageDetection() {
-        viewModelScope.launch {
-            val images = _images.value
-            val avatars = _avatars.value
-            
-            if (images.isNotEmpty() && avatars.isNotEmpty()) {
-                val randomImage = images.random()
-                val randomAvatar = avatars.random()
-                
-                setCurrentImageAndAvatar(randomImage, randomAvatar)
-                onImageDetected()
-                
-                // Simulate image loss after 3 seconds
-                kotlinx.coroutines.delay(3000)
-                onImageLost()
-            }
-        }
-    }
-    
-    /**
-     * Cleanup when ViewModel is cleared
-     */
-    override fun onCleared() {
-        super.onCleared()
-        viewModelScope.launch {
-            arService.stopTracking()
-        }
+        Log.d(TAG, "Simulating image detection")
+        onImageDetected()
     }
 }

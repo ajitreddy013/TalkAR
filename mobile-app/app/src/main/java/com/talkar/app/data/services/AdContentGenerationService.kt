@@ -1,9 +1,12 @@
 package com.talkar.app.data.services
 
 import android.util.Log
+import com.talkar.app.TalkARApplication
 import com.talkar.app.data.api.ApiClient
 import com.talkar.app.data.api.AdContentGenerationRequest
 import com.talkar.app.data.api.AdContentGenerationResponse
+import com.talkar.app.data.local.ImageDatabase
+import kotlinx.coroutines.flow.first
 
 /**
  * Service for generating ad content for products
@@ -20,9 +23,15 @@ class AdContentGenerationService {
         return try {
             Log.d(tag, "Generating ad content for product: $productName")
             
-            // Create request
+            // Get recent products from database
+            val database = ImageDatabase.getDatabase(TalkARApplication.instance)
+            val recentProducts = database.scannedProductDao().getRecentProducts().first()
+            val previousProductNames = recentProducts.map { it.name }
+            
+            // Create request with previous products context
             val request = AdContentGenerationRequest(
-                product = productName
+                product = productName,
+                previous_products = previousProductNames.ifEmpty { null }
             )
             
             // Make API call
@@ -55,9 +64,15 @@ class AdContentGenerationService {
         return try {
             Log.d(tag, "Generating streaming ad content for product: $productName")
             
-            // Create request
+            // Get recent products from database
+            val database = ImageDatabase.getDatabase(TalkARApplication.instance)
+            val recentProducts = database.scannedProductDao().getRecentProducts().first()
+            val previousProductNames = recentProducts.map { it.name }
+            
+            // Create request with previous products context
             val request = AdContentGenerationRequest(
-                product = productName
+                product = productName,
+                previous_products = previousProductNames.ifEmpty { null }
             )
             
             // Make API call to streaming endpoint
@@ -79,6 +94,24 @@ class AdContentGenerationService {
         } catch (e: Exception) {
             Log.e(tag, "Error generating streaming ad content for product: $productName", e)
             Result.failure(e)
+        }
+    }
+    
+    /**
+     * Save a scanned product to the database
+     */
+    suspend fun saveScannedProduct(productId: String, productName: String) {
+        try {
+            val database = ImageDatabase.getDatabase(TalkARApplication.instance)
+            val scannedProduct = com.talkar.app.data.models.ScannedProduct(
+                id = productId,
+                name = productName,
+                scannedAt = System.currentTimeMillis()
+            )
+            database.scannedProductDao().insert(scannedProduct)
+            Log.d(tag, "Saved scanned product: $productName")
+        } catch (e: Exception) {
+            Log.e(tag, "Error saving scanned product: $productName", e)
         }
     }
     

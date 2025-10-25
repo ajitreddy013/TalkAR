@@ -1893,4 +1893,265 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       // Don't throw error as this is non-critical
     }
   }
+
+  /**
+   * Process conversational context queries
+   */
+  static async processConversationalQuery(request: { 
+    query: string; 
+    imageId?: string; 
+    context?: any 
+  }): Promise<{ 
+    response: string; 
+    audioUrl?: string; 
+    emotion?: string 
+  }> {
+    try {
+      // In development, use mock implementation
+      if (process.env.NODE_ENV === "development" || 
+          (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY)) {
+        console.log("Using mock conversational response");
+        return this.generateMockConversationalResponse(request);
+      }
+
+      // Determine which AI provider to use
+      const aiProvider = process.env.AI_PROVIDER || "openai"; // Default to OpenAI
+
+      let result: { response: string; audioUrl?: string; emotion?: string };
+      if (aiProvider === "groq" && process.env.GROQCLOUD_API_KEY) {
+        console.log("Calling GroqCloud API for conversational query");
+        result = await this.callGroqCloudForConversation(request);
+      } else {
+        console.log("Calling OpenAI API for conversational query");
+        result = await this.callOpenAIForConversation(request);
+      }
+
+      return result;
+    } catch (error) {
+      console.error("Conversational query error:", error);
+      // Fallback to mock implementation if real API fails
+      console.log("Falling back to mock conversational response");
+      return this.generateMockConversationalResponse(request);
+    }
+  }
+
+  /**
+   * Mock conversational response generation
+   */
+  private static generateMockConversationalResponse(request: { 
+    query: string; 
+    imageId?: string; 
+    context?: any 
+  }): { response: string; audioUrl?: string; emotion?: string } {
+    const query = request.query.toLowerCase();
+    
+    // Generate mock responses based on query content
+    let response = "";
+    let emotion = "neutral";
+    
+    if (query.includes("hello") || query.includes("hi")) {
+      response = "Hello there! I'm your TalkAR assistant. How can I help you today?";
+      emotion = "happy";
+    } else if (query.includes("what is this") || query.includes("what's this")) {
+      if (request.imageId) {
+        response = "This appears to be an interesting object. I can tell you more about it if you'd like!";
+        emotion = "friendly";
+      } else {
+        response = "I'm not sure what you're referring to. Could you point your camera at something?";
+        emotion = "neutral";
+      }
+    } else if (query.includes("how does this work")) {
+      response = "TalkAR uses augmented reality to bring images to life. Simply point your camera at an object, and I'll provide information about it!";
+      emotion = "friendly";
+    } else if (query.includes("thank")) {
+      response = "You're welcome! Is there anything else I can help you with?";
+      emotion = "happy";
+    } else {
+      response = "That's an interesting question. I'm still learning about the world around us. Could you ask me something else?";
+      emotion = "neutral";
+    }
+    
+    return {
+      response,
+      emotion
+    };
+  }
+
+  /**
+   * Call OpenAI API for conversational queries
+   */
+  private static async callOpenAIForConversation(request: { 
+    query: string; 
+    imageId?: string; 
+    context?: any 
+  }): Promise<{ response: string; audioUrl?: string; emotion?: string }> {
+    try {
+      const openaiApiKey = process.env.OPENAI_API_KEY;
+      const openaiApiUrl = "https://api.openai.com/v1/chat/completions";
+      
+      if (!openaiApiKey) {
+        throw new Error("OpenAI API key not configured");
+      }
+
+      // Create a prompt based on the query and context
+      let prompt = `You are a helpful AR assistant in the TalkAR application. Respond to the user's query in a friendly and informative way.`;
+      
+      if (request.imageId) {
+        prompt += ` The user is currently viewing an image with ID: ${request.imageId}.`;
+      }
+      
+      if (request.context) {
+        prompt += ` Context: ${JSON.stringify(request.context)}`;
+      }
+      
+      prompt += `\n\nUser query: ${request.query}`;
+
+      // Use GPT-4o-mini model
+      const response = await axios.post(
+        openaiApiUrl,
+        {
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: prompt
+            },
+            {
+              role: "user",
+              content: request.query
+            }
+          ],
+          max_tokens: 150,
+          temperature: 0.7
+        },
+        {
+          headers: {
+            "Authorization": `Bearer ${openaiApiKey}`,
+            "Content-Type": "application/json"
+          },
+          timeout: 10000 // 10 second timeout
+        }
+      );
+
+      const text = response.data.choices[0].message.content.trim();
+      
+      // Validate response
+      if (!text || text.length === 0) {
+        throw new Error("Empty response from OpenAI API");
+      }
+
+      return {
+        response: text,
+        emotion: "neutral"
+      };
+    } catch (error: any) {
+      console.error("OpenAI conversational API error:", error.response?.data || error.message);
+      
+      // Handle specific error cases
+      if (error.response?.status === 401) {
+        throw new Error("Invalid OpenAI API key");
+      } else if (error.response?.status === 429) {
+        throw new Error("OpenAI API rate limit exceeded");
+      } else if (error.response?.status === 400) {
+        throw new Error(`OpenAI API bad request: ${error.response.data?.error?.message || 'Invalid request'}`);
+      } else if (error.response?.status >= 500) {
+        throw new Error("OpenAI API service unavailable");
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error("OpenAI API request timeout");
+      } else if (error.code === 'ENOTFOUND') {
+        throw new Error("OpenAI API service unreachable");
+      }
+      
+      throw new Error(`Failed to generate conversational response with OpenAI API: ${error.message}`);
+    }
+  }
+
+  /**
+   * Call GroqCloud API for conversational queries
+   */
+  private static async callGroqCloudForConversation(request: { 
+    query: string; 
+    imageId?: string; 
+    context?: any 
+  }): Promise<{ response: string; audioUrl?: string; emotion?: string }> {
+    try {
+      const groqApiKey = process.env.GROQCLOUD_API_KEY;
+      const groqApiUrl = "https://api.groq.com/openai/v1/chat/completions";
+      
+      if (!groqApiKey) {
+        throw new Error("GroqCloud API key not configured");
+      }
+
+      // Create a prompt based on the query and context
+      let prompt = `You are a helpful AR assistant in the TalkAR application. Respond to the user's query in a friendly and informative way.`;
+      
+      if (request.imageId) {
+        prompt += ` The user is currently viewing an image with ID: ${request.imageId}.`;
+      }
+      
+      if (request.context) {
+        prompt += ` Context: ${JSON.stringify(request.context)}`;
+      }
+      
+      prompt += `\n\nUser query: ${request.query}`;
+
+      // Use LLaMA 3.2 Vision model (or appropriate Groq model)
+      const response = await axios.post(
+        groqApiUrl,
+        {
+          model: "llama3-groq-70b-8192-tool-use-preview", // or "llama-3.2-90b-vision-preview"
+          messages: [
+            {
+              role: "system",
+              content: prompt
+            },
+            {
+              role: "user",
+              content: request.query
+            }
+          ],
+          max_tokens: 150,
+          temperature: 0.7
+        },
+        {
+          headers: {
+            "Authorization": `Bearer ${groqApiKey}`,
+            "Content-Type": "application/json"
+          },
+          timeout: 10000 // 10 second timeout
+        }
+      );
+
+      const text = response.data.choices[0].message.content.trim();
+      
+      // Validate response
+      if (!text || text.length === 0) {
+        throw new Error("Empty response from GroqCloud API");
+      }
+
+      return {
+        response: text,
+        emotion: "neutral"
+      };
+    } catch (error: any) {
+      console.error("GroqCloud conversational API error:", error.response?.data || error.message);
+      
+      // Handle specific error cases
+      if (error.response?.status === 401) {
+        throw new Error("Invalid GroqCloud API key");
+      } else if (error.response?.status === 429) {
+        throw new Error("GroqCloud API rate limit exceeded");
+      } else if (error.response?.status === 400) {
+        throw new Error(`GroqCloud API bad request: ${error.response.data?.error?.message || 'Invalid request'}`);
+      } else if (error.response?.status >= 500) {
+        throw new Error("GroqCloud API service unavailable");
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error("GroqCloud API request timeout");
+      } else if (error.code === 'ENOTFOUND') {
+        throw new Error("GroqCloud API service unreachable");
+      }
+      
+      throw new Error(`Failed to generate conversational response with GroqCloud API: ${error.message}`);
+    }
+  }
 }

@@ -8,7 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import com.talkar.app.ui.components.EnhancedCameraView
-import com.talkar.app.ui.components.AvatarOverlayView
+import com.talkar.app.ui.components.FeedbackAvatarOverlay
 import com.talkar.app.ui.components.AvatarPlaceholder
 import com.talkar.app.ui.screens.AdContentTestScreen
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
@@ -76,9 +76,9 @@ fun Week2ARScreen(
             EnhancedCameraView(
                 modifier = Modifier.fillMaxSize(),
                 isImageDetected = isTracking,
-                onImageRecognized = {
-                    // When wired to real AR, update the VM
-                    viewModel.onImageDetected()
+                onImageRecognized = { imageRecognition ->
+                    // When wired to real AR, update the VM with the recognized image
+                    viewModel.onImageRecognized(imageRecognition)
                 },
                 onAugmentedImageRecognized = {
                     // Placeholder hook if using ARCore-backed recognition
@@ -89,12 +89,15 @@ fun Week2ARScreen(
                 }
             )
             
-            // Avatar Overlay
+            // Avatar Overlay with Feedback Buttons
             if (isAvatarVisible && currentAvatar != null && currentImage != null) {
-                AvatarOverlayView(
+                FeedbackAvatarOverlay(
                     isVisible = true,
                     avatar = currentAvatar,
                     image = currentImage,
+                    onFeedback = { isPositive ->
+                        viewModel.onFeedbackReceived(isPositive)
+                    },
                     modifier = Modifier
                         .align(Alignment.Center)
                         .padding(16.dp)
@@ -175,6 +178,12 @@ fun Week2ARScreen(
                     Text(
                         text = "• Avatar disappears when image is lost",
                         style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "• Use 👍/👎 buttons to provide feedback on avatar content",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(

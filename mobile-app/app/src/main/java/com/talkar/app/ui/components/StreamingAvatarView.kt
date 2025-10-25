@@ -351,7 +351,8 @@ private fun LipSyncVideoView(
                             text = "Live",
                             style = MaterialTheme.typography.bodySmall
                         )
-                    }\n                }
+                    }
+                }
             }
         }
     }

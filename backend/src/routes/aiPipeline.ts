@@ -310,4 +310,53 @@ router.post("/generate_ad_content_streaming", async (req, res, next) => {
   }
 });
 
+// Handle conversational context queries
+router.post("/conversational_query", async (req, res, next) => {
+  try {
+    const { query, imageId, context } = req.body;
+
+    // Validate required parameters
+    if (!query) {
+      return res.status(400).json({
+        error: "Missing required parameter: query"
+      });
+    }
+
+    // Process conversational query
+    const result = await AIPipelineService.processConversationalQuery({
+      query,
+      imageId,
+      context
+    });
+
+    return res.json({
+      success: true,
+      response: result.response,
+      audioUrl: result.audioUrl,
+      emotion: result.emotion
+    });
+  } catch (error: any) {
+    console.error("Conversational query error:", error);
+    
+    // Handle specific error cases
+    if (error.message.includes("API key")) {
+      return res.status(401).json({
+        error: "API authentication failed. Please check your API keys."
+      });
+    } else if (error.message.includes("rate limit")) {
+      return res.status(429).json({
+        error: "API rate limit exceeded. Please try again later."
+      });
+    } else if (error.message.includes("timeout")) {
+      return res.status(408).json({
+        error: "API request timeout. Please try again later."
+      });
+    } else {
+      return res.status(500).json({
+        error: "Failed to process conversational query. Please try again later."
+      });
+    }
+  }
+});
+
 export default router;

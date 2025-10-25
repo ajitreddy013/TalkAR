@@ -57,6 +57,14 @@ interface ApiService {
     
     @POST("ai-pipeline/generate_ad_content_streaming")
     suspend fun generateAdContentStreaming(@Body request: AdContentGenerationRequest): Response<AdContentGenerationResponse>
+    
+    // Conversational Context endpoint
+    @POST("ai-pipeline/conversational_query")
+    suspend fun processConversationalQuery(@Body request: ConversationalQueryRequest): Response<ConversationalQueryResponse>
+    
+    // Feedback endpoint
+    @POST("feedback")
+    suspend fun sendFeedback(@Body request: FeedbackRequest): Response<FeedbackResponse>
 }
 
 object ApiClient {
@@ -133,9 +141,24 @@ data class UserPreferences(
     val preferredTone: String? = null
 )
 
+// Conversational Context models
+data class ConversationalQueryRequest(
+    val query: String,
+    val imageId: String? = null,
+    val context: Map<String, Any>? = null
+)
+
+data class ConversationalQueryResponse(
+    val success: Boolean,
+    val response: String,
+    val audioUrl: String? = null,
+    val emotion: String? = null
+)
+
 // Ad Content Generation models
 data class AdContentGenerationRequest(
-    val product: String
+    val product: String,
+    val previous_products: List<String>? = null
 )
 
 data class AdContentGenerationResponse(
@@ -143,4 +166,17 @@ data class AdContentGenerationResponse(
     val script: String? = null,
     val audio_url: String? = null,
     val video_url: String? = null
+)
+
+// Feedback models
+data class FeedbackRequest(
+    val adContentId: String,
+    val productName: String,
+    val isPositive: Boolean,
+    val timestamp: Long
+)
+
+data class FeedbackResponse(
+    val success: Boolean,
+    val message: String?
 )

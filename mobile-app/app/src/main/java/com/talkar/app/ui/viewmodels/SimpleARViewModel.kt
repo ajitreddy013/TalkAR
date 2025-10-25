@@ -10,6 +10,8 @@ import com.talkar.app.data.models.SyncResponse
 import com.talkar.app.data.models.TalkingHeadVideo
 import com.talkar.app.data.models.AdContent
 import com.talkar.app.data.config.ApiConfig
+import com.talkar.app.data.services.SpeechResult
+import com.talkar.app.data.models.ConversationalResponse
 import com.google.ar.core.AugmentedImage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -40,6 +42,16 @@ class SimpleARViewModel : ViewModel() {
     
     private val _showAdContent = MutableStateFlow(false)
     val showAdContent: StateFlow<Boolean> = _showAdContent.asStateFlow()
+    
+    // Conversational context state
+    private val _speechResult = MutableStateFlow<SpeechResult>(SpeechResult.Idle)
+    val speechResult: StateFlow<SpeechResult> = _speechResult.asStateFlow()
+    
+    private val _conversationalResponse = MutableStateFlow<ConversationalResponse?>(null)
+    val conversationalResponse: StateFlow<ConversationalResponse?> = _conversationalResponse.asStateFlow()
+    
+    private val _isProcessingQuery = MutableStateFlow(false)
+    val isProcessingQuery: StateFlow<Boolean> = _isProcessingQuery.asStateFlow()
 
     // Simple debounce/deduplication to avoid repeated detection events flooding logs
     // and triggering duplicate backend work when AR repeatedly detects the same target.
@@ -499,6 +511,136 @@ class SimpleARViewModel : ViewModel() {
     
     fun setError(errorMessage: String) {
         _uiState.value = _uiState.value.copy(error = errorMessage)
+    }
+    
+    /**
+     * Start voice listening for conversational input
+     */
+    fun startVoiceListening() {
+        // In a real implementation, this would connect to the SpeechRecognitionService
+        // For now, we'll just update the state to simulate listening
+        _speechResult.value = SpeechResult.Listening
+        android.util.Log.d("SimpleARViewModel", "Started voice listening")
+    }
+    
+    /**
+     * Stop voice listening
+     */
+    fun stopVoiceListening() {
+        // In a real implementation, this would stop the SpeechRecognitionService
+        // For now, we'll just update the state to simulate stopping
+        _speechResult.value = SpeechResult.Idle
+        android.util.Log.d("SimpleARViewModel", "Stopped voice listening")
+    }
+    
+    /**
+     * Process conversational query
+     *
+     * @param query The user's query text
+     */
+    fun processConversationalQuery(query: String) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                android.util.Log.d("SimpleARViewModel", "Processing conversational query: $query")
+                
+                // Update UI state
+                _isProcessingQuery.value = true
+                
+                // Get current image context if available
+                val currentImageId = _recognizedImage.value?.id
+                
+                // Create request object
+                val request = com.talkar.app.data.api.ConversationalQueryRequest(
+                    query = query,
+                    imageId = currentImageId,
+                    context = null // In a real implementation, you might add more context
+                )
+                
+                // Call the backend API
+                val response = TalkARApplication.instance.apiClient.processConversationalQuery(request)
+                
+                if (response.isSuccessful) {
+                    val responseBody = response.body()
+                    if (responseBody != null && responseBody.success) {
+                        // Create response object
+                        val conversationalResponse = ConversationalResponse(
+                            success = true,
+                            text = responseBody.response,
+                            audioUrl = responseBody.audioUrl,
+                            timestamp = System.currentTimeMillis()
+                        )
+                        
+                        // Update UI on main thread
+                        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            _conversationalResponse.value = conversationalResponse
+                            _isProcessingQuery.value = false
+                            
+                            // Generate audio response if needed
+                            if (responseBody.audioUrl == null) {
+                                generateAudioResponse(responseBody.response)
+                            }
+                        }
+                    } else {
+                        throw Exception("API returned unsuccessful response")
+                    }
+                } else {
+                    throw Exception("API call failed with code: ${response.code()}")
+                }
+                
+            } catch (e: Exception) {
+                android.util.Log.e("SimpleARViewModel", "Error processing conversational query", e)
+                viewModelScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    _isProcessingQuery.value = false
+                    _uiState.value = _uiState.value.copy(
+                        error = "Failed to process conversational query: ${e.message}"
+                    )
+                }
+            }
+        }
+    }
+    
+    /**
+     * Generate mock response for conversational queries
+     *
+     * @param query The user's query
+     * @return Mock response text
+     */
+    private fun generateMockResponse(query: String): String {
+        return when {
+            query.contains("hello", ignoreCase = true) || 
+            query.contains("hi", ignoreCase = true) -> {
+                "Hello there! I'm your TalkAR assistant. How can I help you today?"
+            }
+            query.contains("what is this", ignoreCase = true) || 
+            query.contains("what's this", ignoreCase = true) -> {
+                val currentImage = _recognizedImage.value
+                if (currentImage != null) {
+                    "This appears to be ${currentImage.name}. I can tell you more about it if you'd like!"
+                } else {
+                    "I'm not sure what you're referring to. Could you point your camera at something?"
+                }
+            }
+            query.contains("how does this work", ignoreCase = true) -> {
+                "TalkAR uses augmented reality to bring images to life. Simply point your camera at an object, and I'll provide information about it!"
+            }
+            query.contains("thank", ignoreCase = true) -> {
+                "You're welcome! Is there anything else I can help you with?"
+            }
+            else -> {
+                "That's an interesting question. I'm still learning about the world around us. Could you ask me something else?"
+            }
+        }
+    }
+    
+    /**
+     * Generate audio response for conversational queries
+     *
+     * @param text The text to convert to audio
+     */
+    private fun generateAudioResponse(text: String) {
+        // In a real implementation, this would call a TTS service
+        // For now, we'll just log the action
+        android.util.Log.d("SimpleARViewModel", "Generating audio response for: $text")
     }
     
     fun setArError(errorMessage: String) {
