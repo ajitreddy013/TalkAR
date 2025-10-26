@@ -20,12 +20,14 @@ import {
   TableRow,
   Chip,
   CircularProgress,
+  TextField,
 } from "@mui/material";
 import { api } from "../services/api";
 
 export default function AIConfig() {
   // AI Configuration state
   const [defaultTone, setDefaultTone] = useState("friendly");
+  const [promptTemplate, setPromptTemplate] = useState("");
   const [defaultLanguage, setDefaultLanguage] = useState("en");
   const [defaultAvatar, setDefaultAvatar] = useState("");
   const [availableAvatars, setAvailableAvatars] = useState<any[]>([]);
@@ -72,6 +74,10 @@ export default function AIConfig() {
       const configs = response.data.configs;
 
       setDefaultTone(configs.default_tone || "friendly");
+      setPromptTemplate(
+        configs.prompt_template ||
+          "Create a short, engaging script for a product advertisement. The product is {product}. Highlight its key features and benefits in a {tone} tone."
+      );
       setDefaultLanguage(configs.default_language || "en");
       setDefaultAvatar(configs.default_avatar_id || "");
 
@@ -112,6 +118,11 @@ export default function AIConfig() {
 
       // Save default tone
       await api.post("/ai-config/defaults/tone", { tone: defaultTone });
+
+      // Save prompt template
+      await api.post("/ai-config/prompt-template", {
+        template: promptTemplate,
+      });
 
       // Save default language
       await api.post("/ai-config/defaults/language", {
@@ -198,6 +209,31 @@ export default function AIConfig() {
               ))}
             </Select>
           </FormControl>
+        </Box>
+
+        <Divider />
+
+        {/* Prompt Template Setting */}
+        <Box>
+          <Typography variant="h6" gutterBottom>
+            Prompt Template
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Customize the AI prompt template. Use &#123;product&#125; as a
+            placeholder for the product name and &#123;tone&#125; for the tone.
+          </Typography>
+
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            value={promptTemplate}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+              setPromptTemplate(e.target.value)
+            }
+            placeholder="Enter prompt template..."
+            variant="outlined"
+          />
         </Box>
 
         <Divider />

@@ -94,6 +94,9 @@ class WhisperService(private val context: Context) {
         apiKey: String,
         language: String? = null
     ): String? = kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation {
+            // Handle cancellation if needed
+        }
         
         try {
             // Create multipart request body
@@ -122,30 +125,30 @@ class WhisperService(private val context: Context) {
             client.newCall(request).enqueue(object : okhttp3.Callback {
                 override fun onFailure(call: okhttp3.Call, e: IOException) {
                     Log.e(TAG, "Whisper API call failed", e)
-                    continuation.resume(null)
+                    continuation.resume(null) {}
                 }
                 
                 override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                     try {
                         if (!response.isSuccessful) {
                             Log.e(TAG, "Whisper API call unsuccessful: ${response.code}")
-                            continuation.resume(null)
+                            continuation.resume(null) {}
                             return
                         }
                         
                         val responseBody = response.body?.string()
                         if (responseBody.isNullOrEmpty()) {
                             Log.e(TAG, "Empty response from Whisper API")
-                            continuation.resume(null)
+                            continuation.resume(null) {}
                             return
                         }
                         
                         // Parse JSON response to extract transcription text
                         val transcription = parseTranscriptionResponse(responseBody)
-                        continuation.resume(transcription)
+                        continuation.resume(transcription) {}
                     } catch (e: Exception) {
                         Log.e(TAG, "Error parsing Whisper API response", e)
-                        continuation.resume(null)
+                        continuation.resume(null) {}
                     } finally {
                         response.close()
                     }
@@ -153,7 +156,7 @@ class WhisperService(private val context: Context) {
             })
         } catch (e: Exception) {
             Log.e(TAG, "Error preparing Whisper API request", e)
-            continuation.resume(null)
+            continuation.resume(null) {}
         }
     }
     

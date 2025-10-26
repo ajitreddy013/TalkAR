@@ -23,10 +23,12 @@ import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.data.repository.ImageRepository
 import com.talkar.app.data.api.ApiClient
 import com.talkar.app.data.local.ImageDatabase
+import com.talkar.app.data.services.ConfigSyncService
 
 class MainActivity : ComponentActivity() {
     
     private var hasCameraPermission by mutableStateOf(false)
+    private lateinit var configSyncService: ConfigSyncService
     
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -45,6 +47,25 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         android.util.Log.d("MainActivity", "MainActivity onCreate - starting lightweight initialization")
+        
+        // Initialize config sync service
+        configSyncService = (application as TalkARApplication).configSyncService
+        configSyncService.setConfigUpdateListener(object : ConfigSyncService.ConfigUpdateListener {
+            override fun onConfigUpdated(key: String, value: String) {
+                android.util.Log.d("MainActivity", "Config updated: $key = $value")
+                // Handle specific config updates here
+                // For example, update UI elements or restart services
+            }
+            
+            override fun onConfigsUpdated(configs: Map<String, String>) {
+                android.util.Log.d("MainActivity", "All configs updated: $configs")
+                // Handle bulk config updates here
+            }
+            
+            override fun onSyncStatusChanged(syncing: Boolean) {
+                android.util.Log.d("MainActivity", "Config sync status changed: $syncing")
+            }
+        })
         
         // Defer heavy work and set up UI immediately
         setContent {

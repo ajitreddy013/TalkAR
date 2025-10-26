@@ -65,6 +65,13 @@ interface ApiService {
     // Feedback endpoint
     @POST("feedback")
     suspend fun sendFeedback(@Body request: FeedbackRequest): Response<FeedbackResponse>
+    
+    // AI Config endpoints
+    @GET("ai-config/defaults/tone")
+    suspend fun getDefaultTone(): Response<DefaultToneResponse>
+    
+    @GET("ai-config/prompt-template")
+    suspend fun getPromptTemplate(): Response<PromptTemplateResponse>
 }
 
 object ApiClient {
@@ -179,4 +186,14 @@ data class FeedbackRequest(
 data class FeedbackResponse(
     val success: Boolean,
     val message: String?
+)
+
+data class DefaultToneResponse(
+    val success: Boolean,
+    val tone: String
+)
+
+data class PromptTemplateResponse(
+    val success: Boolean,
+    val template: String
 )
