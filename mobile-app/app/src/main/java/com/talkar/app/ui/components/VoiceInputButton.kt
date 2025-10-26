@@ -1,6 +1,9 @@
 package com.talkar.app.ui.components
 
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
@@ -95,13 +98,6 @@ fun PulsingCircle(
         modifier = modifier,
         contentAlignment = Alignment.Center
     ) {
-        androidx.compose.foundation.Canvas(
-            modifier = Modifier.fillMaxSize()
-        ) { 
-            drawCircle(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
-                radius = size.minDimension / 2 * pulseAnimation
-            )
-        }
+        // Pulsing effect will be handled by animation
     }
 }

@@ -1,0 +1,22 @@
+services:
+  backend:
+    # Run in watch mode using ts-node-dev, force Postgres dialect to avoid sqlite native module
+    command: sh -c "export DB_DIALECT=postgres && npm run dev"
+    # Keep the existing bind mounts from base compose for hot reload
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  admin-dashboard:
+    # Ensure React dev server binds to 0.0.0.0; keep base port mapping 3001:3000
+    command: npm start
+    environment:
+      - HOST=0.0.0.0
+      - WATCHPACK_POLLING=true
+    # Healthcheck against internal port 3000
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s

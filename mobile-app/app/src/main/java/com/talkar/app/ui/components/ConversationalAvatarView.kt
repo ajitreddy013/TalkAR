@@ -1,7 +1,11 @@
 package com.talkar.app.ui.components
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,14 +76,8 @@ fun ConversationalAvatarView(
                         .clip(RoundedCornerShape(20.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    androidx.compose.foundation.Canvas(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        drawCircle(color = MaterialTheme.colorScheme.primary)
-                    }
-                    
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.VolumeUp,
+                        imageVector = Icons.Default.VolumeUp,
                         contentDescription = "Assistant",
                         tint = Color.White,
                         modifier = Modifier.size(24.dp)
@@ -132,7 +130,7 @@ fun ConversationalAvatarView(
                     onClick = { /* TODO: Play audio */ }
                 ) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Default.VolumeUp,
+                        imageVector = Icons.Default.VolumeUp,
                         contentDescription = "Play audio"
                     )
                 }
@@ -160,14 +158,10 @@ fun TypingIndicator() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(3) { index ->
-            androidx.compose.foundation.Canvas(
-                modifier = Modifier.size(8.dp)
-            ) {
-                drawCircle(
-                    color = if (index < dotCount) MaterialTheme.colorScheme.primary 
-                           else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                )
-            }
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+            )
             
             if (index < 2) {
                 Spacer(modifier = Modifier.width(4.dp))

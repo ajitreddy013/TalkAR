@@ -3,6 +3,8 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import dotenv from "dotenv";
+import { createServer } from "http";
+import { Server } from "socket.io";
 import { sequelize } from "./config/database";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
@@ -20,6 +22,8 @@ import analyticsRoutes from "./routes/analytics";
 import aiPipelineRoutes from "./routes/aiPipeline";
 import aiConfigRoutes from "./routes/aiConfig";
 import performanceRoutes from "./routes/performance";
+import feedbackRoutes from "./routes/feedback";
+import settingsRoutes from "./routes/settings";
 
 // Load environment variables
 dotenv.config();
@@ -49,7 +53,7 @@ app.use(
 );
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://localhost:3001"],
+    origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
     credentials: true,
   })
 );
@@ -99,6 +103,8 @@ app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/ai-pipeline", aiPipelineRoutes);
 app.use("/api/v1/ai-config", aiConfigRoutes);
 app.use("/api/v1/performance", performanceRoutes);
+app.use("/api/v1/feedback", feedbackRoutes);
+app.use("/api/v1/settings", settingsRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
@@ -126,7 +132,28 @@ const startServer = async () => {
     await sequelize.sync({ alter: true });
     console.log("Database synchronized.");
 
-    app.listen(Number(PORT), "0.0.0.0", () => {
+    // Create HTTP server and Socket.IO server
+    const server = createServer(app);
+    const io = new Server(server, {
+      cors: {
+        origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+        credentials: true
+      }
+    });
+
+    // Store io instance in app for access in routes
+    app.set('io', io);
+
+    // Handle socket connections
+    io.on('connection', (socket) => {
+      console.log('Client connected for real-time config updates');
+      
+      socket.on('disconnect', () => {
+        console.log('Client disconnected');
+      });
+    });
+
+    server.listen(Number(PORT), "0.0.0.0", () => {
       console.log(`Server is running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV}`);
       console.log(`Server accessible at: http://0.0.0.0:${PORT}`);

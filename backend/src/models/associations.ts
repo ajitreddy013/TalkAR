@@ -2,6 +2,8 @@ import { Image, Dialogue } from "./Image";
 import { Avatar } from "./Avatar";
 import { ImageAvatarMapping } from "./ImageAvatarMapping";
 import { AIConfig } from "./AIConfig";
+import Feedback from "./Feedback";
+import Settings from "./Settings";
 
 // Define all model associations
 export function defineAssociations() {
@@ -29,4 +31,6 @@ export function defineAssociations() {
   // Note: This is a loose association based on voiceId string matching
   // Avatar.hasMany(Dialogue, { foreignKey: "voiceId", as: "dialogues" });
   // Dialogue.belongsTo(Avatar, { foreignKey: "voiceId", as: "avatar" });
+  
+  // Feedback and Settings models don't need associations
 }

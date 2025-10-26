@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   AppBar,
   Box,
@@ -16,9 +16,14 @@ import {
   Dashboard as DashboardIcon,
   Image as ImageIcon,
   Settings as SettingsIcon,
+  Analytics as AnalyticsIcon,
+  Tune as TuneIcon,
 } from "@mui/icons-material";
 import ImagesPage from "./pages/Images";
 import AIConfigPage from "./pages/AIConfig";
+import AnalyticsPage from "./pages/Analytics";
+import SettingsPage from "./pages/Settings";
+import DashboardPage from "./pages/Dashboard";
 
 function App() {
   const [currentView, setCurrentView] = useState("dashboard");
@@ -49,6 +54,17 @@ function App() {
             </ListItem>
             <ListItem disablePadding>
               <ListItemButton
+                selected={currentView === "analytics"}
+                onClick={() => setCurrentView("analytics")}
+              >
+                <ListItemIcon>
+                  <AnalyticsIcon />
+                </ListItemIcon>
+                <ListItemText primary="Analytics" />
+              </ListItemButton>
+            </ListItem>
+            <ListItem disablePadding>
+              <ListItemButton
                 selected={currentView === "images"}
                 onClick={() => setCurrentView("images")}
               >
@@ -69,38 +85,26 @@ function App() {
                 <ListItemText primary="AI Config" />
               </ListItemButton>
             </ListItem>
+            <ListItem disablePadding>
+              <ListItemButton
+                selected={currentView === "settings"}
+                onClick={() => setCurrentView("settings")}
+              >
+                <ListItemIcon>
+                  <TuneIcon />
+                </ListItemIcon>
+                <ListItemText primary="Settings" />
+              </ListItemButton>
+            </ListItem>
           </List>
         </Box>
 
         <Box sx={{ flex: 1, p: 3 }}>
-          {currentView === "dashboard" && (
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h4" gutterBottom>
-                TalkAR Admin Dashboard
-              </Typography>
-              <Typography variant="body1" paragraph>
-                Welcome to the TalkAR Admin Dashboard. Here you can manage
-                images and scripts for your AR application.
-              </Typography>
-              <Button
-                variant="contained"
-                onClick={() => setCurrentView("images")}
-                sx={{ mr: 2 }}
-              >
-                Manage Images
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={() => setCurrentView("ai-config")}
-                sx={{ mr: 2 }}
-              >
-                AI Configuration
-              </Button>
-            </Paper>
-          )}
-
+          {currentView === "dashboard" && <DashboardPage />}
+          {currentView === "analytics" && <AnalyticsPage />}
           {currentView === "images" && <ImagesPage />}
           {currentView === "ai-config" && <AIConfigPage />}
+          {currentView === "settings" && <SettingsPage />}
         </Box>
       </Box>
     </Box>

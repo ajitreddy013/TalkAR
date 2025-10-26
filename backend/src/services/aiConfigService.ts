@@ -70,6 +70,21 @@ export class AIConfigService {
   }
 
   /**
+   * Get prompt template
+   */
+  static async getPromptTemplate(): Promise<string> {
+    const template = await this.getConfig("prompt_template");
+    return template || "Create a short, engaging script for a product advertisement. The product is {product}. Highlight its key features and benefits in a {tone} tone.";
+  }
+
+  /**
+   * Set prompt template
+   */
+  static async setPromptTemplate(template: string): Promise<boolean> {
+    return await this.setConfig("prompt_template", template, "Prompt template for AI-generated content");
+  }
+
+  /**
    * Get default language
    */
   static async getDefaultLanguage(): Promise<string> {

@@ -2,7 +2,6 @@ package com.talkar.app.ui.viewmodels
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.test.core.app.ApplicationProvider
-import com.talkar.app.TalkARApplication
 import com.talkar.app.data.models.ImageRecognition
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,6 +25,7 @@ class SimpleARViewModelConversationalTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        // Simple initialization without complex dependencies
         viewModel = SimpleARViewModel()
     }
     
@@ -81,7 +81,9 @@ class SimpleARViewModelConversationalTest {
             name = "Test Image",
             description = "A test image",
             imageUrl = "https://example.com/test.jpg",
-            dialogues = listOf()
+            dialogues = listOf(),
+            createdAt = "2023-01-01T00:00:00Z",
+            updatedAt = "2023-01-01T00:00:00Z"
         )
         
         // Process a conversational query with image context

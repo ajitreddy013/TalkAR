@@ -29,62 +29,6 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-// Get specific AI configuration
-router.get("/:key", async (req, res, next) => {
-  try {
-    const { key } = req.params;
-    const value = await AIConfigService.getConfig(key);
-    
-    if (value === null) {
-      return res.status(404).json({
-        success: false,
-        message: `Configuration key '${key}' not found`
-      });
-    }
-
-    return res.json({
-      success: true,
-      key,
-      value
-    });
-  } catch (error) {
-    return next(error);
-  }
-});
-
-// Update AI configuration
-router.post("/:key", async (req, res, next) => {
-  try {
-    const { key } = req.params;
-    const { value, description } = req.body;
-
-    if (value === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required field: value"
-      });
-    }
-
-    const success = await AIConfigService.setConfig(key, value, description);
-    
-    if (!success) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to update configuration"
-      });
-    }
-
-    return res.json({
-      success: true,
-      message: "Configuration updated successfully",
-      key,
-      value
-    });
-  } catch (error) {
-    return next(error);
-  }
-});
-
 // Get default tone
 router.get("/defaults/tone", async (req, res, next) => {
   try {
@@ -120,10 +64,61 @@ router.post("/defaults/tone", async (req, res, next) => {
       });
     }
 
+    // Emit real-time update event
+    req.app?.get('io')?.emit('config_updated', { key: 'default_tone', value: tone });
+
     return res.json({
       success: true,
       message: "Default tone updated successfully",
       tone
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Get prompt template
+router.get("/prompt-template", async (req, res, next) => {
+  try {
+    const template = await AIConfigService.getPromptTemplate();
+    
+    return res.json({
+      success: true,
+      template
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Set prompt template
+router.post("/prompt-template", async (req, res, next) => {
+  try {
+    const { value } = req.body;
+
+    if (!value) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required field: value"
+      });
+    }
+
+    const success = await AIConfigService.setPromptTemplate(value);
+    
+    if (!success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update prompt template"
+      });
+    }
+
+    // Emit real-time update event
+    req.app?.get('io')?.emit('config_updated', { key: 'prompt_template', value: value });
+
+    return res.json({
+      success: true,
+      message: "Prompt template updated successfully",
+      template: value
     });
   } catch (error) {
     return next(error);
@@ -232,6 +227,62 @@ router.post("/defaults/avatar", async (req, res, next) => {
       success: true,
       message: "Default avatar updated successfully",
       avatar
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Get specific AI configuration
+router.get("/:key", async (req, res, next) => {
+  try {
+    const { key } = req.params;
+    const value = await AIConfigService.getConfig(key);
+    
+    if (value === null) {
+      return res.status(404).json({
+        success: false,
+        message: `Configuration key '${key}' not found`
+      });
+    }
+
+    return res.json({
+      success: true,
+      key,
+      value
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Update AI configuration
+router.post("/:key", async (req, res, next) => {
+  try {
+    const { key } = req.params;
+    const { value, description } = req.body;
+
+    if (value === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required field: value"
+      });
+    }
+
+    const success = await AIConfigService.setConfig(key, value, description);
+    
+    if (!success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update configuration"
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Configuration updated successfully",
+      key,
+      value
     });
   } catch (error) {
     return next(error);
