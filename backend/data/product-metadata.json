@@ -5,6 +5,7 @@
     "category": "Beverage",
     "tone": "excited",
     "language": "English",
+    "image_url": "https://cdn.talkar.com/posters/sunrich.png",
     "brand": "Sunrich",
     "price": 29.99,
     "currency": "USD",
@@ -17,10 +18,24 @@
   },
   {
     "image_id": "poster_02",
+    "product_name": "Amul Butter",
+    "category": "Food",
+    "tone": "friendly",
+    "language": "Hindi",
+    "image_url": "https://cdn.talkar.com/posters/amul.png",
+    "brand": "Amul",
+    "price": 45.0,
+    "currency": "INR",
+    "features": ["Pure dairy product", "Rich in taste", "Fresh daily"],
+    "description": "Taste the goodness of pure dairy with Amul's premium butter."
+  },
+  {
+    "image_id": "poster_03",
     "product_name": "Eco-Friendly Backpack",
     "category": "Fashion",
     "tone": "enthusiastic",
     "language": "English",
+    "image_url": "https://cdn.talkar.com/posters/ecogear.png",
     "brand": "EcoGear",
     "price": 59.99,
     "currency": "USD",
@@ -32,11 +47,12 @@
     "description": "Carry your essentials sustainably with our eco-friendly backpack designed for everyday use."
   },
   {
-    "image_id": "poster_03",
+    "image_id": "poster_04",
     "product_name": "Professional Wireless Headphones",
     "category": "Electronics",
     "tone": "professional",
     "language": "English",
+    "image_url": "https://cdn.talkar.com/posters/soundtech.png",
     "brand": "SoundTech",
     "price": 199.99,
     "currency": "USD",
@@ -46,5 +62,22 @@
       "Premium sound quality"
     ],
     "description": "Experience crystal-clear audio with our professional-grade wireless headphones designed for discerning listeners."
+  },
+  {
+    "image_id": "poster_05",
+    "product_name": "Nike Running Shoes",
+    "category": "Sports",
+    "tone": "energetic",
+    "language": "English",
+    "image_url": "https://cdn.talkar.com/posters/nike.png",
+    "brand": "Nike",
+    "price": 129.99,
+    "currency": "USD",
+    "features": [
+      "Lightweight design",
+      "Breathable material",
+      "Superior traction"
+    ],
+    "description": "Run faster and longer with Nike's latest running technology."
   }
 ]

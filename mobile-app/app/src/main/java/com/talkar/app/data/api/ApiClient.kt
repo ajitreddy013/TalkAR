@@ -58,6 +58,19 @@ interface ApiService {
     @POST("ai-pipeline/generate_ad_content_streaming")
     suspend fun generateAdContentStreaming(@Body request: AdContentGenerationRequest): Response<AdContentGenerationResponse>
     
+    // Dynamic Script Generation endpoints
+    @POST("generate-dynamic-script")
+    suspend fun generateDynamicScript(@Body request: DynamicScriptRequest): Response<DynamicScriptResponse>
+    
+    @POST("ai-pipeline/generate_ad_content_from_poster")
+    suspend fun generateAdContentFromPoster(@Body request: PosterAdContentRequest): Response<PosterAdContentResponse>
+    
+    @GET("generate-dynamic-script/posters")
+    suspend fun getAllPosters(): Response<PostersResponse>
+    
+    @GET("generate-dynamic-script/poster/{image_id}")
+    suspend fun getPosterById(@Path("image_id") imageId: String): Response<PosterResponse>
+    
     // Conversational Context endpoint
     @POST("ai-pipeline/conversational_query")
     suspend fun processConversationalQuery(@Body request: ConversationalQueryRequest): Response<ConversationalQueryResponse>
@@ -196,4 +209,89 @@ data class DefaultToneResponse(
 data class PromptTemplateResponse(
     val success: Boolean,
     val template: String
+)
+
+// Dynamic Script Generation models
+data class DynamicScriptRequest(
+    val image_id: String,
+    val user_id: String? = null
+)
+
+data class DynamicScriptResponse(
+    val success: Boolean,
+    val image_id: String? = null,
+    val product_name: String? = null,
+    val category: String? = null,
+    val tone: String? = null,
+    val language: String? = null,
+    val image_url: String? = null,
+    val brand: String? = null,
+    val script: String? = null,
+    val metadata: ScriptMetadata? = null
+)
+
+data class ScriptMetadata(
+    val generated_at: String,
+    val user_id: String,
+    val model_used: String,
+    val word_count: Int
+)
+
+// Poster Ad Content Generation models
+data class PosterAdContentRequest(
+    val image_id: String,
+    val user_id: String? = null
+)
+
+data class PosterAdContentResponse(
+    val success: Boolean,
+    val script: String? = null,
+    val audio_url: String? = null,
+    val video_url: String? = null,
+    val metadata: PosterMetadata? = null
+)
+
+data class PosterMetadata(
+    val image_id: String,
+    val product_name: String,
+    val language: String,
+    val tone: String,
+    val image_url: String,
+    val generated_at: String,
+    val user_id: String
+)
+
+// Poster Management models
+data class PostersResponse(
+    val success: Boolean,
+    val posters: List<PosterInfo>
+)
+
+data class PosterInfo(
+    val image_id: String,
+    val product_name: String,
+    val category: String,
+    val tone: String,
+    val language: String,
+    val image_url: String,
+    val brand: String
+)
+
+data class PosterResponse(
+    val success: Boolean,
+    val poster: PosterDetails
+)
+
+data class PosterDetails(
+    val image_id: String,
+    val product_name: String,
+    val category: String,
+    val tone: String,
+    val language: String,
+    val image_url: String,
+    val brand: String,
+    val price: Double,
+    val currency: String,
+    val features: List<String>,
+    val description: String
 )

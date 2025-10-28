@@ -192,6 +192,63 @@ router.post("/generate_lipsync", async (req, res, next) => {
   }
 });
 
+// Generate complete ad content from poster: poster → script → audio → lipsync video
+router.post("/generate_ad_content_from_poster", async (req, res, next) => {
+  try {
+    const { image_id, user_id } = req.body;
+
+    // Validate required parameters
+    if (!image_id) {
+      return res.status(400).json({
+        error: "Missing required parameter: image_id"
+      });
+    }
+
+    // Validate image_id
+    if (typeof image_id !== 'string' || image_id.trim().length === 0) {
+      return res.status(400).json({
+        error: "Invalid image_id: must be a non-empty string"
+      });
+    }
+
+    // Generate complete ad content from poster
+    const result = await AIPipelineService.generateAdContentFromPoster(image_id, user_id);
+
+    return res.json({
+      success: true,
+      script: result.script,
+      audio_url: result.audioUrl,
+      video_url: result.videoUrl,
+      metadata: result.metadata
+    });
+  } catch (error: any) {
+    console.error("Poster-based ad content generation error:", error);
+    
+    // Handle specific error cases
+    if (error.message.includes("API key")) {
+      return res.status(401).json({
+        error: "API authentication failed. Please check your API keys."
+      });
+    } else if (error.message.includes("rate limit")) {
+      return res.status(429).json({
+        error: "API rate limit exceeded. Please try again later."
+      });
+    } else if (error.message.includes("timeout")) {
+      return res.status(408).json({
+        error: "API request timeout. Please try again later."
+      });
+    } else if (error.message.includes("not found")) {
+      return res.status(404).json({
+        error: error.message
+      });
+    } else {
+      return res.status(500).json({
+        error: "Failed to generate ad content from poster. Please try again later."
+      });
+    }
+  }
+});
+
 // Generate complete ad content: product → script → audio → lipsync video
 router.post("/generate_ad_content", async (req, res, next) => {
   try {
