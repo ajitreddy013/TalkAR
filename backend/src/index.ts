@@ -24,6 +24,7 @@ import aiConfigRoutes from "./routes/aiConfig";
 import performanceRoutes from "./routes/performance";
 import feedbackRoutes from "./routes/feedback";
 import settingsRoutes from "./routes/settings";
+import generateDynamicScriptRoutes from "./routes/generateDynamicScript";
 
 // Load environment variables
 dotenv.config();
@@ -105,6 +106,7 @@ app.use("/api/v1/ai-config", aiConfigRoutes);
 app.use("/api/v1/performance", performanceRoutes);
 app.use("/api/v1/feedback", feedbackRoutes);
 app.use("/api/v1/settings", settingsRoutes);
+app.use("/api/v1/generate-dynamic-script", generateDynamicScriptRoutes);
 
 // Health check
 app.get("/health", (req, res) => {

@@ -7,6 +7,10 @@ import fs from "fs";
 import path from "path";
 import { PerformanceMetricsService } from "./performanceMetricsService";
 import { AnalyticsService } from "./analyticsService";
+import { getPosterById } from "../utils/posterHelper";
+import { getUserPreferences } from "../utils/userHelper";
+import OpenAI from "openai";
+import { optimizedScriptService } from "./optimizedScriptService";
 
 interface ScriptGenerationRequest {
   imageId: string;
@@ -114,6 +118,95 @@ export class AIPipelineService {
     this.processAIPipeline(jobId, imageId, language, emotion);
     
     return { jobId };
+  }
+
+  /**
+   * Generate complete ad content using dynamic script generation: poster → script → audio → lipsync video
+   */
+  static async generateAdContentFromPoster(imageId: string, userId?: string): Promise<{
+    script: string;
+    audioUrl: string;
+    videoUrl: string;
+    metadata: any;
+  }> {
+    const requestId = uuidv4();
+    const startTime = Date.now();
+    
+    // Log AI pipeline event
+    AnalyticsService.logAIPipelineEvent({
+      jobId: requestId,
+      eventType: 'dynamic_ad_content_generation',
+      details: `Starting dynamic ad content generation for poster: ${imageId}`,
+      status: 'started',
+      productName: imageId
+    });
+    
+    // Start performance tracking
+    PerformanceMetricsService.startTracking(requestId, imageId);
+    
+    try {
+      // Step 1: Generate dynamic script using the new endpoint
+      const scriptStartTime = Date.now();
+      const scriptResponse = await this.generateDynamicScript(imageId, userId);
+      const scriptDuration = Date.now() - scriptStartTime;
+      PerformanceMetricsService.recordScriptGeneration(requestId, scriptDuration);
+      
+      const { script, language, tone, image_url, product_name } = scriptResponse;
+      
+      // Step 2: Convert script to audio with streaming optimization
+      const audioStartTime = Date.now();
+      const audioResponse = await this.generateAudioStreaming({
+        text: script,
+        language: language.toLowerCase() === 'hindi' ? 'hi' : 'en',
+        emotion: tone
+      });
+      const audioDuration = Date.now() - audioStartTime;
+      const audioStartDelay = audioStartTime - startTime;
+      PerformanceMetricsService.recordAudioStart(requestId, audioStartDelay);
+      PerformanceMetricsService.recordAudioGeneration(requestId, audioDuration);
+      
+      // Step 3: Generate lip-sync video
+      const videoStartTime = Date.now();
+      const lipSyncResponse = await this.generateLipSyncStreaming({
+        imageId: imageId,
+        audioUrl: audioResponse.audioUrl,
+        emotion: tone,
+        avatar: `${product_name.replace(/\s+/g, '_')}_avatar.png`
+      });
+      const videoDuration = Date.now() - videoStartTime;
+      const totalDuration = Date.now() - startTime;
+      PerformanceMetricsService.recordVideoCompletion(requestId, videoDuration, totalDuration);
+      
+      // Return the complete ad content with metadata
+      return {
+        script,
+        audioUrl: audioResponse.audioUrl,
+        videoUrl: lipSyncResponse.videoUrl,
+        metadata: {
+          image_id: imageId,
+          product_name,
+          language,
+          tone,
+          image_url,
+          generated_at: new Date().toISOString(),
+          user_id: userId || "anonymous"
+        }
+      };
+    } catch (error) {
+      console.error("Dynamic ad content generation error:", error);
+      PerformanceMetricsService.recordFailure(requestId, error instanceof Error ? error.message : "Unknown error");
+      
+      // Log AI pipeline error
+      AnalyticsService.logAIPipelineEvent({
+        jobId: requestId,
+        eventType: 'error',
+        details: `Dynamic ad content generation failed for poster: ${imageId} - ${error instanceof Error ? error.message : "Unknown error"}`,
+        status: 'failed',
+        productName: imageId
+      });
+      
+      throw error;
+    }
   }
 
   /**
@@ -1638,6 +1731,41 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       hash = hash & hash; // Convert to 32-bit integer
     }
     return Math.abs(hash).toString(36);
+  }
+
+  /**
+   * Generate dynamic script using optimized service with caching
+   */
+  static async generateDynamicScript(imageId: string, userId?: string): Promise<{
+    script: string;
+    language: string;
+    tone: string;
+    image_url: string;
+    product_name: string;
+  }> {
+    try {
+      // Use optimized script service with caching
+      const result = await optimizedScriptService.generateOptimizedScript({
+        image_id: imageId,
+        user_id: userId,
+        use_cache: true
+      });
+
+      // Log the generation request for analytics
+      console.log(`[DYNAMIC_SCRIPT] Generated script for ${imageId}: ${result.script.substring(0, 50)}... (${result.cached ? 'cached' : 'generated'} in ${result.generation_time}ms)`);
+
+      return {
+        script: result.script,
+        language: result.language,
+        tone: result.tone,
+        image_url: result.image_url,
+        product_name: result.product_name
+      };
+
+    } catch (error: any) {
+      console.error("Dynamic script generation error:", error);
+      throw new Error(`Failed to generate dynamic script: ${error.message}`);
+    }
   }
 
   /**

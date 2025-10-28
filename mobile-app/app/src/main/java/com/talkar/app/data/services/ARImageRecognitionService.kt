@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.ar.core.*
 import com.google.ar.core.exceptions.*
 import com.talkar.app.data.models.ImageRecognition
+import com.talkar.app.data.services.DynamicScriptService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,9 @@ class ARImageRecognitionService(private val context: Context) {
     private var session: Session? = null
     private var imageDatabase: AugmentedImageDatabase? = null
     
+    // Dynamic script service for generating personalized content
+    private val dynamicScriptService = DynamicScriptService(context)
+    
     private val _recognizedImages = MutableStateFlow<List<AugmentedImage>>(emptyList())
     val recognizedImages: StateFlow<List<AugmentedImage>> = _recognizedImages.asStateFlow()
     
@@ -32,6 +36,10 @@ class ARImageRecognitionService(private val context: Context) {
     
     // Cache for recognized images to avoid duplicate processing
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
+    
+    // State for ad content generation
+    private val _generatedAdContent = MutableStateFlow<com.talkar.app.data.api.PosterAdContentResponse?>(null)
+    val generatedAdContent: StateFlow<com.talkar.app.data.api.PosterAdContentResponse?> = _generatedAdContent.asStateFlow()
     
     // Coroutine scope for background operations
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -530,9 +538,54 @@ class ARImageRecognitionService(private val context: Context) {
             
             Log.d(tag, "Image recognized: $imageName")
             
+            // Generate personalized ad content for the recognized poster
+            generatePersonalizedAdContent(imageName)
+            
         } catch (e: Exception) {
             Log.e(tag, "Error handling recognized image", e)
         }
+    }
+    
+    /**
+     * Generate personalized ad content for the recognized poster
+     */
+    private fun generatePersonalizedAdContent(imageId: String) {
+        coroutineScope.launch {
+            try {
+                Log.d(tag, "Generating personalized ad content for poster: $imageId")
+                
+                // Generate complete ad content (script + audio + video)
+                val adContent = dynamicScriptService.generateAdContentFromPoster(imageId)
+                
+                if (adContent != null) {
+                    _generatedAdContent.value = adContent
+                    Log.d(tag, "Successfully generated personalized ad content for $imageId")
+                    Log.d(tag, "Script: ${adContent.script}")
+                    Log.d(tag, "Video URL: ${adContent.video_url}")
+                } else {
+                    Log.e(tag, "Failed to generate ad content for $imageId")
+                    _error.value = "Failed to generate personalized ad content for $imageId"
+                }
+                
+            } catch (e: Exception) {
+                Log.e(tag, "Error generating personalized ad content for $imageId", e)
+                _error.value = "Error generating ad content: ${e.message}"
+            }
+        }
+    }
+    
+    /**
+     * Get generated ad content for the last recognized image
+     */
+    fun getGeneratedAdContent(): com.talkar.app.data.api.PosterAdContentResponse? {
+        return _generatedAdContent.value
+    }
+    
+    /**
+     * Clear generated ad content
+     */
+    fun clearGeneratedAdContent() {
+        _generatedAdContent.value = null
     }
     
     /**
