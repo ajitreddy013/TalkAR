@@ -25,12 +25,26 @@ import performanceRoutes from "./routes/performance";
 import feedbackRoutes from "./routes/feedback";
 import settingsRoutes from "./routes/settings";
 import generateDynamicScriptRoutes from "./routes/generateDynamicScript";
+import http from "http";
+import LRU from "lru-cache";
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Enable HTTP keep-alive
+const agent = new http.Agent({ keepAlive: true });
+// Store in app for use in routes
+app.set('httpAgent', agent);
+
+// Create LRU cache for video content
+const videoCache = new LRU<string, any>({
+  max: 3, // Cache last 3 videos
+  ttl: 1000 * 60 * 5, // 5 minutes TTL
+});
+app.set('videoCache', videoCache);
 
 // Middleware
 app.use(
@@ -95,18 +109,20 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/images", imageRoutes);
 app.use("/api/v1/sync", syncRoutes);
 app.use("/api/v1/admin", adminRoutes);
-app.use("/api/multi-images", multiImageRoutes);
-app.use("/api/v1/avatars", avatarRoutes);
-app.use("/api/v1/lipsync", lipSyncRoutes);
-app.use("/api/v1/scripts", scriptRoutes);
-app.use("/api/v1/enhanced-lipsync", enhancedLipSyncRoutes);
-app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/ai-pipeline", aiPipelineRoutes);
 app.use("/api/v1/ai-config", aiConfigRoutes);
 app.use("/api/v1/performance", performanceRoutes);
 app.use("/api/v1/feedback", feedbackRoutes);
 app.use("/api/v1/settings", settingsRoutes);
 app.use("/api/v1/generate-dynamic-script", generateDynamicScriptRoutes);
+
+// Legacy routes (for backward compatibility)
+app.use("/api/multi-images", multiImageRoutes);
+app.use("/api/v1/avatars", avatarRoutes);
+app.use("/api/v1/lipsync", lipSyncRoutes);
+app.use("/api/v1/scripts", scriptRoutes);
+app.use("/api/v1/enhanced-lipsync", enhancedLipSyncRoutes);
+app.use("/api/v1/analytics", analyticsRoutes);
 
 // Health check
 app.get("/health", (req, res) => {

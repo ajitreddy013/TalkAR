@@ -31,6 +31,17 @@ import com.talkar.app.ui.components.EmotionalAvatarView
 import androidx.compose.animation.Crossfade
 
 /**
+ * Enum class for ad content states
+ */
+enum class AdState {
+    DETECTED,
+    GENERATING,
+    STREAMING_AUDIO,
+    PLAYING_VIDEO,
+    ERROR
+}
+
+/**
  * Streaming Avatar View that handles partial playback
  * Shows placeholder during buffering and replaces with lipsync video when ready
  */
@@ -56,6 +67,7 @@ fun StreamingAvatarView(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showVideo by remember { mutableStateOf(false) }
     var audioLevel by remember { mutableStateOf(0f) }
+    var adState by remember { mutableStateOf(AdState.DETECTED) }
     
     // Fade animation for transitions
     val avatarAlpha by animateFloatAsState(
@@ -68,9 +80,15 @@ fun StreamingAvatarView(
         adContent?.audioUrl?.let { audioUrl ->
             if (audioUrl.isNotEmpty()) {
                 Log.d("StreamingAvatarView", "Initializing audio streaming for URL: $audioUrl")
+                adState = AdState.STREAMING_AUDIO
                 @Suppress("UnsafeOptInUsageError")
                 initializeAudioStreaming(context, audioUrl, isPlaying) { playing ->
                     isPlaying = playing
+                    if (playing) {
+                        adState = AdState.STREAMING_AUDIO
+                    } else {
+                        adState = AdState.DETECTED
+                    }
                 }
             }
         }
@@ -82,6 +100,21 @@ fun StreamingAvatarView(
             // Add a small delay to ensure smooth transition
             kotlinx.coroutines.delay(500)
             showVideo = true
+            adState = AdState.PLAYING_VIDEO
+        }
+    }
+    
+    // Handle loading state
+    LaunchedEffect(isAdContentLoading) {
+        if (isAdContentLoading) {
+            adState = AdState.GENERATING
+        }
+    }
+    
+    // Handle error state
+    LaunchedEffect(adContentError) {
+        if (adContentError != null) {
+            adState = AdState.ERROR
         }
     }
     
@@ -95,13 +128,13 @@ fun StreamingAvatarView(
             // Show different views based on state
             Crossfade(targetState = showVideo, animationSpec = tween(durationMillis = 500)) { showVideoState ->
                 when {
-                    isAdContentLoading -> {
+                    adState == AdState.GENERATING -> {
                         // Loading state
                         LoadingAvatarView()
                     }
-                    adContentError != null -> {
+                    adState == AdState.ERROR -> {
                         // Error state
-                        ErrorAvatarView(error = adContentError)
+                        ErrorAvatarView(error = adContentError ?: "Unknown error")
                     }
                     isBuffering -> {
                         // Buffering state with placeholder
@@ -143,6 +176,66 @@ fun StreamingAvatarView(
                         )
                     }
                 }
+            }
+            
+            // Add state indicator overlay
+            StateIndicatorOverlay(adState = adState)
+        }
+    }
+}
+
+/**
+ * State indicator overlay that shows current ad state
+ */
+@Composable
+private fun StateIndicatorOverlay(adState: AdState) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp),
+        contentAlignment = Alignment.TopStart
+    ) {
+        Card(
+            modifier = Modifier.padding(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = when (adState) {
+                    AdState.DETECTED -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+                    AdState.GENERATING -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f)
+                    AdState.STREAMING_AUDIO -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.9f)
+                    AdState.PLAYING_VIDEO -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
+                    AdState.ERROR -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.9f)
+                }
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // State icon
+                Text(
+                    text = when (adState) {
+                        AdState.DETECTED -> "🔍"
+                        AdState.GENERATING -> "⚙️"
+                        AdState.STREAMING_AUDIO -> "🔊"
+                        AdState.PLAYING_VIDEO -> "🎬"
+                        AdState.ERROR -> "⚠️"
+                    },
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                
+                Spacer(modifier = Modifier.width(4.dp))
+                
+                // State text
+                Text(
+                    text = when (adState) {
+                        AdState.DETECTED -> "Poster detected"
+                        AdState.GENERATING -> "Generating ad..."
+                        AdState.STREAMING_AUDIO -> "Talking..."
+                        AdState.PLAYING_VIDEO -> "Playing video"
+                        AdState.ERROR -> "Error occurred"
+                    },
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
