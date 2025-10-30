@@ -9,8 +9,9 @@ import { PerformanceMetricsService } from "./performanceMetricsService";
 import { AnalyticsService } from "./analyticsService";
 import { getPosterById } from "../utils/posterHelper";
 import { getUserPreferences } from "../utils/userHelper";
-import OpenAI from "openai";
 import { optimizedScriptService } from "./optimizedScriptService";
+import http from "http";
+import LRU from "lru-cache";
 
 interface ScriptGenerationRequest {
   imageId: string;
@@ -135,7 +136,7 @@ export class AIPipelineService {
     // Log AI pipeline event
     AnalyticsService.logAIPipelineEvent({
       jobId: requestId,
-      eventType: 'dynamic_ad_content_generation',
+      eventType: 'ad_content_generation',
       details: `Starting dynamic ad content generation for poster: ${imageId}`,
       status: 'started',
       productName: imageId
@@ -1098,6 +1099,9 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       // Select voice based on language and emotion
       const voiceId = this.selectVoiceId(request.language, request.emotion);
       
+      // Get HTTP agent from app for keep-alive
+      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
+      
       const response = await axios.post(
         `${elevenLabsApiUrl}/${voiceId}`,
         {
@@ -1114,7 +1118,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
             "Content-Type": "application/json"
           },
           responseType: "arraybuffer",
-          timeout: 10000 // Reduced timeout for faster failure
+          timeout: 10000, // Reduced timeout for faster failure
+          httpAgent: agent
         }
       );
 
@@ -1144,7 +1149,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       } else if (error.response?.status === 429) {
         throw new Error("ElevenLabs API rate limit exceeded");
       } else if (error.response?.status === 400) {
-        throw new Error(`ElevenLabs API bad request: ${error.response.data?.message || 'Invalid request'}`);
+        throw new Error(`ElevenLabs API bad request: ${error.response.data?.error?.message || 'Invalid request'}`);
       } else if (error.response?.status >= 500) {
         throw new Error("ElevenLabs API service unavailable");
       } else if (error.code === 'ECONNABORTED') {
@@ -1156,6 +1161,200 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       throw new Error(`Failed to generate audio with ElevenLabs API: ${error.message}`);
     }
   }
+
+  /**
+   * Call Google Cloud TTS API for audio generation
+   */
+  private static async callGoogleCloudTTS(request: AudioGenerationRequest): Promise<AudioGenerationResponse> {
+    try {
+      const googleCloudTTSApiKey = process.env.GOOGLE_CLOUD_TTS_API_KEY;
+      const googleCloudTTSApiUrl = "https://texttospeech.googleapis.com/v1/text:synthesize";
+      
+      if (!googleCloudTTSApiKey) {
+        throw new Error("Google Cloud TTS API key not configured");
+      }
+
+      // Validate request parameters
+      if (!request.text || request.text.length === 0) {
+        throw new Error("Text is required for audio generation");
+      }
+
+      if (request.text.length > 5000) {
+        throw new Error("Text too long for audio generation (max 5000 characters)");
+      }
+
+      if (request.language && request.language.length !== 2) {
+        throw new Error("Invalid language code (should be 2 characters)");
+      }
+
+      // Validate emotion if provided
+      const validEmotions = ["neutral", "happy", "surprised", "serious"];
+      if (request.emotion && !validEmotions.includes(request.emotion)) {
+        throw new Error(`Invalid emotion. Valid emotions: ${validEmotions.join(", ")}`);
+      }
+
+      // Select voice based on language and emotion
+      const voiceId = this.selectVoiceId(request.language, request.emotion);
+      
+      const response = await axios.post(
+        `${googleCloudTTSApiUrl}?key=${googleCloudTTSApiKey}`,
+        {
+          input: {
+            text: request.text
+          },
+          voice: {
+            languageCode: request.language,
+            ssmlGender: "NEUTRAL",
+            name: voiceId
+          },
+          audioConfig: {
+            audioEncoding: "MP3"
+          }
+        },
+        {
+          headers: {
+            "Content-Type": "application/json"
+          },
+          responseType: "arraybuffer",
+          timeout: 10000 // Reduced timeout for faster failure
+        }
+      );
+
+      // Validate response
+      if (!response.data) {
+        throw new Error("Empty response from Google Cloud TTS API");
+      }
+
+      // Save audio to file
+      const audioBuffer = response.data;
+      const audioFilename = await this.saveAudioToFile(audioBuffer, request.text, request.language, request.emotion);
+      const audioUrl = `http://localhost:3000/audio/${audioFilename}`;
+      
+      // Calculate approximate duration based on text length
+      const duration = Math.max(5, Math.min(30, request.text.length / 15));
+
+      return {
+        audioUrl,
+        duration
+      };
+    } catch (error: any) {
+      console.error("Google Cloud TTS API error:", error.response?.data || error.message);
+      
+      // Handle specific error cases
+      if (error.response?.status === 401) {
+        throw new Error("Invalid Google Cloud TTS API key");
+      } else if (error.response?.status === 429) {
+        throw new Error("Google Cloud TTS API rate limit exceeded");
+      } else if (error.response?.status === 400) {
+        throw new Error(`Google Cloud TTS API bad request: ${error.response.data?.error?.message || 'Invalid request'}`);
+      } else if (error.response?.status >= 500) {
+        throw new Error("Google Cloud TTS API service unavailable");
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error("Google Cloud TTS API request timeout");
+      } else if (error.code === 'ENOTFOUND') {
+        throw new Error("Google Cloud TTS API service unreachable");
+      }
+      
+      throw new Error(`Failed to generate audio with Google Cloud TTS API: ${error.message}`);
+    }
+  }
+
+  /**
+   * Call GroqCloud API for script generation
+   */
+  private static async callGroqCloudAPI(request: ScriptGenerationRequest): Promise<ScriptGenerationResponse> {
+    try {
+      const groqCloudApiKey = process.env.GROQCLOUD_API_KEY;
+      const groqCloudApiUrl = "https://api.groqcloud.com/v1/generate";
+      
+      if (!groqCloudApiKey) {
+        throw new Error("GroqCloud API key not configured");
+      }
+
+      // Validate request parameters
+      if (request.productName && request.productName.length > 100) {
+        throw new Error("Product name too long (max 100 characters)");
+      }
+
+      if (request.language && request.language.length !== 2) {
+        throw new Error("Invalid language code (should be 2 characters)");
+      }
+
+      // Create a prompt based on the request type
+      let prompt: string;
+      if (request.productName) {
+        // Product description prompt
+        prompt = `Describe the product "${request.productName}" in 2 engaging lines for an advertisement.`;
+      } else {
+        // Museum guide prompt (existing)
+        prompt = `Generate a short, engaging script for an interactive museum guide. 
+        The guide should welcome visitors and provide interesting information about the exhibit.
+        Language: ${request.language}
+        Emotion: ${request.emotion || "neutral"}
+        Keep it concise and conversational.`;
+      }
+
+      // Validate emotion if provided
+      const validEmotions = ["neutral", "happy", "surprised", "serious"];
+      if (request.emotion && !validEmotions.includes(request.emotion)) {
+        throw new Error(`Invalid emotion. Valid emotions: ${validEmotions.join(", ")}`);
+      }
+
+      const response = await axios.post(
+        groqCloudApiUrl,
+        {
+          prompt,
+          max_tokens: request.productName ? 100 : 150,
+          temperature: 0.7
+        },
+        {
+          headers: {
+            "Authorization": `Bearer ${groqCloudApiKey}`,
+            "Content-Type": "application/json"
+          },
+          timeout: 10000 // 10 second timeout
+        }
+      );
+
+      const text = response.data.choices[0].text.trim();
+      
+      // Validate response
+      if (!text || text.length === 0) {
+        throw new Error("Empty response from GroqCloud API");
+      }
+
+      if (text.length > 500) {
+        throw new Error("Response too long from GroqCloud API");
+      }
+
+      return {
+        text,
+        language: request.language,
+        emotion: request.emotion
+      };
+    } catch (error: any) {
+      console.error("GroqCloud API error:", error.response?.data || error.message);
+      
+      // Handle specific error cases
+      if (error.response?.status === 401) {
+        throw new Error("Invalid GroqCloud API key");
+      } else if (error.response?.status === 429) {
+        throw new Error("GroqCloud API rate limit exceeded");
+      } else if (error.response?.status === 400) {
+        throw new Error(`GroqCloud API bad request: ${error.response.data?.error?.message || 'Invalid request'}`);
+      } else if (error.response?.status >= 500) {
+        throw new Error("GroqCloud API service unavailable");
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error("GroqCloud API request timeout");
+      } else if (error.code === 'ENOTFOUND') {
+        throw new Error("GroqCloud API service unreachable");
+      }
+      
+      throw new Error(`Failed to generate script with GroqCloud API: ${error.message}`);
+    }
+  }
+
+
 
   /**
    * Call Sync.so API for lip-sync generation
@@ -1197,6 +1396,9 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
 
       console.log("Calling Sync.so API with request:", requestBody);
 
+      // Get HTTP agent from app for keep-alive
+      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
+      
       const response = await axios.post(
         `${syncApiUrl}/generate`,
         requestBody,
@@ -1205,7 +1407,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
             "x-api-key": syncApiKey,
             "Content-Type": "application/json"
           },
-          timeout: 20000 // Reduced timeout for faster failure
+          timeout: 20000, // Reduced timeout for faster failure
+          httpAgent: agent
         }
       );
 
@@ -1277,6 +1480,9 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
         console.log(`Polling Sync.so job ${jobId}, attempt ${attempt}/${maxAttempts}`);
         
         try {
+          // Get HTTP agent from app for keep-alive
+          const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
+          
           const response = await axios.get(
             `${syncApiUrl}/jobs/${jobId}`,
             {
@@ -1284,7 +1490,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
                 "x-api-key": syncApiKey,
                 "Content-Type": "application/json"
               },
-              timeout: 30000 // 30 second timeout
+              timeout: 30000, // 30 second timeout
+              httpAgent: agent
             }
           );
 
@@ -1340,6 +1547,9 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
         throw new Error("Sync API key not configured");
       }
 
+      // Get HTTP agent from app for keep-alive
+      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
+      
       const response = await axios.get(
         `${syncApiUrl}/jobs/${jobId}`,
         {
@@ -1347,7 +1557,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
             "x-api-key": syncApiKey,
             "Content-Type": "application/json"
           },
-          timeout: 30000 // 30 second timeout
+          timeout: 30000, // 30 second timeout
+          httpAgent: agent
         }
       );
 
@@ -1359,209 +1570,209 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
   }
 
   /**
-   * Call GroqCloud API for script generation
+   * Stream audio using ElevenLabs streaming API
    */
-  private static async callGroqCloudAPI(request: ScriptGenerationRequest): Promise<ScriptGenerationResponse> {
+  static async streamAudio(text: string, response: any): Promise<void> {
     try {
-      const groqApiKey = process.env.GROQCLOUD_API_KEY;
-      const groqApiUrl = "https://api.groq.com/openai/v1/chat/completions";
+      const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
+      const elevenLabsApiUrl = "https://api.elevenlabs.io/v1/text-to-speech";
       
-      if (!groqApiKey) {
-        throw new Error("GroqCloud API key not configured");
+      if (!elevenLabsApiKey) {
+        throw new Error("ElevenLabs API key not configured");
       }
 
       // Validate request parameters
-      if (request.productName && request.productName.length > 100) {
-        throw new Error("Product name too long (max 100 characters)");
-      }
-
-      if (request.language && request.language.length !== 2) {
-        throw new Error("Invalid language code (should be 2 characters)");
-      }
-
-      // Create a prompt based on the request type
-      let prompt: string;
-      if (request.productName) {
-        // Product description prompt
-        prompt = `Describe the product "${request.productName}" in 2 engaging lines for an advertisement.`;
-      } else {
-        // Museum guide prompt (existing)
-        prompt = `Generate a short, engaging script for an interactive museum guide. 
-        The guide should welcome visitors and provide interesting information about the exhibit.
-        Language: ${request.language}
-        Emotion: ${request.emotion || "neutral"}
-        Keep it concise and conversational.`;
-      }
-
-      // Validate emotion if provided
-      const validEmotions = ["neutral", "happy", "surprised", "serious"];
-      if (request.emotion && !validEmotions.includes(request.emotion)) {
-        throw new Error(`Invalid emotion. Valid emotions: ${validEmotions.join(", ")}`);
-      }
-
-      // Use LLaMA 3.2 Vision model (or appropriate Groq model)
-      const response = await axios.post(
-        groqApiUrl,
-        {
-          model: "llama3-groq-70b-8192-tool-use-preview", // or "llama-3.2-90b-vision-preview"
-          messages: [
-            {
-              role: "system",
-              content: request.productName 
-                ? "You are a creative marketing assistant specializing in product descriptions." 
-                : "You are an interactive museum guide creating engaging content for visitors."
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          max_tokens: request.productName ? 100 : 150,
-          temperature: 0.7
-        },
-        {
-          headers: {
-            "Authorization": `Bearer ${groqApiKey}`,
-            "Content-Type": "application/json"
-          },
-          timeout: 10000 // 10 second timeout
-        }
-      );
-
-      const text = response.data.choices[0].message.content.trim();
-      
-      // Validate response
       if (!text || text.length === 0) {
-        throw new Error("Empty response from GroqCloud API");
+        throw new Error("Text is required for audio streaming");
       }
 
-      if (text.length > 500) {
-        throw new Error("Response too long from GroqCloud API");
+      if (text.length > 5000) {
+        throw new Error("Text too long for audio streaming (max 5000 characters)");
       }
 
-      return {
-        text,
-        language: request.language,
-        emotion: request.emotion
-      };
+      const voiceId = "21m00Tcm4TlvDq8ikWAM"; // Default voice ID
+      
+      // Get HTTP agent from app for keep-alive
+      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
+      
+      const streamResponse = await axios({
+        method: "post",
+        url: `${elevenLabsApiUrl}/${voiceId}/stream`,
+        data: { 
+          text: text,
+          model_id: "eleven_monolingual_v1",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.5
+          }
+        },
+        headers: { 
+          "xi-api-key": elevenLabsApiKey,
+          "Content-Type": "application/json"
+        },
+        responseType: "stream",
+        timeout: 10000, // Reduced timeout for faster failure
+        httpAgent: agent
+      });
+      
+      streamResponse.data.pipe(response);
     } catch (error: any) {
-      console.error("GroqCloud API error:", error.response?.data || error.message);
+      console.error("Audio streaming error:", error.response?.data || error.message);
       
       // Handle specific error cases
       if (error.response?.status === 401) {
-        throw new Error("Invalid GroqCloud API key");
+        throw new Error("Invalid ElevenLabs API key");
       } else if (error.response?.status === 429) {
-        throw new Error("GroqCloud API rate limit exceeded");
+        throw new Error("ElevenLabs API rate limit exceeded");
       } else if (error.response?.status === 400) {
-        throw new Error(`GroqCloud API bad request: ${error.response.data?.error?.message || 'Invalid request'}`);
+        throw new Error(`ElevenLabs API bad request: ${error.response.data?.message || 'Invalid request'}`);
       } else if (error.response?.status >= 500) {
-        throw new Error("GroqCloud API service unavailable");
+        throw new Error("ElevenLabs API service unavailable");
       } else if (error.code === 'ECONNABORTED') {
-        throw new Error("GroqCloud API request timeout");
+        throw new Error("ElevenLabs API request timeout");
       } else if (error.code === 'ENOTFOUND') {
-        throw new Error("GroqCloud API service unreachable");
+        throw new Error("ElevenLabs API service unreachable");
       }
       
-      throw new Error(`Failed to generate script with GroqCloud API: ${error.message}`);
+      throw new Error(`Failed to stream audio with ElevenLabs API: ${error.message}`);
     }
   }
 
   /**
-   * Call Google Cloud TTS API for audio generation
+   * Generate lip-sync video asynchronously
    */
-  private static async callGoogleCloudTTS(request: AudioGenerationRequest): Promise<AudioGenerationResponse> {
+  static async generateLipSyncAsync(request: LipSyncGenerationRequest): Promise<LipSyncGenerationResponse> {
     try {
-      const googleCloudApiKey = process.env.GOOGLE_CLOUD_TTS_API_KEY;
+      const syncApiKey = process.env.SYNC_API_KEY;
+      const syncApiUrl = process.env.SYNC_API_URL || "https://api.sync.so/v2";
       
-      if (!googleCloudApiKey) {
-        throw new Error("Google Cloud TTS API key not configured");
+      if (!syncApiKey) {
+        throw new Error("Sync API key not configured");
       }
 
       // Validate request parameters
-      if (!request.text || request.text.length === 0) {
-        throw new Error("Text is required for audio generation");
+      if (!request.audioUrl) {
+        throw new Error("Audio URL is required for lip-sync generation");
       }
 
-      if (request.text.length > 5000) {
-        throw new Error("Text too long for audio generation (max 5000 characters)");
+      // Prepare request body matching Sync.so API requirements
+      const requestBody: any = {
+        audio_url: request.audioUrl
+      };
+
+      // Add avatar if provided, otherwise use imageId
+      let avatarUrl: string;
+      if (request.avatar) {
+        requestBody.avatar = request.avatar;
+        avatarUrl = request.avatar;
+      } else {
+        // Get image URL from database or use default
+        avatarUrl = `https://talkar-image-storage.com/${request.imageId}.jpg`;
+        requestBody.avatar = avatarUrl;
       }
 
-      if (request.language && request.language.length !== 2) {
-        throw new Error("Invalid language code (should be 2 characters)");
+      // Add emotion if provided
+      if (request.emotion) {
+        requestBody.emotion = request.emotion;
       }
 
-      // Validate emotion if provided
-      const validEmotions = ["neutral", "happy", "surprised", "serious"];
-      if (request.emotion && !validEmotions.includes(request.emotion)) {
-        throw new Error(`Invalid emotion. Valid emotions: ${validEmotions.join(", ")}`);
-      }
+      console.log("Calling Sync.so API with request:", requestBody);
 
-      // Map language and emotion to Google Cloud TTS voice
-      const voiceConfig = this.getGoogleCloudVoiceConfig(request.language, request.emotion);
-      
-      // Google Cloud TTS API endpoint
-      const googleTtsApiUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${googleCloudApiKey}`;
+      // Get HTTP agent from app for keep-alive
+      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
       
       const response = await axios.post(
-        googleTtsApiUrl,
-        {
-          input: {
-            text: request.text
-          },
-          voice: voiceConfig.voice,
-          audioConfig: {
-            audioEncoding: "MP3",
-            speakingRate: voiceConfig.speakingRate,
-            pitch: voiceConfig.pitch
-          }
-        },
+        `${syncApiUrl}/generate`,
+        requestBody,
         {
           headers: {
+            "x-api-key": syncApiKey,
             "Content-Type": "application/json"
           },
-          timeout: 10000 // Reduced timeout for faster failure
+          timeout: 20000, // Reduced timeout for faster failure
+          httpAgent: agent
         }
       );
 
-      // Validate response
-      if (!response.data || !response.data.audioContent) {
-        throw new Error("Empty response from Google Cloud TTS API");
+      // Handle job ID and polling if needed
+      if (response.data.jobId) {
+        // This is an async job, need to poll for completion
+        const jobId = response.data.jobId;
+        console.log(`Sync.so job started with ID: ${jobId}`);
+        
+        // Poll for completion (in a real implementation, this would be done asynchronously)
+        // For now, we'll return the job ID and let the client poll
+        return {
+          videoUrl: response.data.videoUrl || response.data.outputUrl || "",
+          duration: response.data.duration || 15,
+          jobId: jobId
+        };
+      } else {
+        // Job completed immediately
+        const videoUrl = response.data.videoUrl || response.data.outputUrl;
+        const duration = response.data.duration || 15;
+
+        // Save video URL to database
+        await this.saveVideoUrlToDatabase(request.imageId, videoUrl, avatarUrl, request.emotion);
+
+        return {
+          videoUrl,
+          duration
+        };
       }
-
-      // Decode base64 audio content
-      const audioContent = response.data.audioContent;
-      const audioBuffer = Buffer.from(audioContent, 'base64');
-      
-      // Save audio to file
-      const audioFilename = await this.saveAudioToFile(audioBuffer, request.text, request.language, request.emotion);
-      const audioUrl = `http://localhost:3000/audio/${audioFilename}`;
-      
-      // Calculate approximate duration based on text length
-      const duration = Math.max(5, Math.min(30, request.text.length / 15));
-
-      return {
-        audioUrl,
-        duration
-      };
     } catch (error: any) {
-      console.error("Google Cloud TTS API error:", error.response?.data || error.message);
+      console.error("Sync.so API error:", error.response?.data || error.message);
       
       // Handle specific error cases
       if (error.response?.status === 401) {
-        throw new Error("Invalid Google Cloud TTS API key");
+        throw new Error("Invalid Sync API key");
       } else if (error.response?.status === 429) {
-        throw new Error("Google Cloud TTS API rate limit exceeded");
+        throw new Error("Sync API rate limit exceeded");
       } else if (error.response?.status === 400) {
-        throw new Error(`Google Cloud TTS API bad request: ${error.response.data?.error?.message || 'Invalid request'}`);
+        throw new Error(`Sync API bad request: ${error.response.data?.message || 'Invalid request'}`);
       } else if (error.response?.status >= 500) {
-        throw new Error("Google Cloud TTS API service unavailable");
+        throw new Error("Sync API service unavailable");
       } else if (error.code === 'ECONNABORTED') {
-        throw new Error("Google Cloud TTS API request timeout");
+        throw new Error("Sync API request timeout");
       } else if (error.code === 'ENOTFOUND') {
-        throw new Error("Google Cloud TTS API service unreachable");
+        throw new Error("Sync API service unreachable");
       }
       
-      throw new Error(`Failed to generate audio with Google Cloud TTS API: ${error.message}`);
+      throw new Error(`Failed to generate lip-sync video with Sync.so API: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get lip-sync job status
+   */
+  static async getLipSyncJobStatus(jobId: string): Promise<any> {
+    try {
+      const syncApiKey = process.env.SYNC_API_KEY;
+      const syncApiUrl = process.env.SYNC_API_URL || "https://api.sync.so/v2";
+      
+      if (!syncApiKey) {
+        throw new Error("Sync API key not configured");
+      }
+
+      // Get HTTP agent from app for keep-alive
+      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
+      
+      const response = await axios.get(
+        `${syncApiUrl}/jobs/${jobId}`,
+        {
+          headers: {
+            "x-api-key": syncApiKey,
+            "Content-Type": "application/json"
+          },
+          timeout: 30000, // 30 second timeout
+          httpAgent: agent
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
+      console.error("Sync.so job status error:", error.response?.data || error.message);
+      throw new Error(`Failed to get Sync.so job status: ${error.message}`);
     }
   }
 
@@ -1997,6 +2208,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
     };
   }
 
+
+
   /**
    * Load product metadata from JSON file or database
    */
@@ -2059,6 +2272,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       emotion: tone
     };
   }
+
+
 
   /**
    * Save generated video URL to database

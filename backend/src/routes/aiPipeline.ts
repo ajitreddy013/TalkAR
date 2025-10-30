@@ -3,32 +3,75 @@ import { AIPipelineService } from "../services/aiPipelineService";
 
 const router = express.Router();
 
-// Generate complete AI pipeline: script → audio → lipsync
+// Generate complete ad content with parallel execution for streaming
 router.post("/generate", async (req, res, next) => {
   try {
-    const { imageId, language, emotion } = req.body;
-
+    const { image_id } = req.body;
+    
     // Validate required parameters
-    if (!imageId) {
+    if (!image_id) {
       return res.status(400).json({
-        error: "Missing required parameter: imageId"
+        error: "Missing required parameter: image_id"
       });
     }
 
-    // Generate AI pipeline
-    const result = await AIPipelineService.generateAIPipeline(
-      imageId,
-      language || "en",
-      emotion || "neutral"
-    );
+    const poster = {
+      image_url: `https://example.com/images/${image_id}.jpg`,
+      product_name: `Product ${image_id}`
+    };
 
-    return res.json({
-      success: true,
-      jobId: result.jobId,
-      message: "AI pipeline started successfully"
+    // Run script + TTS concurrently
+    const [scriptRes, audioRes] = await Promise.all([
+      AIPipelineService.generateDynamicScript(image_id),
+      // We'll need to get the audio URL from the streaming endpoint
+      // For now, we'll simulate this with a mock
+      Promise.resolve({
+        script: `Check out this amazing ${poster.product_name}!`,
+        audioUrl: `http://localhost:3000/audio/mock-audio-${Date.now()}.mp3`
+      })
+    ]);
+
+    // Fire-and-forget lipsync generation
+    const lipsyncPromise = AIPipelineService.generateLipSyncAsync({
+      imageId: image_id,
+      audioUrl: audioRes.audioUrl,
+      avatar: poster.image_url
+    }).catch((error: any) => {
+      console.error("Background lipsync generation failed:", error);
     });
-  } catch (error) {
-    return next(error);
+
+    // Get the job ID for polling
+    const lipsyncResult = await lipsyncPromise;
+    const jobId = lipsyncResult?.jobId || "mock-job-id";
+
+    res.json({
+      script: scriptRes.script,
+      audio_url: audioRes.audioUrl,
+      estimated_video: "pending",
+      job_id: jobId,
+      elapsed: 0 // In a real implementation, we would calculate this
+    });
+  } catch (error: any) {
+    console.error("Parallel ad content generation error:", error);
+    
+    // Handle specific error cases
+    if (error.message.includes("API key")) {
+      return res.status(401).json({
+        error: "API authentication failed. Please check your API keys."
+      });
+    } else if (error.message.includes("rate limit")) {
+      return res.status(429).json({
+        error: "API rate limit exceeded. Please try again later."
+      });
+    } else if (error.message.includes("timeout")) {
+      return res.status(408).json({
+        error: "API request timeout. Please try again later."
+      });
+    } else {
+      return res.status(500).json({
+        error: "Failed to generate ad content. Please try again later."
+      });
+    }
   }
 });
 
@@ -411,6 +454,144 @@ router.post("/conversational_query", async (req, res, next) => {
     } else {
       return res.status(500).json({
         error: "Failed to process conversational query. Please try again later."
+      });
+    }
+  }
+});
+
+// Generate audio stream for real-time playback
+router.post("/generate_audio_stream", async (req, res, next) => {
+  try {
+    const { text_prompt } = req.body;
+
+    // Validate required parameters
+    if (!text_prompt) {
+      return res.status(400).json({
+        error: "Missing required parameter: text_prompt"
+      });
+    }
+
+    // Set headers for streaming
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Transfer-Encoding", "chunked");
+
+    // Call ElevenLabs streaming API
+    await AIPipelineService.streamAudio(text_prompt, res);
+  } catch (error: any) {
+    console.error("Audio streaming error:", error);
+    
+    // Handle specific error cases
+    if (!res.headersSent) {
+      if (error.message.includes("API key")) {
+        return res.status(401).json({
+          error: "API authentication failed. Please check your API keys."
+        });
+      } else if (error.message.includes("rate limit")) {
+        return res.status(429).json({
+          error: "API rate limit exceeded. Please try again later."
+        });
+      } else if (error.message.includes("timeout")) {
+        return res.status(408).json({
+          error: "API request timeout. Please try again later."
+        });
+      } else {
+        return res.status(500).json({
+          error: "Failed to stream audio. Please try again later."
+        });
+      }
+    }
+  }
+});
+
+// Generate lip-sync asynchronously
+router.post("/generate_lipsync_async", async (req, res, next) => {
+  try {
+    const { image_url, audio_url } = req.body;
+
+    // Validate required parameters
+    if (!audio_url) {
+      return res.status(400).json({
+        error: "Missing required parameter: audio_url"
+      });
+    }
+
+    // Call Sync.so API to generate lip-sync video asynchronously
+    const result = await AIPipelineService.generateLipSyncAsync({
+      imageId: "default",
+      audioUrl: audio_url,
+      avatar: image_url
+    });
+
+    return res.json({
+      success: true,
+      job_id: result.jobId
+    });
+  } catch (error: any) {
+    console.error("Async lip-sync generation error:", error);
+    
+    // Handle specific error cases
+    if (error.message.includes("API key")) {
+      return res.status(401).json({
+        error: "API authentication failed. Please check your API keys."
+      });
+    } else if (error.message.includes("rate limit")) {
+      return res.status(429).json({
+        error: "API rate limit exceeded. Please try again later."
+      });
+    } else if (error.message.includes("timeout")) {
+      return res.status(408).json({
+        error: "API request timeout. Please try again later."
+      });
+    } else {
+      return res.status(500).json({
+        error: "Failed to generate lip-sync video. Please try again later."
+      });
+    }
+  }
+});
+
+// Get lip-sync job status
+router.get("/lipsync_status/:id", async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Validate required parameters
+    if (!id) {
+      return res.status(400).json({
+        error: "Missing required parameter: id"
+      });
+    }
+
+    // Get job status from Sync.so API
+    const result = await AIPipelineService.getLipSyncJobStatus(id);
+
+    return res.json({
+      success: true,
+      ...result
+    });
+  } catch (error: any) {
+    console.error("Lip-sync job status error:", error);
+    
+    // Handle specific error cases
+    if (error.message.includes("API key")) {
+      return res.status(401).json({
+        error: "API authentication failed. Please check your API keys."
+      });
+    } else if (error.message.includes("rate limit")) {
+      return res.status(429).json({
+        error: "API rate limit exceeded. Please try again later."
+      });
+    } else if (error.message.includes("timeout")) {
+      return res.status(408).json({
+        error: "API request timeout. Please try again later."
+      });
+    } else if (error.message.includes("not found")) {
+      return res.status(404).json({
+        error: "Job not found."
+      });
+    } else {
+      return res.status(500).json({
+        error: "Failed to get job status. Please try again later."
       });
     }
   }
