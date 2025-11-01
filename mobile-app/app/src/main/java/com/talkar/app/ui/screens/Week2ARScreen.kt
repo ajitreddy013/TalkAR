@@ -7,10 +7,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
-import com.talkar.app.ui.components.CameraPreviewView  // Changed from EnhancedCameraView
+import com.talkar.app.ui.components.CameraPreviewView
 import com.talkar.app.ui.components.FeedbackAvatarOverlay
-import com.talkar.app.ui.components.AvatarPlaceholder
-import com.talkar.app.ui.screens.AdContentTestScreen
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.Avatar
@@ -29,7 +27,10 @@ fun Week2ARScreen(
     var showTestScreen by remember { mutableStateOf(false) }
     
     if (showTestScreen) {
-        AdContentTestScreen(modifier = modifier)
+        // Simple test screen without clutter
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Test Screen")
+        }
         return
     }
     
@@ -51,13 +52,8 @@ fun Week2ARScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("TalkAR - Week 2: Avatar Overlay") },
+                title = { Text("TalkAR") },
                 actions = {
-                    Button(
-                        onClick = { viewModel.simulateImageDetection() }
-                    ) {
-                        Text("Test Detection")
-                    }
                     IconButton(
                         onClick = { showTestScreen = true }
                     ) {
@@ -73,7 +69,7 @@ fun Week2ARScreen(
                 .padding(paddingValues)
         ) {
             // Camera preview (shows real camera output with ARCore integration)
-            CameraPreviewView(  // Changed from EnhancedCameraView
+            CameraPreviewView(
                 modifier = Modifier.fillMaxSize(),
                 isImageDetected = isTracking,
                 onImageRecognized = { imageRecognition ->
@@ -142,55 +138,6 @@ fun Week2ARScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                }
-            }
-            
-            // Instructions
-            Card(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "📱 Week 2 Instructions",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = MaterialTheme.typography.titleSmall.fontWeight
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "• Tap 'Test Detection' to simulate image detection",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = "• Avatar overlay appears",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = "• Avatar should track with image movement",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = "• Avatar disappears when image is lost",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "• Use 👍/👎 buttons to provide feedback on avatar content",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "🧪 Tap the test icon to access ad content integration tests",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
                 }
             }
         }

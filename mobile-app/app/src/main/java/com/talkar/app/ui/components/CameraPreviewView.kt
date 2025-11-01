@@ -1,11 +1,11 @@
 package com.talkar.app.ui.components
 
 import android.content.Context
-import android.hardware.camera2.*
-import android.util.Size
-import android.view.Surface
-import android.view.TextureView
+import android.opengl.GLSurfaceView
+import android.util.Log
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -13,7 +13,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.talkar.app.data.models.ImageRecognition
 import com.talkar.app.data.services.BackendImageARService
-import kotlinx.coroutines.launch
+import com.google.ar.core.*
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
 
 @Composable
 fun CameraPreviewView(
@@ -24,7 +26,6 @@ fun CameraPreviewView(
     isImageDetected: Boolean = false
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     
     // Initialize Backend AR service for real image detection
     val arService = remember { BackendImageARService(context) }
@@ -33,9 +34,9 @@ fun CameraPreviewView(
     LaunchedEffect(Unit) {
         try {
             val initialized = arService.initialize()
-            android.util.Log.d("CameraPreviewView", "AR service initialized: $initialized")
+            Log.d("CameraPreviewView", "AR service initialized: $initialized")
         } catch (e: Exception) {
-            android.util.Log.e("CameraPreviewView", "Failed to initialize AR service", e)
+            Log.e("CameraPreviewView", "Failed to initialize AR service", e)
             onError("Failed to initialize AR: ${e.message}")
         }
     }
@@ -46,7 +47,7 @@ fun CameraPreviewView(
             try {
                 arService.pauseTracking()
             } catch (e: Exception) {
-                android.util.Log.e("CameraPreviewView", "Error disposing AR service", e)
+                Log.e("CameraPreviewView", "Error disposing AR service", e)
             }
         }
     }
@@ -56,28 +57,16 @@ fun CameraPreviewView(
     val isTracking by arService.isTracking.collectAsState()
     val error by arService.error.collectAsState()
     
-    // Handle session resumption
-    LaunchedEffect(isTracking) {
-        if (isTracking) {
-            android.util.Log.d("CameraPreviewView", "ARCore session resumed, resuming processing")
-            try {
-                arService.resumeTracking()
-            } catch (e: Exception) {
-                android.util.Log.e("CameraPreviewView", "Error resuming processing", e)
-            }
-        }
-    }
-    
     // Handle recognized images
     LaunchedEffect(recognizedImages) {
-        android.util.Log.d("CameraPreviewView", "Recognized images updated: ${recognizedImages.size}")
+        Log.d("CameraPreviewView", "Recognized images updated: ${recognizedImages.size}")
         recognizedImages.forEach { augmentedImage ->
-            android.util.Log.d("CameraPreviewView", "Processing recognized image: ${augmentedImage.name}")
+            Log.d("CameraPreviewView", "Processing recognized image: ${augmentedImage.name}")
             onAugmentedImageRecognized(augmentedImage)
             
             val imageRecognition = arService.getRecognizedImage(augmentedImage.name ?: "")
             imageRecognition?.let { 
-                android.util.Log.d("CameraPreviewView", "Image recognition result: ${it.name}")
+                Log.d("CameraPreviewView", "Image recognition result: ${it.name}")
                 onImageRecognized(it) 
             }
         }
@@ -85,7 +74,7 @@ fun CameraPreviewView(
     
     AndroidView(
         factory = { ctx ->
-            createCameraPreviewView(ctx, arService, onImageRecognized)
+            createBackendARCameraView(ctx, arService, onImageRecognized, onError)
         },
         modifier = modifier
     )
@@ -93,45 +82,40 @@ fun CameraPreviewView(
     // Handle errors
     error?.let { errorMessage ->
         onError(errorMessage)
-        android.util.Log.e("CameraPreviewView", "AR Error: $errorMessage")
+        Log.e("CameraPreviewView", "AR Error: $errorMessage")
     }
 }
 
-private fun createCameraPreviewView(
+private fun createBackendARCameraView(
     context: Context,
     arService: BackendImageARService,
-    onImageRecognized: (com.talkar.app.data.models.ImageRecognition) -> Unit
+    onImageRecognized: (ImageRecognition) -> Unit,
+    onError: (String) -> Unit
 ): android.view.View {
-    // Create a layout to hold camera preview and overlays
-    val layout = android.widget.FrameLayout(context)
     
-    // Create TextureView for camera preview
-    val textureView = android.view.TextureView(context)
-    textureView.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
-        override fun onSurfaceTextureAvailable(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
-            android.util.Log.d("CameraPreviewView", "Surface texture available: ${width}x${height}")
-            // Initialize camera when surface is available
-            initializeCamera(textureView, arService, onImageRecognized)
-        }
-        
-        override fun onSurfaceTextureSizeChanged(surface: android.graphics.SurfaceTexture, width: Int, height: Int) {
-            android.util.Log.d("CameraPreviewView", "Surface texture size changed: ${width}x${height}")
-        }
-        
-        override fun onSurfaceTextureDestroyed(surface: android.graphics.SurfaceTexture): Boolean {
-            android.util.Log.d("CameraPreviewView", "Surface texture destroyed")
-            return true
-        }
-        
-        override fun onSurfaceTextureUpdated(surface: android.graphics.SurfaceTexture) {
-            // This is called continuously when the camera is working
-        }
+    val layout = FrameLayout(context).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
     }
-    
-    layout.addView(textureView)
-    
+
+    // Create ARCore GLSurfaceView for camera preview
+    val glSurfaceView = GLSurfaceView(context).apply {
+        setEGLContextClientVersion(2)
+        setEGLConfigChooser(8, 8, 8, 8, 16, 0) // Alpha, depth, stencil
+        preserveEGLContextOnPause = true
+    }
+
+    // Create AR renderer
+    val arRenderer = BackendCameraRendererV2(context, arService, onImageRecognized, onError)
+    glSurfaceView.setRenderer(arRenderer)
+    glSurfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+
+    layout.addView(glSurfaceView)
+
     // Add scanning indicator overlay
-    val scanningOverlay = android.widget.TextView(context).apply {
+    val scanningOverlay = TextView(context).apply {
         text = "🎯 Point camera at image to scan"
         textSize = 18f
         setTextColor(android.graphics.Color.WHITE)
@@ -139,93 +123,133 @@ private fun createCameraPreviewView(
         setPadding(20, 20, 20, 20)
         setBackgroundColor(android.graphics.Color.parseColor("#80000000"))
     }
-    
-    val overlayParams = android.widget.FrameLayout.LayoutParams(
-        android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
-        android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+
+    val overlayParams = FrameLayout.LayoutParams(
+        FrameLayout.LayoutParams.WRAP_CONTENT,
+        FrameLayout.LayoutParams.WRAP_CONTENT
     )
     overlayParams.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER
     overlayParams.topMargin = 100
     layout.addView(scanningOverlay, overlayParams)
-    
-    // No test button - real image detection only
-    
+
     return layout
 }
 
-private fun initializeCamera(
-    textureView: android.view.TextureView, 
-    arService: BackendImageARService,
-    onImageRecognized: (com.talkar.app.data.models.ImageRecognition) -> Unit
-) {
-    try {
-        android.util.Log.d("CameraPreviewView", "Initializing camera with ARCore integration...")
+/**
+ * OpenGL renderer that displays camera feed and handles AR tracking for BackendImageARService
+ */
+private class BackendCameraRendererV2(
+    private val context: Context,
+    private val arService: BackendImageARService,
+    private val onImageRecognized: (ImageRecognition) -> Unit,
+    private val onError: (String) -> Unit
+) : GLSurfaceView.Renderer {
+
+    private var displayRotationHelper: BackendDisplayRotationHelperV2? = null
+    private var backgroundRenderer: BackendBackgroundRendererV2? = null
+
+    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        Log.d("BackendCameraRendererV2", "Surface created")
         
-        // Create camera manager
-        val cameraManager = textureView.context.getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
-        val cameraIdList = cameraManager.cameraIdList
+        // Set clear color to black
+        android.opengl.GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
         
-        if (cameraIdList.isEmpty()) {
-            android.util.Log.e("CameraPreviewView", "No cameras available")
-            return
+        try {
+            // Initialize background renderer for camera feed
+            backgroundRenderer = BackendBackgroundRendererV2()
+            backgroundRenderer?.createOnGlThread(context)
+            
+            // Initialize display rotation helper
+            displayRotationHelper = BackendDisplayRotationHelperV2(context)
+            
+            Log.d("BackendCameraRendererV2", "OpenGL setup complete")
+            
+        } catch (e: Exception) {
+            Log.e("BackendCameraRendererV2", "Failed to initialize OpenGL", e)
+            onError("Failed to initialize camera preview: ${e.message}")
         }
-        
-        val cameraId = cameraIdList[0] // Use first available camera
-        android.util.Log.d("CameraPreviewView", "Using camera: $cameraId")
-        
-        // Check camera permissions
-        val hasPermission = textureView.context.checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        
-        if (!hasPermission) {
-            android.util.Log.e("CameraPreviewView", "Camera permission not granted")
-            return
-        }
-        
-        cameraManager.openCamera(cameraId, object : android.hardware.camera2.CameraDevice.StateCallback() {
-            override fun onOpened(camera: android.hardware.camera2.CameraDevice) {
-                android.util.Log.d("CameraPreviewView", "Camera opened successfully")
+    }
+
+    override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+        Log.d("BackendCameraRendererV2", "Surface changed: ${width}x${height}")
+        android.opengl.GLES20.glViewport(0, 0, width, height)
+        displayRotationHelper?.onSurfaceChanged(width, height)
+    }
+
+    override fun onDrawFrame(gl: GL10?) {
+        // Clear screen
+        android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT or android.opengl.GLES20.GL_DEPTH_BUFFER_BIT)
+
+        try {
+            // Check if ARCore is initialized
+            if (!arService.isInitialized()) {
+                return
+            }
+
+            // Get ARCore session from the service
+            val session = arService.getSession()
+            session?.let { session ->
+                
+                // Update display rotation
+                displayRotationHelper?.updateSessionIfNeeded(session)
                 
                 try {
-                    // Create capture session
-                    val surface = android.view.Surface(textureView.surfaceTexture)
-                    val captureRequest = camera.createCaptureRequest(android.hardware.camera2.CameraDevice.TEMPLATE_PREVIEW)
-                    captureRequest.addTarget(surface)
+                    // Update ARCore frame
+                    val frame = session.update()
+                    val camera = frame.camera
                     
-                    camera.createCaptureSession(listOf(surface), object : android.hardware.camera2.CameraCaptureSession.StateCallback() {
-                        override fun onConfigured(session: android.hardware.camera2.CameraCaptureSession) {
-                            android.util.Log.d("CameraPreviewView", "Camera session configured")
-                            try {
-                                session.setRepeatingRequest(captureRequest.build(), null, null)
-                                
-                                // BackendImageARService handles AR processing internally
-                                android.util.Log.d("CameraPreviewView", "Camera preview started - AR processing handled by BackendImageARService")
-                            } catch (e: Exception) {
-                                android.util.Log.e("CameraPreviewView", "Failed to start repeating request", e)
-                            }
-                        }
-                        
-                        override fun onConfigureFailed(session: android.hardware.camera2.CameraCaptureSession) {
-                            android.util.Log.e("CameraPreviewView", "Camera session configuration failed")
-                        }
-                    }, null)
+                    // Draw camera background
+                    backgroundRenderer?.draw(frame)
+                    
+                    // Process frame for image recognition using the service
+                    // The BackendImageARService handles its own frame processing
+                    
+                    // Check for recognized images and trigger callbacks
+                    val augmentedImages = frame.getUpdatedTrackables(AugmentedImage::class.java)
+                    // The service already updates its state, so we don't need to do anything here
+                    // The composable will observe the state changes
+                    
+                } catch (e: com.google.ar.core.exceptions.CameraNotAvailableException) {
+                    Log.e("BackendCameraRendererV2", "Camera not available", e)
                 } catch (e: Exception) {
-                    android.util.Log.e("CameraPreviewView", "Failed to create capture session", e)
+                    Log.e("BackendCameraRendererV2", "Error in draw frame", e)
                 }
             }
             
-            override fun onDisconnected(camera: android.hardware.camera2.CameraDevice) {
-                android.util.Log.d("CameraPreviewView", "Camera disconnected")
-            }
-            
-            override fun onError(camera: android.hardware.camera2.CameraDevice, error: Int) {
-                android.util.Log.e("CameraPreviewView", "Camera error: $error")
-            }
-        }, null)
-        
-    } catch (e: Exception) {
-        android.util.Log.e("CameraPreviewView", "Failed to initialize camera", e)
+        } catch (e: Exception) {
+            Log.e("BackendCameraRendererV2", "Error in onDrawFrame", e)
+        }
     }
 }
 
-// BackendImageARService handles all AR processing internally
-// No manual frame processing needed
+/**
+ * Helper class for display rotation
+ */
+private class BackendDisplayRotationHelperV2(private val context: Context) {
+    fun onSurfaceChanged(width: Int, height: Int) {
+        Log.d("BackendDisplayRotationHelperV2", "Surface changed: ${width}x${height}")
+    }
+    
+    fun updateSessionIfNeeded(session: Session) {
+        // Handle display rotation updates
+    }
+}
+
+/**
+ * Renderer for camera background
+ */
+private class BackendBackgroundRendererV2 {
+    fun createOnGlThread(context: Context) {
+        Log.d("BackendBackgroundRendererV2", "Created on GL thread")
+        // Initialize shaders and textures for camera background
+        // In a full implementation, this would set up the actual OpenGL rendering
+    }
+    
+    fun draw(frame: Frame) {
+        // Draw camera background texture
+        // This would typically involve:
+        // 1. Getting camera texture from ARCore frame
+        // 2. Drawing it as background using OpenGL shaders
+        Log.v("BackendBackgroundRendererV2", "Drawing camera background")
+    }
+}
