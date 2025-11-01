@@ -105,6 +105,37 @@ class FeedbackSyncService private constructor() {
         }
     }
     
+    /**
+     * Send feedback to backend for user context
+     */
+    suspend fun sendFeedback(imageId: String, feedback: String): Boolean {
+        return try {
+            Log.d(tag, "Sending feedback to user context: imageId=$imageId, feedback=$feedback")
+            
+            // Create feedback request for user context
+            val request = com.talkar.app.data.api.FeedbackRequest(
+                adContentId = imageId,
+                productName = "Unknown", // We don't have product name here
+                isPositive = feedback == "like",
+                timestamp = System.currentTimeMillis()
+            )
+            
+            // Send feedback to backend user context endpoint
+            val response = apiClient.sendUserContextFeedback(request)
+            
+            if (response.isSuccessful && response.body()?.success == true) {
+                Log.d(tag, "Successfully sent feedback to user context: imageId=$imageId")
+                true
+            } else {
+                Log.e(tag, "Failed to send feedback to user context: imageId=$imageId. Response: ${response.code()} ${response.message()}")
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(tag, "Error sending feedback to user context: imageId=$imageId", e)
+            false
+        }
+    }
+    
     companion object {
         @Volatile
         private var INSTANCE: FeedbackSyncService? = null

@@ -471,26 +471,13 @@ class ARImageRecognitionService(private val context: Context) {
      */
     fun processFrame(frame: Frame) {
         try {
-            // Skip processing if we already have recognized images to reduce CPU load
-            if (_recognizedImages.value.isNotEmpty()) {
-                return
-            }
-            
             val augmentedImages = frame.getUpdatedTrackables(AugmentedImage::class.java)
             
-            // Limit processing to avoid overwhelming the system
-            val maxProcessingCount = 3
-            var processedCount = 0
-            
+            // Process all tracking updates without early return to prevent freezing
             for (augmentedImage in augmentedImages) {
-                if (processedCount >= maxProcessingCount) {
-                    break // Limit processing per frame
-                }
-                
                 when (augmentedImage.trackingState) {
                     TrackingState.TRACKING -> {
                         handleImageRecognized(augmentedImage)
-                        processedCount++
                     }
                     TrackingState.PAUSED -> {
                         Log.d(tag, "Image tracking paused: ${augmentedImage.name}")
@@ -761,9 +748,8 @@ class ARImageRecognitionService(private val context: Context) {
                 _isTracking.value = true
                 Log.d(tag, "ARCore processing resumed successfully")
                 
-                // Skip frame processing loop to avoid MissingGlContextException
-                // Frame processing requires OpenGL context which we don't have in this setup
-                Log.d(tag, "Skipping frame processing to avoid GL context issues")
+                // Start frame processing in a controlled manner
+                Log.d(tag, "Frame processing will be handled by renderer")
                 
             } ?: run {
                 Log.w(tag, "Cannot resume - ARCore session is null")

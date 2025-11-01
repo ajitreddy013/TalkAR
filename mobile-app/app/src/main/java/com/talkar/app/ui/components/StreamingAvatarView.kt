@@ -29,6 +29,16 @@ import android.view.ViewGroup
 import androidx.compose.runtime.DisposableEffect
 import com.talkar.app.ui.components.EmotionalAvatarView
 import androidx.compose.animation.Crossfade
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.Mic
+import android.speech.SpeechRecognizer
+import android.speech.RecognizerIntent
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
 /**
  * Enum class for ad content states
@@ -68,6 +78,30 @@ fun StreamingAvatarView(
     var showVideo by remember { mutableStateOf(false) }
     var audioLevel by remember { mutableStateOf(0f) }
     var adState by remember { mutableStateOf(AdState.DETECTED) }
+    
+    // Feedback state
+    var feedbackSent by remember { mutableStateOf(false) }
+    
+    // Voice recognition state
+    var isListening by remember { mutableStateOf(false) }
+    var voiceQueryResult by remember { mutableStateOf<String?>(null) }
+    
+    // Voice recognition launcher
+    val voiceRecognitionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        isListening = false
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val data = result.data
+            val results = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val recognizedText = results?.get(0) ?: ""
+            voiceQueryResult = recognizedText
+            Log.d("StreamingAvatarView", "Voice recognition result: $recognizedText")
+            
+            // Send the recognized text to the view model for processing
+            viewModel.processVoiceQuery(recognizedText, image?.id)
+        }
+    }
     
     // Fade animation for transitions
     val avatarAlpha by animateFloatAsState(
@@ -180,6 +214,39 @@ fun StreamingAvatarView(
             
             // Add state indicator overlay
             StateIndicatorOverlay(adState = adState)
+            
+            // Add feedback buttons when ad content is available and feedback hasn't been sent
+            if (adContent != null && !feedbackSent && (adState == AdState.STREAMING_AUDIO || adState == AdState.PLAYING_VIDEO)) {
+                FeedbackButtons(
+                    imageId = image.id,
+                    onFeedbackSent = { feedbackSent = true }
+                )
+            }
+            
+            // Add voice recognition button
+            if (adContent != null && (adState == AdState.STREAMING_AUDIO || adState == AdState.PLAYING_VIDEO)) {
+                VoiceRecognitionButton(
+                    isListening = isListening,
+                    onVoiceRecognitionRequested = {
+                        isListening = true
+                        voiceQueryResult = null
+                        
+                        // Create intent for voice recognition
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, "Ask me anything about this product...")
+                        }
+                        
+                        // Launch voice recognition
+                        try {
+                            voiceRecognitionLauncher.launch(intent)
+                        } catch (e: Exception) {
+                            Log.e("StreamingAvatarView", "Error launching voice recognition", e)
+                            isListening = false
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -494,5 +561,101 @@ private fun initializeAudioStreaming(context: Context, audioUrl: String, isPlayi
         })
     } catch (e: Exception) {
         Log.e("StreamingAvatarView", "Error initializing audio streaming", e)
+    }
+}
+
+/**
+ * Feedback buttons for like/dislike
+ */
+@Composable
+private fun FeedbackButtons(
+    imageId: String,
+    onFeedbackSent: () -> Unit
+) {
+    val viewModel: EnhancedARViewModel = viewModel()
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Card(
+            modifier = Modifier.padding(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+            )
+        ) {
+            Row(
+                modifier = Modifier.padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Rate this ad:",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                
+                IconButton(
+                    onClick = {
+                        viewModel.sendFeedback(imageId, "like")
+                        onFeedbackSent()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ThumbUp,
+                        contentDescription = "Like",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                
+                IconButton(
+                    onClick = {
+                        viewModel.sendFeedback(imageId, "dislike")
+                        onFeedbackSent()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ThumbDown,
+                        contentDescription = "Dislike",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Voice recognition button
+ */
+@Composable
+private fun VoiceRecognitionButton(
+    isListening: Boolean,
+    onVoiceRecognitionRequested: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(8.dp),
+        contentAlignment = Alignment.BottomEnd
+    ) {
+        Card(
+            modifier = Modifier.padding(8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+            )
+        ) {
+            IconButton(
+                onClick = onVoiceRecognitionRequested,
+                enabled = !isListening
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Mic,
+                    contentDescription = if (isListening) "Listening..." else "Voice Query",
+                    tint = if (isListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
     }
 }

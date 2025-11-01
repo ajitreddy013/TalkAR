@@ -1,5 +1,5 @@
-import { getPosterById } from "./posterHelper";
-import { getUserPreferences } from "./userHelper";
+import { getPosterById } from "../utils/posterHelper";
+import { getUserPreferences } from "../utils/userHelper";
 import OpenAI from "openai";
 
 interface CacheEntry {

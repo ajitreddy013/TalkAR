@@ -44,7 +44,7 @@ router.post("/generate", async (req, res, next) => {
     const lipsyncResult = await lipsyncPromise;
     const jobId = lipsyncResult?.jobId || "mock-job-id";
 
-    res.json({
+    return res.json({
       script: scriptRes.script,
       audio_url: audioRes.audioUrl,
       estimated_video: "pending",
@@ -459,6 +459,58 @@ router.post("/conversational_query", async (req, res, next) => {
   }
 });
 
+// Handle voice interaction queries with context
+router.post("/voice_query", async (req, res, next) => {
+  try {
+    const { query } = req.body;
+
+    // Validate required parameters
+    if (!query) {
+      return res.status(400).json({
+        error: "Missing required parameter: query"
+      });
+    }
+
+    // Get recent interactions for context
+    const { getRecentInteractions } = await import("../utils/memoryHelper");
+    const context = getRecentInteractions();
+
+    // Process conversational query with context
+    const result = await AIPipelineService.processConversationalQuery({
+      query,
+      context
+    });
+
+    return res.json({
+      success: true,
+      response: result.response,
+      audioUrl: result.audioUrl,
+      emotion: result.emotion
+    });
+  } catch (error: any) {
+    console.error("Voice query error:", error);
+    
+    // Handle specific error cases
+    if (error.message.includes("API key")) {
+      return res.status(401).json({
+        error: "API authentication failed. Please check your API keys."
+      });
+    } else if (error.message.includes("rate limit")) {
+      return res.status(429).json({
+        error: "API rate limit exceeded. Please try again later."
+      });
+    } else if (error.message.includes("timeout")) {
+      return res.status(408).json({
+        error: "API request timeout. Please try again later."
+      });
+    } else {
+      return res.status(500).json({
+        error: "Failed to process voice query. Please try again later."
+      });
+    }
+  }
+});
+
 // Generate audio stream for real-time playback
 router.post("/generate_audio_stream", async (req, res, next) => {
   try {
@@ -477,6 +529,7 @@ router.post("/generate_audio_stream", async (req, res, next) => {
 
     // Call ElevenLabs streaming API
     await AIPipelineService.streamAudio(text_prompt, res);
+    return;
   } catch (error: any) {
     console.error("Audio streaming error:", error);
     
@@ -500,6 +553,7 @@ router.post("/generate_audio_stream", async (req, res, next) => {
         });
       }
     }
+    return;
   }
 });
 
