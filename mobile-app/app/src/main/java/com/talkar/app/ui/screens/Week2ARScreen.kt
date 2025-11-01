@@ -7,7 +7,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
-import com.talkar.app.ui.components.EnhancedCameraView
+import com.talkar.app.ui.components.CameraPreviewView  // Changed from EnhancedCameraView
 import com.talkar.app.ui.components.FeedbackAvatarOverlay
 import com.talkar.app.ui.components.AvatarPlaceholder
 import com.talkar.app.ui.screens.AdContentTestScreen
@@ -72,8 +72,8 @@ fun Week2ARScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Enhanced camera preview (shows real camera output)
-            EnhancedCameraView(
+            // Camera preview (shows real camera output with ARCore integration)
+            CameraPreviewView(  // Changed from EnhancedCameraView
                 modifier = Modifier.fillMaxSize(),
                 isImageDetected = isTracking,
                 onImageRecognized = { imageRecognition ->

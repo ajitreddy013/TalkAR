@@ -198,8 +198,8 @@ private class ARCameraRenderer(
                 return
             }
 
-            // Get ARCore session
-            session = getARSession()
+            // Get ARCore session from the service instead of creating a new one
+            val session = arService.getSession()
             session?.let { session ->
                 
                 // Update display rotation
@@ -213,7 +213,7 @@ private class ARCameraRenderer(
                     // Draw camera background
                     backgroundRenderer?.draw(frame)
                     
-                    // Process frame for image recognition
+                    // Process frame for image recognition using the service
                     arService.processFrame(frame)
                     
                     // Check for recognized images and draw AR content
@@ -242,24 +242,6 @@ private class ARCameraRenderer(
             
         } catch (e: Exception) {
             Log.e("ARCameraRenderer", "Error in onDrawFrame", e)
-        }
-    }
-    
-    private fun getARSession(): Session? {
-        // This is a simplified approach - in practice you'd manage session lifecycle properly
-        return try {
-            if (session == null) {
-                session = Session(context)
-                // Configure session for image tracking
-                val config = Config(session)
-                config.focusMode = Config.FocusMode.AUTO
-                session?.configure(config)
-                session?.resume()
-            }
-            session
-        } catch (e: Exception) {
-            Log.e("ARCameraRenderer", "Failed to get AR session", e)
-            null
         }
     }
 }

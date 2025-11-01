@@ -1,5 +1,6 @@
 import express from "express";
 import Feedback from "../models/Feedback";
+import { updateFeedback } from "../utils/memoryHelper";
 
 const router = express.Router();
 
@@ -126,6 +127,42 @@ router.get("/recent", async (req, res, next) => {
     });
   } catch (error) {
     console.error("[FEEDBACK] Error fetching recent feedback:", error);
+    return next(error);
+  }
+});
+
+// POST /api/v1/feedback/user-context - Update feedback in user context
+router.post("/user-context", async (req, res, next) => {
+  try {
+    const { poster_id, feedback } = req.body;
+
+    // Validate required fields
+    if (!poster_id || !feedback) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields: poster_id, feedback"
+      });
+    }
+
+    // Validate feedback value
+    if (feedback !== "like" && feedback !== "dislike") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid feedback value. Must be 'like' or 'dislike'"
+      });
+    }
+
+    // Update feedback in user context
+    updateFeedback(poster_id, feedback);
+
+    console.log(`[FEEDBACK] Updated user context feedback - Poster: ${poster_id}, Feedback: ${feedback}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Feedback updated in user context successfully"
+    });
+  } catch (error) {
+    console.error("[FEEDBACK] Error updating user context feedback:", error);
     return next(error);
   }
 });

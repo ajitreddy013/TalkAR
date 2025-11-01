@@ -1,0 +1,23 @@
+[
+  {
+    "timestamp": "2025-10-31T19:49:55.973Z",
+    "poster_id": "poster_02",
+    "product_name": "Sunrich Water",
+    "script": "Check out this amazing Sunrich Water!",
+    "feedback": null
+  },
+  {
+    "timestamp": "2025-10-31T19:49:56.975Z",
+    "poster_id": "poster_03",
+    "product_name": "Nike Shoes",
+    "script": "Check out this amazing Nike Shoes!",
+    "feedback": null
+  },
+  {
+    "timestamp": "2025-10-31T19:49:57.976Z",
+    "poster_id": "poster_04",
+    "product_name": "Coca Cola",
+    "script": "Check out this amazing Coca Cola!",
+    "feedback": "like"
+  }
+]

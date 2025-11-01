@@ -16,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.sqrt
 import kotlin.math.abs
@@ -24,6 +25,9 @@ import java.net.URL
 import java.io.InputStream
 import android.graphics.BitmapFactory
 import android.graphics.Bitmap
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 /**
  * Backend Image AR Service - Downloads multiple images from backend for AR recognition
@@ -39,6 +43,13 @@ class BackendImageARService(private val context: Context) {
     private val tag = "BackendImageARService"
     private var session: Session? = null
     private var imageDatabase: AugmentedImageDatabase? = null
+    
+    // HTTP client with timeout configuration
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
     
     // Backend API client - lazily retrieved from the Application instance to avoid
     // creating it during service field initialization (which can happen before
@@ -127,7 +138,10 @@ class BackendImageARService(private val context: Context) {
             Log.d(tag, "Downloading images from backend...")
             
             // Get images from backend API
-            val response = apiClient.getImages()
+            val response = withContext(Dispatchers.IO) {
+                apiClient.getImages()
+            }
+            
             if (!response.isSuccessful || response.body() == null) {
                 Log.w(tag, "Failed to get images from backend: ${response.code()}")
                 return false
@@ -189,18 +203,44 @@ class BackendImageARService(private val context: Context) {
     }
     
     /**
-     * Download single image bitmap from URL
+     * Download single image bitmap from URL using OkHttp
      */
     private suspend fun downloadImageBitmap(imageUrl: String): Bitmap? {
-        return try {
-            val url = URL(imageUrl)
-            val inputStream: InputStream = url.openConnection().getInputStream()
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
-            bitmap
-        } catch (e: Exception) {
-            Log.e(tag, "Failed to download image from URL: $imageUrl", e)
-            null
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.d(tag, "Downloading image from URL: $imageUrl")
+                
+                val request = Request.Builder()
+                    .url(imageUrl)
+                    .build()
+                
+                httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.e(tag, "Failed to download image: HTTP ${response.code}")
+                        return@withContext null
+                    }
+                    
+                    val inputStream = response.body?.byteStream()
+                    if (inputStream == null) {
+                        Log.e(tag, "Failed to get input stream from response")
+                        return@withContext null
+                    }
+                    
+                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    inputStream.close()
+                    
+                    if (bitmap == null) {
+                        Log.e(tag, "Failed to decode bitmap from input stream")
+                        return@withContext null
+                    }
+                    
+                    Log.d(tag, "Successfully decoded bitmap: ${bitmap.width}x${bitmap.height}")
+                    bitmap
+                }
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to download image from URL: $imageUrl", e)
+                null
+            }
         }
     }
     
@@ -658,4 +698,3 @@ class BackendImageARService(private val context: Context) {
         )
     }
 }
-

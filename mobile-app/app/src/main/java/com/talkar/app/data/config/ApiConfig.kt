@@ -24,15 +24,15 @@ object ApiConfig {
     private val HOST: String = try {
         com.talkar.app.BuildConfig.API_HOST
     } catch (e: Exception) {
-        Log.w(TAG, "Failed to read BuildConfig.API_HOST, using default '10.17.5.127'", e)
-        "10.17.5.127"
+        Log.w(TAG, "Failed to read BuildConfig.API_HOST, using default '10.136.91.236'", e)
+        "10.136.91.236"
     }
 
     private val PORT: Int = try {
         com.talkar.app.BuildConfig.API_PORT
     } catch (e: Exception) {
-        Log.w(TAG, "Failed to read BuildConfig.API_PORT, using default 3000", e)
-        3000
+        Log.w(TAG, "Failed to read BuildConfig.API_PORT, using default 4000", e)
+        4000
     }
 
     private val API_VERSION: String = try {

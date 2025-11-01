@@ -91,6 +91,7 @@ class EnhancedARViewModel(
     // Services
     private val adContentService = AdContentGenerationService.getInstance()
     private val feedbackSyncService = FeedbackSyncService.getInstance()
+    private val apiClient = com.talkar.app.data.api.ApiClient.create()
     
     init {
         loadBackendData()
@@ -260,6 +261,63 @@ class EnhancedARViewModel(
     fun onAvatarTapped() {
         Log.d(TAG, "Avatar tapped")
         // TODO: Implement avatar interaction (play script, lip-sync, etc.)
+    }
+    
+    /**
+     * Send feedback to backend
+     */
+    fun sendFeedback(imageId: String, feedback: String) {
+        Log.d(TAG, "Sending feedback for image: $imageId, feedback: $feedback")
+        
+        viewModelScope.launch {
+            try {
+                // Send feedback to backend
+                val success = feedbackSyncService.sendFeedback(imageId, feedback)
+                
+                if (success) {
+                    Log.d(TAG, "Feedback sent successfully for image: $imageId")
+                    
+                    // Show a toast or some UI feedback
+                    // This would typically be handled by the UI layer
+                } else {
+                    Log.e(TAG, "Failed to send feedback for image: $imageId")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending feedback for image: $imageId", e)
+            }
+        }
+    }
+    
+    /**
+     * Process voice query
+     */
+    fun processVoiceQuery(query: String, imageId: String?) {
+        Log.d(TAG, "Processing voice query: $query for image: $imageId")
+        
+        viewModelScope.launch {
+            try {
+                // Process the voice query with the backend
+                val request = com.talkar.app.data.api.ConversationalQueryRequest(
+                    query = query,
+                    imageId = imageId,
+                    context = null // Context will be added by the backend
+                )
+                
+                val response = apiClient.processConversationalQuery(request)
+                
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val result = response.body()!!
+                    Log.d(TAG, "Voice query processed successfully: ${result.response}")
+                    
+                    // TODO: Play the response audio or show it in the UI
+                    // This would typically involve TTS or showing the response text
+                } else {
+                    Log.e(TAG, "Failed to process voice query. Response: ${response.code()} ${response.message()}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing voice query", e)
+            }
+        }
     }
     
     /**

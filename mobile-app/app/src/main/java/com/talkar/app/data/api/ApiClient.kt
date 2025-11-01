@@ -79,6 +79,10 @@ interface ApiService {
     @POST("feedback")
     suspend fun sendFeedback(@Body request: FeedbackRequest): Response<FeedbackResponse>
     
+    // User Context Feedback endpoint
+    @POST("feedback/user-context")
+    suspend fun sendUserContextFeedback(@Body request: FeedbackRequest): Response<FeedbackResponse>
+    
     // AI Config endpoints
     @GET("ai-config/defaults/tone")
     suspend fun getDefaultTone(): Response<DefaultToneResponse>

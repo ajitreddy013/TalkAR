@@ -36,10 +36,11 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "multer": "^2.0.2",
+    "openai": "^6.7.0",
     "pg": "^8.13.1",
     "sequelize": "^6.37.5",
     "socket.io": "^4.8.1",
-    "uuid": "^11.0.3",
+    "uuid": "^11.1.0",
     "validator": "^13.15.20"
   },
   "devDependencies": {
