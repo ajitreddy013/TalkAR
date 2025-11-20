@@ -29,7 +29,7 @@ android {
 
     // Release (production) defaults should use HTTPS and a production host. CI or local overrides can set API_HOST_RELEASE etc.
     def apiProtocolRelease = project.hasProperty('API_PROTOCOL_RELEASE') ? project.API_PROTOCOL_RELEASE : 'https'
-    def apiHostRelease = project.hasProperty('API_HOST_RELEASE') ? project.API_HOST_RELEASE : 'api.talkar.app'
+    def apiHostRelease = project.hasProperty('API_HOST_RELEASE') ? project.API_HOST_RELEASE : 'talkar-backend.onrender.com'
     def apiPortRelease = project.hasProperty('API_PORT_RELEASE') ? project.API_PORT_RELEASE.toInteger() : 443
 
     buildTypes {
