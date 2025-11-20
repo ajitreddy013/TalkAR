@@ -1,12 +1,8 @@
 import dotenv from 'dotenv';
-import dns from 'dns';
 
 dotenv.config();
 
-// Force IPv4 to avoid ENETUNREACH on IPv6 in some environments (like Render/Supabase)
-if (dns.setDefaultResultOrder) {
-  dns.setDefaultResultOrder('ipv4first');
-}
+dotenv.config();
 
 export const config = {
   port: process.env.PORT || 3000,
