@@ -159,10 +159,6 @@ app.use(errorHandler);
 // Database connection and server startup
 const startServer = async () => {
   try {
-    // Force IPv4 resolution for DB host
-    const { resolveDbHost } = await import("./config/database");
-    await resolveDbHost();
-
     await sequelize.authenticate();
     console.log("Database connection established successfully.");
 
