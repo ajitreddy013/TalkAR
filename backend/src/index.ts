@@ -30,11 +30,13 @@ import { SimpleCache } from "./utils/simpleCache";
 import path from "path";
 import { AnalyticsWorker } from "./services/analyticsWorker";
 
+import { config } from "./config";
+
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = config.port;
 
 // Enable HTTP keep-alive
 const agent = new http.Agent({ keepAlive: true });
@@ -60,6 +62,7 @@ app.use(
           "blob:",
           "http://localhost:3000",
           "http://localhost:3001",
+          "https://*.supabase.co", // Allow Supabase storage
         ],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
@@ -70,7 +73,9 @@ app.use(
 );
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+    origin: [config.frontendOrigin, "http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
@@ -126,12 +131,24 @@ app.use("/api/v1/enhanced-lipsync", enhancedLipSyncRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
 
 // Health check
-app.get("/health", (req: Request, res: Response) => {
-  res.json({
-    status: "OK",
-    timestamp: new Date().toISOString(),
-    version: "1.0.0",
-  });
+import { pool } from "./db";
+
+app.get("/health", async (req: Request, res: Response) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      status: "OK",
+      timestamp: new Date().toISOString(),
+      version: "1.0.0",
+      db: "connected"
+    });
+  } catch (e: any) {
+    res.status(500).json({ 
+      status: "error", 
+      error: e.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Error handling
