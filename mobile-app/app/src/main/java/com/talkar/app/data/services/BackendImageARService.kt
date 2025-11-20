@@ -105,6 +105,7 @@ class BackendImageARService(private val context: Context) {
                 return false
             }
             
+            // Create ARCore session - this will handle camera initialization
             session = Session(context)
             configureSession()
             
@@ -596,12 +597,19 @@ class BackendImageARService(private val context: Context) {
     }
     
     /**
+     * Get the current ARCore session for external processing
+     */
+    fun getSession(): Session? {
+        return session
+    }
+
+    /**
      * Get recognized image by name
      */
     fun getRecognizedImage(name: String): ImageRecognition? {
         return recognizedImageCache[name]
     }
-    
+
     /**
      * Clear recognized images
      */

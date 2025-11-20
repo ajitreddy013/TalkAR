@@ -11,7 +11,7 @@ import { getPosterById } from "../utils/posterHelper";
 import { getUserPreferences } from "../utils/userHelper";
 import { optimizedScriptService } from "./optimizedScriptService";
 import http from "http";
-import LRU from "lru-cache";
+import { SimpleCache } from "../utils/simpleCache";
 import { storeInteraction } from "../utils/memoryHelper";
 import { logInteraction } from "../utils/interactionLogger";
 
@@ -91,6 +91,12 @@ const aiPipelineJobs = new Map<string, AIPipelineJob>();
 // In-memory cache for frequently requested content (in production, use Redis)
 const contentCache = new Map<string, any>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Initialize LRU cache for scripts
+const scriptCache = new SimpleCache<string, string>({
+  max: 100,
+  ttl: 1000 * 60 * 60, // 1 hour
+});
 
 // In-memory storage for product metadata
 const productMetadataCache = new Map<string, ProductMetadata>();

@@ -71,6 +71,27 @@ export interface AnalyticsData {
   timestamp: string;
 }
 
+export interface AggregatedMetric {
+  date: string;
+  scans: number;
+  plays: number;
+  avg_latency_ms: number;
+  likes: number;
+  dislikes: number;
+}
+
+export interface Interaction {
+  id: string;
+  poster_id: string;
+  script: string;
+  audio_url: string;
+  video_url: string;
+  feedback: string;
+  status: string;
+  latency_ms: number;
+  created_at: string;
+}
+
 export const AnalyticsService = {
   getAnalytics: () => api.get<{ success: boolean; analytics: AnalyticsData; timestamp: string }>("/api/v1/analytics"),
   
@@ -81,4 +102,13 @@ export const AnalyticsService = {
   getPerformance: () => api.get<{ success: boolean; performance: PerformanceMetrics; timestamp: string }>("/api/v1/analytics/performance"),
   
   getAIPipelineEvents: () => api.get<{ success: boolean; aiPipelineEvents: any; timestamp: string }>("/api/v1/analytics/ai-pipeline-events"),
+
+  // New Admin Endpoints
+  getAggregatedMetrics: () => api.get<AggregatedMetric[]>("/admin/metrics"),
+  getInteractions: (page = 1, limit = 10) => api.get<{ interactions: Interaction[], total: number, page: number, pages: number }>(`/admin/interactions?page=${page}&limit=${limit}`),
+  exportInteractions: () => {
+    // Assuming api.defaults.baseURL is set, otherwise use relative path
+    const baseUrl = api.defaults.baseURL || '';
+    window.open(`${baseUrl}/admin/interactions/export`, '_blank');
+  }
 };

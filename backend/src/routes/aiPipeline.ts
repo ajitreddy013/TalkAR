@@ -1,10 +1,11 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { AIPipelineService } from "../services/aiPipelineService";
+import Interaction from "../models/Interaction";
 
 const router = express.Router();
 
 // Generate complete ad content with parallel execution for streaming
-router.post("/generate", async (req, res, next) => {
+router.post("/generate", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { image_id } = req.body;
     
@@ -76,7 +77,7 @@ router.post("/generate", async (req, res, next) => {
 });
 
 // Get job status
-router.get("/status/:jobId", async (req, res, next) => {
+router.get("/status/:jobId", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { jobId } = req.params;
 
@@ -98,7 +99,7 @@ router.get("/status/:jobId", async (req, res, next) => {
 });
 
 // Get Sync.so job status
-router.get("/lipsync/status/:jobId", async (req, res, next) => {
+router.get("/lipsync/status/:jobId", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { jobId } = req.params;
 
@@ -114,7 +115,7 @@ router.get("/lipsync/status/:jobId", async (req, res, next) => {
 });
 
 // Generate script with metadata support
-router.post("/generate_script", async (req, res, next) => {
+router.post("/generate_script", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { imageId, language, emotion, userPreferences } = req.body;
 
@@ -144,7 +145,7 @@ router.post("/generate_script", async (req, res, next) => {
 });
 
 // Generate product script
-router.post("/generate_product_script", async (req, res, next) => {
+router.post("/generate_product_script", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { productName } = req.body;
 
@@ -167,7 +168,7 @@ router.post("/generate_product_script", async (req, res, next) => {
 });
 
 // Generate audio only
-router.post("/generate_audio", async (req, res, next) => {
+router.post("/generate_audio", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { text, language, voiceId, emotion } = req.body;
 
@@ -196,7 +197,7 @@ router.post("/generate_audio", async (req, res, next) => {
 });
 
 // Generate lip-sync only (enhanced version matching Sync.so API requirements)
-router.post("/generate_lipsync", async (req, res, next) => {
+router.post("/generate_lipsync", async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Extract parameters with both naming conventions for compatibility
     const { imageId, audioUrl, audio_url, emotion, avatar } = req.body;
@@ -236,7 +237,11 @@ router.post("/generate_lipsync", async (req, res, next) => {
 });
 
 // Generate complete ad content from poster: poster → script → audio → lipsync video
-router.post("/generate_ad_content_from_poster", async (req, res, next) => {
+router.post("/generate_ad_content_from_poster", async (req: Request, res: Response, next: NextFunction) => {
+  const t0 = Date.now();
+  let interaction: any = null;
+  const io = req.app.get('io');
+
   try {
     const { image_id, user_id } = req.body;
 
@@ -254,18 +259,78 @@ router.post("/generate_ad_content_from_poster", async (req, res, next) => {
       });
     }
 
+    // Create interaction record
+    try {
+      interaction = await (Interaction as any).create({
+        poster_id: image_id,
+        user_id: user_id || 'anonymous',
+        status: 'started'
+      });
+
+      if (io) {
+        io.emit('new_interaction', {
+          id: interaction.id,
+          type: 'scan',
+          poster_id: image_id,
+          timestamp: t0,
+          status: 'started'
+        });
+      }
+    } catch (err) {
+      console.error("Failed to create interaction record:", err);
+    }
+
     // Generate complete ad content from poster
     const result = await AIPipelineService.generateAdContentFromPoster(image_id, user_id);
+
+    const t_video_ready = Date.now();
+    const latency = t_video_ready - t0;
+
+    // Update interaction
+    if (interaction) {
+      await interaction.update({
+        script: result.script,
+        audio_url: result.audioUrl,
+        video_url: result.videoUrl,
+        status: 'completed',
+        latency_ms: latency
+      });
+
+      if (io) {
+        io.emit('interaction_update', {
+          id: interaction.id,
+          status: 'completed',
+          latency_ms: latency,
+          video_url: result.videoUrl
+        });
+      }
+    }
 
     return res.json({
       success: true,
       script: result.script,
       audio_url: result.audioUrl,
       video_url: result.videoUrl,
-      metadata: result.metadata
+      metadata: result.metadata,
+      interaction_id: interaction ? interaction.id : null
     });
   } catch (error: any) {
     console.error("Poster-based ad content generation error:", error);
+    
+    // Update interaction status to error
+    if (interaction) {
+      await interaction.update({
+        status: 'error',
+        latency_ms: Date.now() - t0
+      });
+      
+      if (io) {
+        io.emit('interaction_update', {
+          id: interaction.id,
+          status: 'error'
+        });
+      }
+    }
     
     // Handle specific error cases
     if (error.message.includes("API key")) {
@@ -293,7 +358,7 @@ router.post("/generate_ad_content_from_poster", async (req, res, next) => {
 });
 
 // Generate complete ad content: product → script → audio → lipsync video
-router.post("/generate_ad_content", async (req, res, next) => {
+router.post("/generate_ad_content", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { product } = req.body;
 
@@ -352,7 +417,7 @@ router.post("/generate_ad_content", async (req, res, next) => {
 });
 
 // Generate complete ad content with streaming optimization
-router.post("/generate_ad_content_streaming", async (req, res, next) => {
+router.post("/generate_ad_content_streaming", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { product } = req.body;
 
@@ -411,7 +476,7 @@ router.post("/generate_ad_content_streaming", async (req, res, next) => {
 });
 
 // Handle conversational context queries
-router.post("/conversational_query", async (req, res, next) => {
+router.post("/conversational_query", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { query, imageId, context } = req.body;
 
@@ -460,7 +525,7 @@ router.post("/conversational_query", async (req, res, next) => {
 });
 
 // Handle voice interaction queries with context
-router.post("/voice_query", async (req, res, next) => {
+router.post("/voice_query", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { query } = req.body;
 
@@ -512,7 +577,7 @@ router.post("/voice_query", async (req, res, next) => {
 });
 
 // Generate audio stream for real-time playback
-router.post("/generate_audio_stream", async (req, res, next) => {
+router.post("/generate_audio_stream", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { text_prompt } = req.body;
 
@@ -558,7 +623,7 @@ router.post("/generate_audio_stream", async (req, res, next) => {
 });
 
 // Generate lip-sync asynchronously
-router.post("/generate_lipsync_async", async (req, res, next) => {
+router.post("/generate_lipsync_async", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { image_url, audio_url } = req.body;
 
@@ -605,7 +670,7 @@ router.post("/generate_lipsync_async", async (req, res, next) => {
 });
 
 // Get lip-sync job status
-router.get("/lipsync_status/:id", async (req, res, next) => {
+router.get("/lipsync_status/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
 

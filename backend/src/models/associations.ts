@@ -4,6 +4,8 @@ import { ImageAvatarMapping } from "./ImageAvatarMapping";
 import { AIConfig } from "./AIConfig";
 import Feedback from "./Feedback";
 import Settings from "./Settings";
+import Interaction from "./Interaction";
+import Metric from "./Metric";
 
 // Define all model associations
 export function defineAssociations() {

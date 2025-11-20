@@ -1,4 +1,4 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
@@ -26,7 +26,9 @@ import feedbackRoutes from "./routes/feedback";
 import settingsRoutes from "./routes/settings";
 import generateDynamicScriptRoutes from "./routes/generateDynamicScript";
 import http from "http";
-import LRU from "lru-cache";
+import { SimpleCache } from "./utils/simpleCache";
+import path from "path";
+import { AnalyticsWorker } from "./services/analyticsWorker";
 
 // Load environment variables
 dotenv.config();
@@ -40,7 +42,7 @@ const agent = new http.Agent({ keepAlive: true });
 app.set('httpAgent', agent);
 
 // Create LRU cache for video content
-const videoCache = new LRU<string, any>({
+const videoCache = new SimpleCache<string, any>({
   max: 3, // Cache last 3 videos
   ttl: 1000 * 60 * 5, // 5 minutes TTL
 });
@@ -79,7 +81,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Serve uploaded files statically with CORS headers
 app.use(
   "/uploads",
-  (req, res, next) => {
+  (req: Request, res: Response, next: NextFunction) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET");
     res.header(
@@ -92,12 +94,11 @@ app.use(
 );
 
 // Serve admin-dashboard production build (if present)
-import path from "path";
 const adminBuildPath = path.join(__dirname, "..", "admin-dashboard", "build");
 try {
   app.use(express.static(adminBuildPath));
   // For any other routes not handled by API, serve the React app
-  app.get("/", (req, res) => {
+  app.get("/", (req: Request, res: Response) => {
     res.sendFile(path.join(adminBuildPath, "index.html"));
   });
 } catch (e) {
@@ -125,7 +126,7 @@ app.use("/api/v1/enhanced-lipsync", enhancedLipSyncRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
 
 // Health check
-app.get("/health", (req, res) => {
+app.get("/health", (req: Request, res: Response) => {
   res.json({
     status: "OK",
     timestamp: new Date().toISOString(),
@@ -183,6 +184,9 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+// Start analytics worker
+AnalyticsWorker.start();
 
 startServer();
 
