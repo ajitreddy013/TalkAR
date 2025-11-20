@@ -10,12 +10,9 @@ import {
   Alert,
 } from "@mui/material";
 import {
-  Image as ImageIcon,
-  Chat,
-  Visibility,
-  TrendingUp,
+  QrCodeScanner,
   PlayArrow,
-  Error as ErrorIcon,
+  ThumbUp,
   AccessTime,
 } from "@mui/icons-material";
 import {
@@ -31,9 +28,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { fetchImages } from "../store/slices/imageSlice";
-import { useAppDispatch, useAppSelector } from "../store/hooks";
-import { AnalyticsService, AnalyticsData } from "../services/analyticsService";
+import { AnalyticsService, AggregatedMetric } from "../services/analyticsService";
 
 interface StatItem {
   title: string;
@@ -43,115 +38,77 @@ interface StatItem {
 }
 
 const Dashboard: React.FC = () => {
-  const dispatch = useAppDispatch();
-  const { images, loading } = useAppSelector((state) => state.images);
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [metrics, setMetrics] = useState<AggregatedMetric[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    dispatch(fetchImages());
     fetchAnalytics();
-  }, [dispatch]);
+  }, []);
 
   const fetchAnalytics = async () => {
-    setAnalyticsLoading(true);
+    setLoading(true);
     setError(null);
     try {
-      const response = await AnalyticsService.getAnalytics();
-      setAnalytics(response.data.analytics);
+      const response = await AnalyticsService.getAggregatedMetrics();
+      // Sort by date ascending
+      const sortedMetrics = response.data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      setMetrics(sortedMetrics);
     } catch (err) {
       console.error("Failed to fetch analytics:", err);
       setError("Failed to load analytics data");
     } finally {
-      setAnalyticsLoading(false);
+      setLoading(false);
     }
   };
 
-  // Prepare data for charts
-  const getImageTriggerData = () => {
-    if (!analytics?.imageTriggers?.byImage) return [];
-    return analytics.imageTriggers.byImage.map((item) => ({
-      name:
-        item.imageName.length > 15
-          ? `${item.imageName.substring(0, 15)}...`
-          : item.imageName,
-      triggers: item.count,
-    }));
-  };
-
-  const getAIPipelineData = () => {
-    if (!analytics?.aiPipelineEvents?.byType) return [];
-    return analytics.aiPipelineEvents.byType.map((item) => ({
-      name: item.eventType.replace("_", " "),
-      count: item.count,
-    }));
-  };
-
-  const getPerformanceData = () => {
-    if (!analytics?.performance) return [];
-    return [
-      { name: "Successful", value: analytics.performance.successfulRequests },
-      { name: "Failed", value: analytics.performance.failedRequests },
-    ];
-  };
-
-  const COLORS = ["#0088FE", "#FF0000"];
+  // Calculate aggregates
+  const totalScans = metrics.reduce((sum, m) => sum + m.scans, 0);
+  const totalPlays = metrics.reduce((sum, m) => sum + m.plays, 0);
+  const avgLatency = metrics.length > 0 
+    ? Math.round(metrics.reduce((sum, m) => sum + m.avg_latency_ms, 0) / metrics.length) 
+    : 0;
+  const totalLikes = metrics.reduce((sum, m) => sum + m.likes, 0);
+  const totalDislikes = metrics.reduce((sum, m) => sum + m.dislikes, 0);
+  const likeRate = (totalLikes + totalDislikes) > 0 
+    ? Math.round((totalLikes / (totalLikes + totalDislikes)) * 100) 
+    : 0;
 
   const stats: StatItem[] = [
     {
-      title: "Total Images",
-      value: images.length,
-      icon: <ImageIcon />,
+      title: "Total Scans",
+      value: totalScans,
+      icon: <QrCodeScanner />,
       color: "#1976d2",
     },
     {
-      title: "Active Images",
-      value: images.filter((img) => img.isActive).length,
-      icon: <Visibility />,
+      title: "Total Plays",
+      value: totalPlays,
+      icon: <PlayArrow />,
       color: "#2e7d32",
     },
     {
-      title: "Total Dialogues",
-      value: images.reduce((acc, img) => acc + img.dialogues.length, 0),
-      icon: <Chat />,
+      title: "Avg Latency",
+      value: `${avgLatency}ms`,
+      icon: <AccessTime />,
       color: "#ed6c02",
     },
     {
-      title: "Languages",
-      value: new Set(
-        images.flatMap((img) => img.dialogues.map((d) => d.language))
-      ).size,
-      icon: <TrendingUp />,
+      title: "Like Rate",
+      value: `${likeRate}%`,
+      icon: <ThumbUp />,
       color: "#9c27b0",
     },
   ];
 
-  // Add analytics-based stats
-  if (analytics) {
-    stats.push({
-      title: "Total Triggers",
-      value: analytics.imageTriggers.total,
-      icon: <PlayArrow />,
-      color: "#4caf50",
-    });
+  const feedbackData = [
+    { name: "Likes", value: totalLikes },
+    { name: "Dislikes", value: totalDislikes },
+  ];
 
-    stats.push({
-      title: "AI Pipeline Errors",
-      value: analytics.aiPipelineEvents.errors,
-      icon: <ErrorIcon />,
-      color: "#f44336",
-    });
+  const COLORS = ["#4caf50", "#f44336"];
 
-    stats.push({
-      title: "Avg Response Time",
-      value: `${analytics.performance.averageResponseTime}ms`,
-      icon: <AccessTime />,
-      color: "#ff9800",
-    });
-  }
-
-  if (loading || analyticsLoading) {
+  if (loading) {
     return <LinearProgress />;
   }
 
@@ -197,117 +154,58 @@ const Dashboard: React.FC = () => {
         ))}
 
         {/* Charts Section */}
-        {analytics && (
-          <>
-            <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 3, height: 400 }}>
-                <Typography variant="h6" gutterBottom>
-                  Image Triggers by Image
-                </Typography>
-                <ResponsiveContainer width="100%" height="90%">
-                  <BarChart
-                    data={getImageTriggerData()}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="name"
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                    />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="triggers" fill="#8884d8" name="Triggers" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 3, height: 400 }}>
-                <Typography variant="h6" gutterBottom>
-                  AI Pipeline Events
-                </Typography>
-                <ResponsiveContainer width="100%" height="90%">
-                  <BarChart
-                    data={getAIPipelineData()}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="name"
-                      angle={-45}
-                      textAnchor="end"
-                      height={60}
-                    />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="count" fill="#82ca9d" name="Count" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 3, height: 400 }}>
-                <Typography variant="h6" gutterBottom>
-                  Request Success Rate
-                </Typography>
-                <ResponsiveContainer width="100%" height="90%">
-                  <PieChart>
-                    <Pie
-                      data={getPerformanceData()}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) =>
-                        `${name}: ${((percent as number) * 100).toFixed(0)}%`
-                      }
-                      outerRadius={120}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {getPerformanceData().map((entry, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={COLORS[index % COLORS.length]}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              </Paper>
-            </Grid>
-          </>
-        )}
-
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
+        <Grid item xs={12} md={8}>
+          <Paper sx={{ p: 3, height: 400 }}>
             <Typography variant="h6" gutterBottom>
-              Recent Images
+              Scans & Plays per Day
             </Typography>
-            {images.slice(0, 5).map((image) => (
-              <Box
-                key={image.id}
-                sx={{
-                  mb: 2,
-                  p: 2,
-                  border: "1px solid #e0e0e0",
-                  borderRadius: 1,
-                }}
+            <ResponsiveContainer width="100%" height="90%">
+              <BarChart
+                data={metrics}
+                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
               >
-                <Typography variant="subtitle1">{image.name}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {image.dialogues.length} dialogues •{" "}
-                  {image.isActive ? "Active" : "Inactive"}
-                </Typography>
-              </Box>
-            ))}
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="scans" fill="#1976d2" name="Scans" />
+                <Bar dataKey="plays" fill="#2e7d32" name="Plays" />
+              </BarChart>
+            </ResponsiveContainer>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, height: 400 }}>
+            <Typography variant="h6" gutterBottom>
+              Feedback Overview
+            </Typography>
+            <ResponsiveContainer width="100%" height="90%">
+              <PieChart>
+                <Pie
+                  data={feedbackData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) =>
+                    `${name}: ${((percent as number) * 100).toFixed(0)}%`
+                  }
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {feedbackData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={COLORS[index % COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
           </Paper>
         </Grid>
       </Grid>
