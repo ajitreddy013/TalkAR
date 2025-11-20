@@ -132,10 +132,35 @@ router.get("/metrics", async (req: Request, res: Response, next: NextFunction) =
 // Get interactions
 router.get("/interactions", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { page = 1, limit = 100 } = req.query;
+    const { page = 1, limit = 100, status, poster_id, startDate, endDate } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
     
+    const whereClause: any = {};
+    
+    if (status && status !== 'all') {
+      whereClause.status = status;
+    }
+    
+    if (poster_id) {
+      whereClause.poster_id = { [Op.iLike]: `%${poster_id}%` };
+    }
+    
+    if (startDate && endDate) {
+      whereClause.created_at = {
+        [Op.between]: [startDate, endDate]
+      };
+    } else if (startDate) {
+      whereClause.created_at = {
+        [Op.gte]: startDate
+      };
+    } else if (endDate) {
+      whereClause.created_at = {
+        [Op.lte]: endDate
+      };
+    }
+
     const { count, rows } = await (Interaction as any).findAndCountAll({
+      where: whereClause,
       limit: Number(limit),
       offset,
       order: [['created_at', 'DESC']]

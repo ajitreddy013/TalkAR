@@ -6,9 +6,15 @@ import {
   Button,
   LinearProgress,
   Alert,
+  TextField,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  Grid,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridToolbar } from "@mui/x-data-grid";
-import { Download as DownloadIcon } from "@mui/icons-material";
+import { Download as DownloadIcon, FilterList as FilterIcon } from "@mui/icons-material";
 import { AnalyticsService, Interaction } from "../services/analyticsService";
 
 const Interactions: React.FC = () => {
@@ -19,6 +25,12 @@ const Interactions: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   const [rowCount, setRowCount] = useState(0);
 
+  // Filter state
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [posterIdFilter, setPosterIdFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
   useEffect(() => {
     fetchInteractions(page, pageSize);
   }, [page, pageSize]);
@@ -27,7 +39,14 @@ const Interactions: React.FC = () => {
     setLoading(true);
     try {
       // API uses 1-based page index
-      const response = await AnalyticsService.getInteractions(p + 1, s);
+      const filters = {
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        poster_id: posterIdFilter || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      };
+      
+      const response = await AnalyticsService.getInteractions(p + 1, s, filters);
       setInteractions(response.data.interactions);
       setRowCount(response.data.total);
     } catch (err) {
@@ -36,6 +55,11 @@ const Interactions: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleApplyFilters = () => {
+    setPage(0); // Reset to first page when filtering
+    fetchInteractions(0, pageSize);
   };
 
   const handleExport = () => {
@@ -84,6 +108,68 @@ const Interactions: React.FC = () => {
           {error}
         </Alert>
       )}
+
+      {/* Filter Bar */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={6} md={2}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Status</InputLabel>
+              <Select
+                value={statusFilter}
+                label="Status"
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <MenuItem value="all">All</MenuItem>
+                <MenuItem value="completed">Completed</MenuItem>
+                <MenuItem value="failed">Failed</MenuItem>
+                <MenuItem value="started">Started</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Poster ID"
+              value={posterIdFilter}
+              onChange={(e) => setPosterIdFilter(e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={2}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Start Date"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={2}>
+            <TextField
+              fullWidth
+              size="small"
+              label="End Date"
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <Button
+              variant="contained"
+              startIcon={<FilterIcon />}
+              onClick={handleApplyFilters}
+              fullWidth
+            >
+              Apply Filters
+            </Button>
+          </Grid>
+        </Grid>
+      </Paper>
 
       <Paper sx={{ height: 600, width: "100%" }}>
         <DataGrid

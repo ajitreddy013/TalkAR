@@ -105,7 +105,14 @@ export const AnalyticsService = {
 
   // New Admin Endpoints
   getAggregatedMetrics: () => api.get<AggregatedMetric[]>("/admin/metrics"),
-  getInteractions: (page = 1, limit = 10) => api.get<{ interactions: Interaction[], total: number, page: number, pages: number }>(`/admin/interactions?page=${page}&limit=${limit}`),
+  getInteractions: (page = 1, limit = 10, filters?: { status?: string, poster_id?: string, startDate?: string, endDate?: string }) => {
+    let query = `/admin/interactions?page=${page}&limit=${limit}`;
+    if (filters?.status) query += `&status=${filters.status}`;
+    if (filters?.poster_id) query += `&poster_id=${filters.poster_id}`;
+    if (filters?.startDate) query += `&startDate=${filters.startDate}`;
+    if (filters?.endDate) query += `&endDate=${filters.endDate}`;
+    return api.get<{ interactions: Interaction[], total: number, page: number, pages: number }>(query);
+  },
   exportInteractions: () => {
     // Assuming api.defaults.baseURL is set, otherwise use relative path
     const baseUrl = api.defaults.baseURL || '';
