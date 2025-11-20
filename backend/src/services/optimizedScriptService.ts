@@ -24,8 +24,10 @@ interface OptimizedScriptResponse {
   generation_time: number;
 }
 
+import { config } from "../config";
+
 export class OptimizedScriptService {
-  private openai: OpenAI;
+  private openai: OpenAI | null = null; // Changed to nullable
   private scriptCache: Map<string, CacheEntry>;
   private posterCache: Map<string, CacheEntry>;
   private userPrefsCache: CacheEntry | null;
@@ -44,9 +46,12 @@ export class OptimizedScriptService {
   };
 
   constructor() {
-    this.openai = new OpenAI({ 
-      apiKey: process.env.OPENAI_API_KEY 
-    });
+    // Lazy init OpenAI to prevent startup crash if key is missing
+    if (config.openaiKey) {
+      this.openai = new OpenAI({ 
+        apiKey: config.openaiKey 
+      });
+    }
     
     this.scriptCache = new Map();
     this.posterCache = new Map();
@@ -63,6 +68,16 @@ export class OptimizedScriptService {
     setInterval(() => {
       this.cleanupExpiredCache();
     }, 5 * 60 * 1000);
+  }
+
+  private getOpenAI(): OpenAI {
+    if (!this.openai) {
+      if (!config.openaiKey) {
+        throw new Error("OpenAI API Key is missing. Please check your configuration.");
+      }
+      this.openai = new OpenAI({ apiKey: config.openaiKey });
+    }
+    return this.openai;
   }
 
   /**
@@ -135,7 +150,7 @@ export class OptimizedScriptService {
     const prompt = this.createOptimizedPrompt(poster, language, tone);
 
     // Generate script with optimized parameters
-    const response = await this.openai.chat.completions.create({
+    const response = await this.getOpenAI().chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       max_tokens: 80, // Reduced for faster generation
