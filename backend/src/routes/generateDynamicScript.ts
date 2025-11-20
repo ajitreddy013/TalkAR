@@ -1,5 +1,4 @@
 import express from "express";
-import OpenAI from "openai";
 import { getPosterById } from "../utils/posterHelper";
 import { getUserPreferences } from "../utils/userHelper";
 import { dynamicScriptLogger } from "../utils/dynamicScriptLogger";
@@ -7,11 +6,6 @@ import { optimizedScriptService } from "../services/optimizedScriptService";
 import { getRecentInteractions } from "../utils/memoryHelper";
 
 const router = express.Router();
-
-// Initialize OpenAI client
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY 
-});
 
 /**
  * Generate dynamic script based on poster metadata and user preferences
