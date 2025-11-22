@@ -92,9 +92,25 @@ interface ApiService {
 }
 
 object ApiClient {
+    private const val AUTH_TOKEN = "demo-token-123" // TODO: Replace with actual token management
+
     fun create(): ApiService {
+        val okHttpClient = okhttp3.OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val original = chain.request()
+                val request = original.newBuilder()
+                    .header("Authorization", "Bearer $AUTH_TOKEN")
+                    .method(original.method(), original.body())
+                    .build()
+                chain.proceed(request)
+            }
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+
         return retrofit2.Retrofit.Builder()
             .baseUrl(ApiConfig.API_V1_URL + "/")
+            .client(okHttpClient)
             .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
             .build()
             .create(ApiService::class.java)

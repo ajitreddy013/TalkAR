@@ -485,6 +485,9 @@ class EnhancedARViewModel(
     /**
      * Handle ad content generation errors with retry mechanism
      */
+    /**
+     * Handle ad content generation errors with retry mechanism and fallback
+     */
     private fun handleAdContentError(errorMessage: String, productName: String) {
         if (retryCount < maxRetries) {
             retryCount++
@@ -496,9 +499,22 @@ class EnhancedARViewModel(
                 generateAdContentForImageStreaming(productName, productName)
             }
         } else {
-            _adContentError.value = errorMessage
-            _isAdContentLoading.value = false
             Log.e(TAG, "Failed to generate streaming ad content after $maxRetries retries: $errorMessage")
+            
+            // FALLBACK MODE: Show text bubble instead of video
+            Log.i(TAG, "Activating Fallback Mode: Text Bubble")
+            
+            val fallbackContent = AdContent(
+                script = "Welcome to $productName! (Offline Mode)",
+                audioUrl = null,
+                videoUrl = null, // Null video triggers text bubble UI
+                productName = productName
+            )
+            
+            _currentAdContent.value = fallbackContent
+            _isAvatarVisible.value = true
+            _isAdContentLoading.value = false
+            _adContentError.value = "Connection weak. Switched to text mode."
         }
     }
     

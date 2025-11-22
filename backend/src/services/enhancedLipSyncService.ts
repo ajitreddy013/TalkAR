@@ -65,9 +65,9 @@ const mockVideoUrls = {
 
 export class EnhancedLipSyncService {
   /**
-   * Generate lip-sync video for given text and voice
+   * Generate lip-sync video for given text and voice with retry logic
    */
-  static async generateLipSyncVideo(request: LipSyncRequest): Promise<LipSyncResponse> {
+  static async generateLipSyncVideo(request: LipSyncRequest, retries = 3): Promise<LipSyncResponse> {
     const startTime = Date.now();
     const videoId = uuidv4();
     
@@ -93,10 +93,8 @@ export class EnhancedLipSyncService {
 
       videoStorage.set(videoId, videoEntry);
 
-      // Simulate async processing
-      setTimeout(() => {
-        this.completeVideoGeneration(videoId, request);
-      }, processingTime);
+      // Simulate async processing with potential failure
+      this.processVideoWithRetry(videoId, request, processingTime, retries);
 
       const response: LipSyncResponse = {
         success: true,
@@ -119,6 +117,44 @@ export class EnhancedLipSyncService {
         message: 'Failed to start video generation',
       };
     }
+  }
+
+  /**
+   * Process video generation with retry logic
+   */
+  private static async processVideoWithRetry(
+    videoId: string, 
+    request: LipSyncRequest, 
+    processingTime: number, 
+    retriesLeft: number
+  ): Promise<void> {
+    setTimeout(async () => {
+      try {
+        // Simulate 10% failure rate to test retry
+        if (Math.random() < 0.1 && retriesLeft > 0) {
+          throw new Error("Simulated generation failure");
+        }
+        await this.completeVideoGeneration(videoId, request);
+      } catch (error) {
+        console.warn(`[LIPSYNC] Generation failed for ${videoId}. Retries left: ${retriesLeft}`);
+        
+        if (retriesLeft > 0) {
+          // Retry with exponential backoff
+          const delay = 1000 * (4 - retriesLeft); // 1s, 2s, 3s...
+          setTimeout(() => {
+            this.processVideoWithRetry(videoId, request, processingTime, retriesLeft - 1);
+          }, delay);
+        } else {
+          // Mark as failed after all retries
+          const storage = videoStorage.get(videoId);
+          if (storage) {
+            storage.status = 'failed';
+            videoStorage.set(videoId, storage);
+          }
+          console.error(`[LIPSYNC] Final failure for ${videoId} after retries.`);
+        }
+      }
+    }, processingTime);
   }
 
   /**

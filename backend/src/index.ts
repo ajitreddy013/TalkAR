@@ -6,10 +6,12 @@ import morgan from "morgan";
 import dotenv from "dotenv";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import rateLimit from "express-rate-limit"; // Rate limiting
 import { sequelize } from "./config/database";
 import { errorHandler } from "./middleware/errorHandler";
 import { notFound } from "./middleware/notFound";
 import { defineAssociations } from "./models/associations";
+import logger from "./utils/logger"; // Structured logger
 import imageRoutes from "./routes/images";
 import syncRoutes from "./routes/sync";
 import adminRoutes from "./routes/admin";
@@ -83,6 +85,28 @@ app.use(
 app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Rate Limiting
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 60, // Limit each IP to 60 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: "Too many requests from this IP, please try again after a minute",
+  handler: (req, res, next, options) => {
+    logger.warn(`Rate limit exceeded for IP: ${req.ip}`);
+    res.status(options.statusCode).send(options.message);
+  }
+});
+
+// Apply rate limiting to all requests
+app.use(limiter);
+
+// Request logging
+app.use((req, res, next) => {
+  logger.http(`${req.method} ${req.url}`);
+  next();
+});
 
 // Serve uploaded files statically with CORS headers
 app.use(
@@ -204,8 +228,9 @@ const startServer = async () => {
 };
 
 // Start analytics worker
-AnalyticsWorker.start();
-
-startServer();
+if (process.env.NODE_ENV !== 'test') {
+  AnalyticsWorker.start();
+  startServer();
+}
 
 export default app;
