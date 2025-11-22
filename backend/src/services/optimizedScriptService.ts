@@ -150,19 +150,29 @@ export class OptimizedScriptService {
     const prompt = this.createOptimizedPrompt(poster, language, tone);
 
     // Generate script with optimized parameters
-    const response = await this.getOpenAI().chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 80, // Reduced for faster generation
-      temperature: 0.7, // Slightly lower for consistency
-      top_p: 0.9,
-      frequency_penalty: 0.1,
-      presence_penalty: 0.1
-    });
+    try {
+      const response = await this.getOpenAI().chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 80, // Reduced for faster generation
+        temperature: 0.7, // Slightly lower for consistency
+        top_p: 0.9,
+        frequency_penalty: 0.1,
+        presence_penalty: 0.1
+      });
 
-    const script = response.choices[0].message.content?.trim() || "";
-
-    return { script, language, tone };
+      const script = response.choices[0].message.content?.trim() || "";
+      return { script, language, tone };
+    } catch (error) {
+      console.error("OpenAI generation failed, using fallback:", error);
+      // Fallback script
+      const fallbackScript = `Welcome to ${poster.product_name}! Experience the future of ${poster.category} with our amazing features.`;
+      return { 
+        script: fallbackScript, 
+        language, 
+        tone 
+      };
+    }
   }
 
   /**
