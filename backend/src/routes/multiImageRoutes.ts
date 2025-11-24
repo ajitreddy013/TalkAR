@@ -5,7 +5,7 @@ import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 
 // In-memory storage for image sets (in production, use a database)
-let imageSets: any[] = [];
+const imageSets: any[] = [];
 
 const router = express.Router();
 

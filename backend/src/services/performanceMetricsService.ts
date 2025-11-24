@@ -145,7 +145,7 @@ export class PerformanceMetricsService {
    */
   private static checkPerformanceTargets(metrics: PerformanceMetrics): void {
     const targets = this.TARGETS;
-    let issues: string[] = [];
+    const issues: string[] = [];
     
     if (metrics.audioStartDelay > targets.audioStartDelay) {
       issues.push(`Audio start delay ${metrics.audioStartDelay}ms exceeds target ${targets.audioStartDelay}ms`);

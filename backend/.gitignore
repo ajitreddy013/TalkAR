@@ -48,6 +48,8 @@ coverage/
 # Uploads
 uploads/
 temp/
+audio/
+scripts/
 
 # AWS credentials
 .aws/
