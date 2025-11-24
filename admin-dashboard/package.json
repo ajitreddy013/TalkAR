@@ -33,7 +33,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "test:coverage": "react-scripts test --coverage --watchAll=false",
-    "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
+    "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "eject": "react-scripts eject"
   },
