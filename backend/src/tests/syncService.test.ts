@@ -6,7 +6,7 @@ import {
 
 // Mock axios
 jest.mock("axios");
-const mockedAxios = require("axios");
+const mockedAxios = require("axios"); // eslint-disable-line @typescript-eslint/no-require-imports
 
 describe("SyncService", () => {
   beforeEach(() => {

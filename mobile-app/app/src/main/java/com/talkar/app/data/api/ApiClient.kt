@@ -100,7 +100,7 @@ object ApiClient {
                 val original = chain.request()
                 val request = original.newBuilder()
                     .header("Authorization", "Bearer $AUTH_TOKEN")
-                    .method(original.method(), original.body())
+                    .method(original.method, original.body)
                     .build()
                 chain.proceed(request)
             }
