@@ -89,6 +89,10 @@ interface ApiService {
     
     @GET("ai-config/prompt-template")
     suspend fun getPromptTemplate(): Response<PromptTemplateResponse>
+    
+    // Beta Feedback endpoint
+    @POST("beta-feedback")
+    suspend fun sendBetaFeedback(@Body request: BetaFeedbackRequest): Response<BetaFeedbackResponse>
 }
 
 object ApiClient {
@@ -314,4 +318,19 @@ data class PosterDetails(
     val currency: String,
     val features: List<String>,
     val description: String
+)
+
+// Beta Feedback models
+data class BetaFeedbackRequest(
+    val user_id: String?,
+    val poster_id: String,
+    val rating: Int,
+    val comment: String?,
+    val timestamp: Long
+)
+
+data class BetaFeedbackResponse(
+    val success: Boolean,
+    val message: String?,
+    val feedbackId: String?
 )

@@ -5,13 +5,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
+import com.talkar.app.BuildConfig
 import com.talkar.app.ui.components.CameraPreviewView
 import com.talkar.app.ui.components.FeedbackAvatarOverlay
+import com.talkar.app.ui.feedback.FeedbackModal
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.Avatar
+import com.talkar.app.data.services.BetaFeedbackService
+import kotlinx.coroutines.launch
 
 /**
  * Week 2 AR Screen with Static Avatar Overlay
@@ -25,6 +30,12 @@ fun Week2ARScreen(
     modifier: Modifier = Modifier
 ) {
     var showTestScreen by remember { mutableStateOf(false) }
+    var showFeedbackModal by remember { mutableStateOf(false) }
+    var lastRecognizedImageId by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val betaFeedbackService = remember { BetaFeedbackService() }
+    val isBeta = BuildConfig.IS_BETA
     
     if (showTestScreen) {
         // Simple test screen without clutter
@@ -138,6 +149,44 @@ fun Week2ARScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
+                }
+            }
+            
+            // Beta Feedback Modal (only show in beta builds)
+            if (isBeta && showFeedbackModal && lastRecognizedImageId != null) {
+                FeedbackModal(
+                    posterId = lastRecognizedImageId!!,
+                    onDismiss = {
+                        showFeedbackModal = false
+                    },
+                    onSubmit = { rating, comment ->
+                        scope.launch {
+                            val result = betaFeedbackService.submitFeedback(
+                                userId = null, // Anonymous for now
+                                posterId = lastRecognizedImageId!!,
+                                rating = rating,
+                                comment = comment
+                            )
+                            
+                            result.onSuccess {
+                                android.util.Log.d("Week2ARScreen", "Feedback submitted successfully")
+                            }.onFailure { error ->
+                                android.util.Log.e("Week2ARScreen", "Failed to submit feedback", error)
+                            }
+                            
+                            showFeedbackModal = false
+                        }
+                    }
+                )
+            }
+            
+            // Trigger feedback modal when avatar becomes invisible (session ends)
+            LaunchedEffect(isAvatarVisible, currentImage) {
+                val image = currentImage
+                if (!isAvatarVisible && image != null && isBeta) {
+                    // Avatar just disappeared, show feedback
+                    lastRecognizedImageId = image.id
+                    showFeedbackModal = true
                 }
             }
         }
