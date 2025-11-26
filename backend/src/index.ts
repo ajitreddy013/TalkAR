@@ -28,6 +28,7 @@ import performanceRoutes from "./routes/performance";
 import feedbackRoutes from "./routes/feedback";
 import settingsRoutes from "./routes/settings";
 import generateDynamicScriptRoutes from "./routes/generateDynamicScript";
+import betaFeedbackRoutes from "./routes/betaFeedbackRoutes";
 import http from "http";
 import { SimpleCache } from "./utils/simpleCache";
 import path from "path";
@@ -146,6 +147,7 @@ app.use("/api/v1/performance", performanceRoutes);
 app.use("/api/v1/feedback", feedbackRoutes);
 app.use("/api/v1/settings", settingsRoutes);
 app.use("/api/v1/generate-dynamic-script", generateDynamicScriptRoutes);
+app.use("/api/v1/beta-feedback", betaFeedbackRoutes);
 
 // Legacy routes (for backward compatibility)
 app.use("/api/multi-images", multiImageRoutes);

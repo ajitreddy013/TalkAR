@@ -22,7 +22,7 @@ android {
 
     // Allow overriding API host/protocol via project properties (e.g., -PAPI_HOST=... or in gradle.properties)
     def apiProtocolDebug = project.hasProperty('API_PROTOCOL') ? project.API_PROTOCOL : 'http'
-    def apiHostDebug = project.hasProperty('API_HOST') ? project.API_HOST : '10.136.91.236'
+    def apiHostDebug = project.hasProperty('API_HOST') ? project.API_HOST : 'localhost'
     // Ports should be integers for buildConfigField "int"
     def apiPortDebug = project.hasProperty('API_PORT') ? project.API_PORT.toInteger() : 4000
     def apiVersion = project.hasProperty('API_VERSION') ? project.API_VERSION : 'v1'
@@ -39,6 +39,23 @@ android {
             buildConfigField "String", "API_HOST", "\"${apiHostDebug}\""
             buildConfigField "int", "API_PORT", "${apiPortDebug}"
             buildConfigField "String", "API_VERSION", "\"${apiVersion}\""
+            buildConfigField "boolean", "IS_BETA", "false"
+        }
+
+        beta {
+            // Beta build for internal testing
+            applicationIdSuffix ".beta"
+            versionNameSuffix "-beta"
+            debuggable false
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            
+            // Beta uses production backend
+            buildConfigField "String", "API_PROTOCOL", "\"${apiProtocolRelease}\""
+            buildConfigField "String", "API_HOST", "\"${apiHostRelease}\""
+            buildConfigField "int", "API_PORT", "${apiPortRelease}"
+            buildConfigField "String", "API_VERSION", "\"${apiVersion}\""
+            buildConfigField "boolean", "IS_BETA", "true"
         }
 
         release {
@@ -47,6 +64,7 @@ android {
             buildConfigField "String", "API_HOST", "\"${apiHostRelease}\""
             buildConfigField "int", "API_PORT", "${apiPortRelease}"
             buildConfigField "String", "API_VERSION", "\"${apiVersion}\""
+            buildConfigField "boolean", "IS_BETA", "false"
 
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
