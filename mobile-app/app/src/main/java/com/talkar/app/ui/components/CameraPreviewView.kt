@@ -6,6 +6,14 @@ import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.LifecycleOwner
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -25,6 +33,8 @@ fun CameraPreviewView(
     modifier: Modifier = Modifier,
     isImageDetected: Boolean = false
 ) {
+    // Ensure the preview fills the available space
+    Box(modifier = modifier.fillMaxSize()) {
     val context = LocalContext.current
     
     // Initialize Backend AR service for real image detection
@@ -74,9 +84,9 @@ fun CameraPreviewView(
     
     AndroidView(
         factory = { ctx ->
-            createBackendARCameraView(ctx, arService, onImageRecognized, onError)
+            createCameraXPreviewView(ctx, onError)
         },
-        modifier = modifier
+        modifier = Modifier.fillMaxSize()
     )
     
     // Handle errors
@@ -84,55 +94,35 @@ fun CameraPreviewView(
         onError(errorMessage)
         Log.e("CameraPreviewView", "AR Error: $errorMessage")
     }
+    }
 }
 
-private fun createBackendARCameraView(
+private fun createCameraXPreviewView(
     context: Context,
-    arService: BackendImageARService,
-    onImageRecognized: (ImageRecognition) -> Unit,
     onError: (String) -> Unit
 ): android.view.View {
-    
-    val layout = FrameLayout(context).apply {
-        layoutParams = ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT
-        )
-    }
-
-    // Create ARCore GLSurfaceView for camera preview
-    val glSurfaceView = GLSurfaceView(context).apply {
-        setEGLContextClientVersion(2)
-        setEGLConfigChooser(8, 8, 8, 8, 16, 0) // Alpha, depth, stencil
-        preserveEGLContextOnPause = true
-    }
-
-    // Create AR renderer
-    val arRenderer = BackendCameraRendererV2(context, arService, onImageRecognized, onError)
-    glSurfaceView.setRenderer(arRenderer)
-    glSurfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
-
-    layout.addView(glSurfaceView)
-
-    // Add scanning indicator overlay
-    val scanningOverlay = TextView(context).apply {
-        text = "🎯 Point camera at image to scan"
-        textSize = 18f
-        setTextColor(android.graphics.Color.WHITE)
-        gravity = android.view.Gravity.CENTER
-        setPadding(20, 20, 20, 20)
-        setBackgroundColor(android.graphics.Color.parseColor("#80000000"))
-    }
-
-    val overlayParams = FrameLayout.LayoutParams(
-        FrameLayout.LayoutParams.WRAP_CONTENT,
-        FrameLayout.LayoutParams.WRAP_CONTENT
+    val previewView = PreviewView(context)
+    previewView.layoutParams = ViewGroup.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.MATCH_PARENT
     )
-    overlayParams.gravity = android.view.Gravity.TOP or android.view.Gravity.CENTER
-    overlayParams.topMargin = 100
-    layout.addView(scanningOverlay, overlayParams)
 
-    return layout
+    val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+    cameraProviderFuture.addListener({
+        try {
+            val cameraProvider = cameraProviderFuture.get()
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(previewView.surfaceProvider)
+            }
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            cameraProvider.unbindAll()
+            cameraProvider.bindToLifecycle(context as LifecycleOwner, cameraSelector, preview)
+        } catch (e: Exception) {
+            onError(e.message ?: "CameraX error")
+        }
+    }, ContextCompat.getMainExecutor(context))
+
+    return previewView
 }
 
 /**
@@ -177,6 +167,7 @@ private class BackendCameraRendererV2(
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        Log.d("BackendCameraRendererV2", "onDrawFrame called – rendering frame")
         // Clear screen
         android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT or android.opengl.GLES20.GL_DEPTH_BUFFER_BIT)
 
@@ -189,6 +180,7 @@ private class BackendCameraRendererV2(
             // Get ARCore session from the service
             val session = arService.getSession()
             session?.let { session ->
+            android.util.Log.d("BackendCameraRendererV2", "Session update start")
                 
                 // Update display rotation
                 displayRotationHelper?.updateSessionIfNeeded(session)
@@ -196,6 +188,7 @@ private class BackendCameraRendererV2(
                 try {
                     // Update ARCore frame
                     val frame = session.update()
+            android.util.Log.d("BackendCameraRendererV2", "Frame obtained")
                     val camera = frame.camera
                     
                     // Draw camera background
