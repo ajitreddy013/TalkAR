@@ -15,6 +15,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -44,12 +51,8 @@ fun EmotionalAvatarView(
     audioLevel: Float = 0f, // Real-time audio level for more responsive animations
     modifier: Modifier = Modifier
 ) {
-    // Fade animation state
+    // Entry/exit animations
     var showAvatar by remember { mutableStateOf(false) }
-    val alpha by animateFloatAsState(
-        targetValue = if (isVisible) 1f else 0f,
-        animationSpec = tween(durationMillis = 500)
-    ) { if (!isVisible) showAvatar = false }
     
     // Update showAvatar when isVisible changes
     LaunchedEffect(isVisible) {
@@ -58,7 +61,7 @@ fun EmotionalAvatarView(
         }
     }
     
-    if (!showAvatar || avatar == null || image == null) {
+    if (avatar == null || image == null) {
         return
     }
 
@@ -135,69 +138,74 @@ fun EmotionalAvatarView(
         }
     }
 
-    Card(
-        modifier = modifier
-            .size(200.dp)
-            .padding(16.dp)
-            .alpha(alpha), // Apply fade animation
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+    AnimatedVisibility(
+        visible = showAvatar && isVisible,
+        enter = scaleIn(initialScale = 0.8f) + fadeIn(),
+        exit = scaleOut(targetScale = 0.8f) + fadeOut()
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+        Card(
+            modifier = modifier
+                .size(200.dp)
+                .padding(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
         ) {
-            // Avatar face with emotional expressions and head tilt
-            Box(modifier = Modifier
-                .size(150.dp)
-                .graphicsLayer(
-                    rotationZ = headTilt * 10 // Apply subtle head tilt
-                )
-            ) {
-                AvatarFace(
-                    emotion = emotionState,
-                    mouthProgress = mouthProgress,
-                    blinkProgress = blinkProgress,
-                    modifier = Modifier.size(150.dp)
-                )
-            }
-            
-            // Avatar name and image info
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = avatar.name,
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Text(
-                    text = image.name,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            
-            // Progress bar during speech
-            if (isTalking) {
-                SpeechProgressBar(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 8.dp)
-                )
-            }
-            
-            // Live indicator
             Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .size(12.dp)
-                    .background(
-                        color = if (isTalking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                        shape = RoundedCornerShape(50)
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                // Avatar face with emotional expressions and head tilt
+                Box(modifier = Modifier
+                    .size(150.dp)
+                    .graphicsLayer(
+                        rotationZ = headTilt * 10 // Apply subtle head tilt
                     )
-            )
+                ) {
+                    AvatarFace(
+                        emotion = emotionState,
+                        mouthProgress = mouthProgress,
+                        blinkProgress = blinkProgress,
+                        modifier = Modifier.size(150.dp)
+                    )
+                }
+                
+                // Avatar name and image info
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = avatar.name,
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = image.name,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                
+                // Progress bar during speech
+                if (isTalking) {
+                    SpeechProgressBar(
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 8.dp)
+                    )
+                }
+                
+                // Live indicator
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(12.dp)
+                        .background(
+                            color = if (isTalking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(50)
+                        )
+                )
+            }
         }
     }
 }

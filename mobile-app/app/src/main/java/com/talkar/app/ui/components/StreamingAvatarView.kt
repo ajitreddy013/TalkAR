@@ -39,6 +39,9 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.talkar.app.ui.components.EnhancedLoadingScreen
+import com.talkar.app.ui.components.LoadingState
+import com.talkar.app.ui.components.SubtitleOverlay
 
 /**
  * Enum class for ad content states
@@ -223,6 +226,12 @@ fun StreamingAvatarView(
                 )
             }
             
+            // Add subtitle overlay for closed captions
+            SubtitleOverlay(
+                script = adContent?.script,
+                isVisible = adContent != null && (adState == AdState.STREAMING_AUDIO || adState == AdState.PLAYING_VIDEO)
+            )
+            
             // Add voice recognition button
             if (adContent != null && (adState == AdState.STREAMING_AUDIO || adState == AdState.PLAYING_VIDEO)) {
                 VoiceRecognitionButton(
@@ -309,7 +318,7 @@ private fun StateIndicatorOverlay(adState: AdState) {
 }
 
 /**
- * Loading state avatar view
+ * Loading state avatar view with enhanced loading screen
  */
 @Composable
 private fun LoadingAvatarView() {
@@ -319,21 +328,12 @@ private fun LoadingAvatarView() {
             .padding(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(48.dp),
-                strokeWidth = 4.dp
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = "Loading...",
-                style = MaterialTheme.typography.bodyMedium
+            EnhancedLoadingScreen(
+                currentState = LoadingState.GENERATING_SCRIPT
             )
         }
     }
