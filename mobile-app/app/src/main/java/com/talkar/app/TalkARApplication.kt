@@ -8,6 +8,8 @@ import com.talkar.app.data.local.ImageDatabase
 import com.talkar.app.data.services.ARImageRecognitionService
 import com.talkar.app.data.services.ConfigSyncService
 import com.talkar.app.data.services.UserPreferencesService
+import com.talkar.app.data.services.NetworkMonitor
+import com.talkar.app.data.services.DatabaseCleanupService
 
 class TalkARApplication : Application() {
     
@@ -15,7 +17,8 @@ class TalkARApplication : Application() {
     val imageRepository by lazy { 
         ImageRepository(
             apiClient = ApiClient.create(),
-            database = ImageDatabase.getDatabase(this)
+            database = ImageDatabase.getDatabase(this),
+            context = this
         )
     }
     
@@ -41,12 +44,31 @@ class TalkARApplication : Application() {
         ConfigSyncService()
     }
     
+    val networkMonitor by lazy {
+        NetworkMonitor(this)
+    }
+    
+    val databaseCleanupService by lazy {
+        DatabaseCleanupService(this)
+    }
+    
     override fun onCreate() {
         super.onCreate()
         instance = this
         
         // Start configuration sync service
         configSyncService.startSync(30) // Sync every 30 seconds
+        
+        // Clean up old database entries
+        databaseCleanupService.cleanupOldData()
+    }
+    
+    override fun onTerminate() {
+        super.onTerminate()
+        // Clean up resources to prevent memory leaks
+        configSyncService.cleanup()
+        arImageRecognitionService.cleanup()
+        networkMonitor.stopMonitoring()
     }
     
     companion object {
