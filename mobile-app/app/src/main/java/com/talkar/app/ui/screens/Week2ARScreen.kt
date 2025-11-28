@@ -1,5 +1,6 @@
 package com.talkar.app.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +17,7 @@ import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.data.models.BackendImage
 import com.talkar.app.data.models.Avatar
 import com.talkar.app.data.services.BetaFeedbackService
+import com.talkar.app.ui.components.OfflineBanner
 import kotlinx.coroutines.launch
 
 /**
@@ -96,6 +98,17 @@ fun Week2ARScreen(
                 }
             )
             
+            // Offline Banner
+            OfflineBanner(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp),
+                onRetry = {
+                    // Retry logic - refresh data or reconnect
+                    android.util.Log.d("Week2ARScreen", "Retry button clicked")
+                }
+            )
+            
             // Avatar Overlay with Feedback Buttons
             if (isAvatarVisible && currentAvatar != null && currentImage != null) {
                 FeedbackAvatarOverlay(
@@ -161,7 +174,7 @@ fun Week2ARScreen(
                     },
                     onSubmit = { rating, comment ->
                         scope.launch {
-                            val result = betaFeedbackService.submitFeedback(
+                            val result = betaFeedbackService.submitFeedbackWithRetry(
                                 userId = null, // Anonymous for now
                                 posterId = lastRecognizedImageId!!,
                                 rating = rating,
@@ -169,9 +182,13 @@ fun Week2ARScreen(
                             )
                             
                             result.onSuccess {
-                                android.util.Log.d("Week2ARScreen", "Feedback submitted successfully")
+                                android.util.Log.d("Week2ARScreen", "Feedback submitted successfully with ID: $it")
+                                // Show success message to user
+                                Toast.makeText(context, "Thank you for your feedback!", Toast.LENGTH_SHORT).show()
                             }.onFailure { error ->
                                 android.util.Log.e("Week2ARScreen", "Failed to submit feedback", error)
+                                // Show error message to user
+                                Toast.makeText(context, "Failed to submit feedback. Please try again.", Toast.LENGTH_LONG).show()
                             }
                             
                             showFeedbackModal = false
