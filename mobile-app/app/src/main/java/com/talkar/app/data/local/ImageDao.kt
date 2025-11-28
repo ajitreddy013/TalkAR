@@ -13,6 +13,10 @@ interface ImageDao {
     @Query("SELECT * FROM imagerecognition WHERE id = :id")
     fun getImageById(id: String): Flow<ImageRecognition?>
     
+    @Query("SELECT * FROM imagerecognition WHERE id = :id")
+    suspend fun getImageByIdSync(id: String): ImageRecognition?
+
+    
     @Query("SELECT * FROM imagerecognition WHERE name LIKE :query OR description LIKE :query")
     fun searchImages(query: String): Flow<List<ImageRecognition>>
     
