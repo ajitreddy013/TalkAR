@@ -1,0 +1,33 @@
+Content Rating Questionnaire Answers:
+
+1. Does your app contain or promote violence, fighting, or weapons?
+   Answer: No
+
+2. Does your app contain or promote drugs, alcohol, or tobacco?
+   Answer: No
+
+3. Does your app contain or promote sexually suggestive content?
+   Answer: No
+
+4. Does your app contain or promote gambling?
+   Answer: No
+
+5. Does your app collect or share personal information?
+   Answer: Yes - Camera access for AR functionality, anonymous usage analytics
+
+6. Does your app contain user-generated content?
+   Answer: No
+
+7. Does your app enable users to engage in financial transactions?
+   Answer: No
+
+8. Does your app contain ads?
+   Answer: No
+
+9. Does your app contain or promote discrimination, hate speech, or violent extremism?
+   Answer: No
+
+10. Does your app contain or promote false or misleading information?
+    Answer: No
+
+Target Age Group: 13+
