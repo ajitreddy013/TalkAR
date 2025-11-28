@@ -63,7 +63,7 @@ app.get("/api/v1/images", (req, res) => {
             imageFile = uploadFiles[index % uploadFiles.length];
           }
 
-          const localImageUrl = `http://10.136.91.236:4000/uploads/${imageFile}`;
+          const localImageUrl = `http://10.226.52.69:4000/uploads/${imageFile}`;
 
           return {
             id: row.id,
@@ -87,5 +87,5 @@ app.listen(port, "0.0.0.0", () => {
   console.log(`Simple server running on port ${port}`);
   console.log(`Server accessible at: http://0.0.0.0:${port}`);
   console.log(`Local access: http://localhost:${port}`);
-  console.log(`Images will be served from: http://10.136.91.236:4000/uploads/`);
+  console.log(`Images will be served from: http://10.226.52.69:4000/uploads/`);
 });
