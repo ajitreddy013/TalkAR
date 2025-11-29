@@ -4,6 +4,68 @@ import com.talkar.app.data.models.*
 import com.talkar.app.data.config.ApiConfig
 import retrofit2.Response
 import retrofit2.http.*
+import okhttp3.Interceptor
+import okhttp3.Request
+import okhttp3.Response as OkHttpResponse
+import java.io.IOException
+
+class RetryInterceptor : Interceptor {
+    companion object {
+        private const val MAX_RETRIES = 3
+    }
+
+    override fun intercept(chain: Interceptor.Chain): OkHttpResponse {
+        val request = chain.request()
+        var response: OkHttpResponse? = null
+        var exception: IOException? = null
+        var tryCount = 0
+        
+        while (tryCount <= MAX_RETRIES) {
+            try {
+                response?.close()
+                response = chain.proceed(request)
+                
+                // If the response is successful, return it
+                if (response.isSuccessful) {
+                    return response
+                }
+                
+                // If we've reached max retries, break and return the last response
+                if (++tryCount > MAX_RETRIES) {
+                    break
+                }
+                
+                // For 5xx errors or network errors, retry
+                if (response.code >= 500) {
+                    // Close the response before retrying
+                    response.close()
+                    continue
+                } else {
+                    // For 4xx errors, don't retry
+                    break
+                }
+            } catch (e: IOException) {
+                exception = e
+                
+                // If we've reached max retries, break and throw the exception
+                if (++tryCount > MAX_RETRIES) {
+                    break
+                }
+                
+                // Wait before retrying (exponential backoff)
+                try {
+                    Thread.sleep((1000 * tryCount).toLong())
+                } catch (interruptedException: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    throw e
+                }
+            }
+        }
+        
+        // If we have a response, return it; otherwise throw the last exception
+        return response ?: throw (exception ?: IOException("Unknown error"))
+    }
+}
 
 interface ApiService {
     
@@ -100,6 +162,7 @@ object ApiClient {
 
     fun create(): ApiService {
         val okHttpClient = okhttp3.OkHttpClient.Builder()
+            .addInterceptor(RetryInterceptor()) // Add retry interceptor
             .addInterceptor { chain ->
                 val original = chain.request()
                 val request = original.newBuilder()

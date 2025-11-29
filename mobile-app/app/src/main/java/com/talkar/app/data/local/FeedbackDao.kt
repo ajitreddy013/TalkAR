@@ -33,4 +33,7 @@ interface FeedbackDao {
     
     @Query("UPDATE feedback SET synced = 1 WHERE id = :id")
     suspend fun markAsSynced(id: String)
+    
+    @Query("DELETE FROM feedback WHERE timestamp < :threshold")
+    suspend fun deleteOldFeedback(threshold: Long): Int
 }

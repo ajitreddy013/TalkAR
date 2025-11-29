@@ -69,6 +69,16 @@ class ConfigSyncService {
     }
     
     /**
+     * Cleanup resources to prevent memory leaks
+     */
+    fun cleanup() {
+        stopSync()
+        coroutineScope.cancel()
+        configUpdateListener = null
+        Log.d(TAG, "Configuration sync service cleaned up")
+    }
+    
+    /**
      * Force immediate configuration sync
      */
     suspend fun syncConfigs() {
@@ -108,27 +118,48 @@ class ConfigSyncService {
         val configs = mutableMapOf<String, String>()
         
         try {
+            Log.d(TAG, "Starting to fetch configs from backend")
+            
             // Fetch default tone
             try {
+                Log.d(TAG, "Fetching default tone from: ${apiService::class.java.simpleName}")
                 val toneResponse = apiService.getDefaultTone()
+                Log.d(TAG, "Default tone response received. Successful: ${toneResponse.isSuccessful}")
                 if (toneResponse.isSuccessful) {
                     configs["default_tone"] = toneResponse.body()?.tone ?: "friendly"
+                    Log.d(TAG, "Default tone fetched successfully: ${configs["default_tone"]}")
+                } else {
+                    Log.e(TAG, "Failed to fetch default tone. Response code: ${toneResponse.code()}, message: ${toneResponse.message()}")
+                    // Use default value when endpoint is not available
+                    configs["default_tone"] = "friendly"
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error fetching default tone", e)
+                // Use default value when endpoint is not available
+                configs["default_tone"] = "friendly"
             }
             
             // Fetch prompt template
             try {
+                Log.d(TAG, "Fetching prompt template")
                 val templateResponse = apiService.getPromptTemplate()
+                Log.d(TAG, "Prompt template response received. Successful: ${templateResponse.isSuccessful}")
                 if (templateResponse.isSuccessful) {
                     configs["prompt_template"] = templateResponse.body()?.template 
                         ?: "Create a short, engaging script for a product advertisement. The product is {product}. Highlight its key features and benefits in a {tone} tone."
+                    Log.d(TAG, "Prompt template fetched successfully")
+                } else {
+                    Log.e(TAG, "Failed to fetch prompt template. Response code: ${templateResponse.code()}, message: ${templateResponse.message()}")
+                    // Use default value when endpoint is not available
+                    configs["prompt_template"] = "Create a short, engaging script for a product advertisement. The product is {product}. Highlight its key features and benefits in a {tone} tone."
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error fetching prompt template", e)
+                // Use default value when endpoint is not available
+                configs["prompt_template"] = "Create a short, engaging script for a product advertisement. The product is {product}. Highlight its key features and benefits in a {tone} tone."
             }
             
+            Log.d(TAG, "Finished fetching configs. Total configs: ${configs.size}")
             // You would fetch other configs here as well
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching configs from backend", e)

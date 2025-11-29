@@ -30,4 +30,7 @@ interface ScannedProductDao {
     
     @Query("DELETE FROM scanned_products")
     suspend fun deleteAll()
+    
+    @Query("DELETE FROM scanned_products WHERE scannedAt < :threshold")
+    suspend fun deleteOldProducts(threshold: Long): Int
 }

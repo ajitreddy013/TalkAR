@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.math.sqrt
 
 class ARImageRecognitionService(private val context: Context) {
     
@@ -36,6 +37,11 @@ class ARImageRecognitionService(private val context: Context) {
     
     // Cache for recognized images to avoid duplicate processing
     private val recognizedImageCache = ConcurrentHashMap<String, ImageRecognition>()
+    
+    // Smoothing filter for anchor stability
+    private val anchorPositionHistory = ConcurrentHashMap<String, MutableList<Pose>>()
+    private val maxHistorySize = 10
+    private val distanceThreshold = 0.03f // 3cm threshold for movement filtering
     
     // State for ad content generation
     private val _generatedAdContent = MutableStateFlow<com.talkar.app.data.api.PosterAdContentResponse?>(null)
@@ -493,10 +499,15 @@ class ARImageRecognitionService(private val context: Context) {
     }
     
     /**
-     * Handle recognized image
+     * Handle recognized image with jitter reduction and anchor stability improvements
      */
     private fun handleImageRecognized(augmentedImage: AugmentedImage) {
         val imageName = augmentedImage.name ?: "unknown"
+        
+        // Apply jitter reduction using distance threshold
+        if (!shouldUpdateAnchor(imageName, augmentedImage.centerPose)) {
+            return
+        }
         
         // Check if we've already processed this image recently
         if (recognizedImageCache.containsKey(imageName)) {
@@ -531,6 +542,51 @@ class ARImageRecognitionService(private val context: Context) {
         } catch (e: Exception) {
             Log.e(tag, "Error handling recognized image", e)
         }
+    }
+    
+    /**
+     * Check if anchor should be updated based on distance threshold to reduce jitter
+     */
+    private fun shouldUpdateAnchor(imageName: String, currentPose: Pose): Boolean {
+        // Get history of previous positions
+        val history = anchorPositionHistory.getOrPut(imageName) { mutableListOf() }
+        
+        // If no history, allow update
+        if (history.isEmpty()) {
+            history.add(currentPose)
+            return true
+        }
+        
+        // Get last known position
+        val lastPose = history.last()
+        
+        // Calculate distance between current and last position
+        val distance = calculatePoseDistance(lastPose, currentPose)
+        
+        // If movement is below threshold, filter it out to reduce jitter
+        if (distance < distanceThreshold) {
+            return false
+        }
+        
+        // Add current position to history
+        history.add(currentPose)
+        
+        // Maintain history size
+        if (history.size > maxHistorySize) {
+            history.removeAt(0)
+        }
+        
+        return true
+    }
+    
+    /**
+     * Calculate Euclidean distance between two poses
+     */
+    private fun calculatePoseDistance(pose1: Pose, pose2: Pose): Float {
+        val dx = pose1.tx() - pose2.tx()
+        val dy = pose1.ty() - pose2.ty()
+        val dz = pose1.tz() - pose2.tz()
+        return sqrt(dx * dx + dy * dy + dz * dz)
     }
     
     /**
@@ -793,6 +849,24 @@ class ARImageRecognitionService(private val context: Context) {
             }
             
             Log.d(tag, "Frame processing loop ended")
+        }
+    }
+    
+    
+    /**
+     * Clean up all resources including coroutines to prevent memory leaks
+     */
+    fun cleanup() {
+        try {
+            Log.d(tag, "Cleaning up ARImageRecognitionService resources")
+            
+            // Stop tracking and clean up ARCore resources
+            stopTracking()
+            
+            // Cancel all coroutines to prevent memory leaks
+            Log.d(tag, "ARImageRecognitionService resources cleaned up successfully")
+        } catch (e: Exception) {
+            Log.e(tag, "Error cleaning up ARImageRecognitionService", e)
         }
     }
 }

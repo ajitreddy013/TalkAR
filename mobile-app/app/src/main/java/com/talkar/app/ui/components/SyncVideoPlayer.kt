@@ -8,13 +8,51 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.view.ViewGroup
-import android.widget.VideoView
+import android.content.Context
+import android.util.Log
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
+import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.common.C
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 
 @Composable
 fun SyncVideoPlayer(
     videoUrl: String,
     modifier: Modifier = Modifier
 ) {
+    val exoPlayer = remember { 
+        ExoPlayer.Builder(LocalContext.current).apply {
+            // Configure load control for better buffering
+            val loadControl = DefaultLoadControl.Builder()
+                .setBufferDurationsMs(
+                    2000, // min buffer - reduced for faster startup
+                    5000, // max buffer - optimized for mobile
+                    1500, // playback start - faster startup
+                    2000  // rebuffer - reduced for better UX
+                )
+                .setPrioritizeTimeOverSizeThresholds(true)
+                .build()
+            setLoadControl(loadControl)
+        }.build()
+    }
+    
+    // Prepare media item
+    DisposableEffect(videoUrl) {
+        val mediaItem = MediaItem.fromUri(videoUrl)
+        exoPlayer.setMediaItem(mediaItem)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
+        exoPlayer.repeatMode = ExoPlayer.REPEAT_MODE_ONE
+        
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+    
     Card(
         modifier = modifier,
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -31,15 +69,13 @@ fun SyncVideoPlayer(
             
             AndroidView(
                 factory = { context ->
-                    VideoView(context).apply {
+                    PlayerView(context).apply {
                         layoutParams = ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             300
                         )
-                        setVideoPath(videoUrl)
-                        setOnPreparedListener { mediaPlayer ->
-                            mediaPlayer.isLooping = true
-                        }
+                        player = exoPlayer
+                        useController = false // We'll provide our own controls
                     }
                 },
                 modifier = Modifier
@@ -54,17 +90,22 @@ fun SyncVideoPlayer(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
-                    onClick = { /* Play video */ },
+                    onClick = { 
+                        exoPlayer.playWhenReady = !exoPlayer.playWhenReady
+                    },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Play")
+                    Text(if (exoPlayer.playWhenReady) "Pause" else "Play")
                 }
                 
                 OutlinedButton(
-                    onClick = { /* Pause video */ },
+                    onClick = { 
+                        exoPlayer.seekTo(0)
+                        exoPlayer.playWhenReady = true
+                    },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("Pause")
+                    Text("Restart")
                 }
             }
         }

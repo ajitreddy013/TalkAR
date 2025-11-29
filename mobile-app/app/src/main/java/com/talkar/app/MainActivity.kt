@@ -81,7 +81,7 @@ class MainActivity : ComponentActivity() {
                     val enhancedViewModel: EnhancedARViewModel = viewModel {
                         val apiService = ApiClient.create()
                         val database = ImageDatabase.getDatabase(this@MainActivity)
-                        val repository = ImageRepository(apiService, database)
+                        val repository = ImageRepository(apiService, database, this@MainActivity)
                         EnhancedARViewModel(repository)
                     }
                     
@@ -125,4 +125,3 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
