@@ -1,6 +1,8 @@
 package com.talkar.app.data.services
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import com.google.ar.core.*
 import com.google.ar.core.exceptions.*
@@ -96,10 +98,34 @@ class BackendImageARService(private val context: Context) {
     private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     /**
+     * Check if device has internet connectivity
+     */
+    private fun isNetworkAvailable(): Boolean {
+        return try {
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val activeNetwork = connectivityManager.activeNetwork
+            val networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+            
+            networkCapabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
+            networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        } catch (e: Exception) {
+            Log.e(tag, "Error checking network availability", e)
+            false
+        }
+    }
+    
+    /**
      * Initialize service and download images from backend
      */
     suspend fun initialize(): Boolean {
         return try {
+            // First check if we have network connectivity
+            if (!isNetworkAvailable()) {
+                Log.d(tag, "No network connectivity available, skipping backend initialization")
+                _error.value = "No internet connection available"
+                return false
+            }
+            
             if (!isARCoreSupported()) {
                 _error.value = "ARCore is not supported on this device"
                 return false
