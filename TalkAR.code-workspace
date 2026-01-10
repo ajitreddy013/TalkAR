@@ -1,0 +1,16 @@
+{
+  "folders": [
+    {
+      "name": "Admin Dashboard",
+      "path": "./admin-dashboard"
+    },
+    {
+      "name": "Backend",
+      "path": "./backend"
+    }
+  ],
+  "settings": {
+    "typescript.preferences.includePackageJsonAutoImports": "auto",
+    "typescript.workspaceSymbols.scope": "allRoots"
+  }
+}
