@@ -125,7 +125,7 @@ app.use(
 );
 
 // Serve admin-dashboard production build (if present)
-const adminBuildPath = path.join(__dirname, "..", "admin-dashboard", "build");
+const adminBuildPath = path.join(__dirname, "../..", "admin-dashboard", "build");
 try {
   app.use(express.static(adminBuildPath));
   // For any other routes not handled by API, serve the React app
@@ -158,11 +158,9 @@ app.use("/api/v1/enhanced-lipsync", enhancedLipSyncRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
 
 // Health check
-import { pool } from "./db";
-
 app.get("/health", async (req: Request, res: Response) => {
   try {
-    await pool.query('SELECT 1');
+    await sequelize.authenticate();
     res.json({
       status: "OK",
       timestamp: new Date().toISOString(),
