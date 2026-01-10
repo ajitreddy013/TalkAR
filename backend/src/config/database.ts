@@ -30,7 +30,7 @@ if (effectiveDialect === "sqlite") {
   sequelizeOptions.storage = config.nodeEnv === "test" ? ":memory:" : "./database.sqlite";
 }
 
-export const sequelize = config.dbUrl 
+export const sequelize = config.dbUrl && config.dbUrl.trim() !== ''
   ? new Sequelize(config.dbUrl, sequelizeOptions)
   : new Sequelize({
       ...sequelizeOptions,
