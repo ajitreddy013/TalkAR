@@ -8,7 +8,8 @@ export const validateImageUpload = (
 ) => {
   const schema = Joi.object({
     name: Joi.string().required().min(1).max(100),
-    description: Joi.string().optional().max(500),
+    description: Joi.string().optional().allow('').max(500),
+    script: Joi.string().optional().allow('').max(2000),
   });
 
   const { error } = schema.validate(req.body);
@@ -16,8 +17,10 @@ export const validateImageUpload = (
     return res.status(400).json({ error: error.details[0].message });
   }
 
-  if (!req.file) {
-    return res.status(400).json({ error: "Image file is required" });
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
+  
+  if (!files || !files['image'] || files['image'].length === 0) {
+    return res.status(400).json({ error: "Main image file is required" });
   }
 
   return next();
