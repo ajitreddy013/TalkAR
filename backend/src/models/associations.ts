@@ -26,6 +26,7 @@ export function defineAssociations() {
   Image.hasMany(ImageAvatarMapping, {
     foreignKey: "imageId",
     as: "avatarMappings",
+    onDelete: "CASCADE",
   });
   ImageAvatarMapping.belongsTo(Image, { foreignKey: "imageId", as: "associatedImage" });
 

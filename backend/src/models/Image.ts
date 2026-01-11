@@ -27,6 +27,7 @@ export class Image
   public isActive!: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+  public dialogues?: Dialogue[];
 
   // Associations
   public getDialogues!: () => Promise<Dialogue[]>;
@@ -180,5 +181,5 @@ Dialogue.init(
 );
 
 // Define associations
-Image.hasMany(Dialogue, { foreignKey: "imageId", as: "dialogues" });
+Image.hasMany(Dialogue, { foreignKey: "imageId", as: "dialogues", onDelete: "CASCADE" });
 Dialogue.belongsTo(Image, { foreignKey: "imageId", as: "image" });
