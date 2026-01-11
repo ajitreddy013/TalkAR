@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import android.view.ViewGroup
@@ -24,8 +25,9 @@ fun SyncVideoPlayer(
     videoUrl: String,
     modifier: Modifier = Modifier
 ) {
-    val exoPlayer = remember { 
-        ExoPlayer.Builder(LocalContext.current).apply {
+    val context = LocalContext.current
+    val exoPlayer = remember(context) { 
+        ExoPlayer.Builder(context).apply {
             // Configure load control for better buffering
             val loadControl = DefaultLoadControl.Builder()
                 .setBufferDurationsMs(
