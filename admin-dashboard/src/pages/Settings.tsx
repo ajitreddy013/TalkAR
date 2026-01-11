@@ -287,7 +287,7 @@ export default function Settings() {
                 <Grid item xs={12} md={4}>
                   <Box>
                     <Typography gutterBottom>
-                      Scale: {settings.avatarScale.toFixed(2)}
+                      Scale: {settings?.avatarScale?.toFixed(2) ?? '1.00'}
                     </Typography>
                     <Slider
                       value={settings.avatarScale}
@@ -304,7 +304,7 @@ export default function Settings() {
                 <Grid item xs={12} md={4}>
                   <Box>
                     <Typography gutterBottom>
-                      X Position: {settings.avatarPositionX.toFixed(2)}
+                      X Position: {settings?.avatarPositionX?.toFixed(2) ?? '0.00'}
                     </Typography>
                     <Slider
                       value={settings.avatarPositionX}
@@ -321,7 +321,7 @@ export default function Settings() {
                 <Grid item xs={12} md={4}>
                   <Box>
                     <Typography gutterBottom>
-                      Y Position: {settings.avatarPositionY.toFixed(2)}
+                      Y Position: {settings?.avatarPositionY?.toFixed(2) ?? '0.00'}
                     </Typography>
                     <Slider
                       value={settings.avatarPositionY}
@@ -338,7 +338,7 @@ export default function Settings() {
                 <Grid item xs={12}>
                   <Box>
                     <Typography gutterBottom>
-                      Z Position: {settings.avatarPositionZ.toFixed(2)}
+                      Z Position: {settings?.avatarPositionZ?.toFixed(2) ?? '0.00'}
                     </Typography>
                     <Slider
                       value={settings.avatarPositionZ}
