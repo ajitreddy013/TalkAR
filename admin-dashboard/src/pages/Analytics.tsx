@@ -74,9 +74,9 @@ export default function Analytics() {
 
   useEffect(() => {
     fetchAllData();
-    // Refresh data every 30 seconds
-    const interval = setInterval(fetchAllData, 30000);
-    return () => clearInterval(interval);
+    // Auto-refresh disabled to prevent continuous page refreshes
+    // const interval = setInterval(fetchAllData, 30000);
+    // return () => clearInterval(interval);
   }, []);
 
   const fetchAllData = async () => {
