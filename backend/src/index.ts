@@ -100,8 +100,10 @@ const limiter = rateLimit({
   }
 });
 
-// Apply rate limiting to all requests
-app.use(limiter);
+// Apply rate limiting in production only
+if (process.env.NODE_ENV === "production") {
+  app.use(limiter);
+}
 
 // Request logging
 app.use((req, res, next) => {
@@ -190,7 +192,7 @@ const startServer = async () => {
     defineAssociations();
     console.log("Model associations defined.");
 
-    await sequelize.sync({ alter: true });
+    await sequelize.sync();
     console.log("Database synchronized.");
 
     // Create HTTP server and Socket.IO server
@@ -214,6 +216,11 @@ const startServer = async () => {
       });
     });
 
+    // Start analytics worker after database is ready
+    if (process.env.NODE_ENV !== 'test') {
+      AnalyticsWorker.start();
+    }
+
     server.listen(Number(PORT), "0.0.0.0", () => {
       console.log(`Server is running on port ${PORT}`);
       console.log(`Environment: ${process.env.NODE_ENV}`);
@@ -227,9 +234,8 @@ const startServer = async () => {
   }
 };
 
-// Start analytics worker
+// Start server
 if (process.env.NODE_ENV !== 'test') {
-  AnalyticsWorker.start();
   startServer();
 }
 

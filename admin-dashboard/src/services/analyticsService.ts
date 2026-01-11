@@ -104,9 +104,9 @@ export const AnalyticsService = {
   getAIPipelineEvents: () => api.get<{ success: boolean; aiPipelineEvents: any; timestamp: string }>("/api/v1/analytics/ai-pipeline-events"),
 
   // New Admin Endpoints
-  getAggregatedMetrics: () => api.get<AggregatedMetric[]>("/admin/metrics"),
+  getAggregatedMetrics: () => api.get<AggregatedMetric[]>("/api/v1/admin/metrics"),
   getInteractions: (page = 1, limit = 10, filters?: { status?: string, poster_id?: string, startDate?: string, endDate?: string }) => {
-    let query = `/admin/interactions?page=${page}&limit=${limit}`;
+    let query = `/api/v1/admin/interactions?page=${page}&limit=${limit}`;
     if (filters?.status) query += `&status=${filters.status}`;
     if (filters?.poster_id) query += `&poster_id=${filters.poster_id}`;
     if (filters?.startDate) query += `&startDate=${filters.startDate}`;
@@ -116,6 +116,6 @@ export const AnalyticsService = {
   exportInteractions: () => {
     // Assuming api.defaults.baseURL is set, otherwise use relative path
     const baseUrl = api.defaults.baseURL || '';
-    window.open(`${baseUrl}/admin/interactions/export`, '_blank');
+    window.open(`${baseUrl}/api/v1/admin/interactions/export`, '_blank');
   }
 };

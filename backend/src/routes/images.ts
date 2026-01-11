@@ -1,5 +1,6 @@
 import express from "express";
 import { Image, Dialogue } from "../models/Image";
+import { ImageAvatarMapping } from "../models/ImageAvatarMapping";
 import { uploadImage, uploadToS3 } from "../services/uploadService";
 import { validateImageUpload, validateDialogue } from "../middleware/validation";
 import path from "path";
@@ -49,68 +50,156 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-// Create new image
+// Create new image with optional thumbnail and script
 router.post(
   "/",
-  uploadImage.single("image"),
+  uploadImage.fields([
+    { name: "image", maxCount: 1 },
+    { name: "thumbnail", maxCount: 1 },
+  ]),
   validateImageUpload,
   async (req, res, next) => {
     try {
-      const { name, description } = req.body;
+      const { name, description, script } = req.body;
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+      
       let imageUrl: string;
+      let thumbnailUrl: string | undefined;
 
-      if (!req.file) {
-        return res.status(400).json({ error: "Image file is required" });
+      if (!files || !files["image"] || files["image"].length === 0) {
+        return res.status(400).json({ error: "Main image file is required" });
       }
 
-      // Handle S3 upload for production or local file storage for development
+      const mainImageFile = files["image"][0];
+      const thumbnailFile = files["thumbnail"] ? files["thumbnail"][0] : null;
+
+      // Handle main image upload
       if (process.env.NODE_ENV === "production" && process.env.AWS_S3_BUCKET) {
-        // Upload to S3
-        imageUrl = await uploadToS3(req.file);
+        imageUrl = await uploadToS3(mainImageFile);
       } else {
-        // Use local file path
-        imageUrl = req.file.path;
-        // Convert to relative path for serving
-        imageUrl = `/uploads/${path.basename(imageUrl)}`;
+        imageUrl = `/uploads/${path.basename(mainImageFile.path)}`;
+      }
+
+      // Handle thumbnail upload
+      if (thumbnailFile) {
+        if (process.env.NODE_ENV === "production" && process.env.AWS_S3_BUCKET) {
+          thumbnailUrl = await uploadToS3(thumbnailFile);
+        } else {
+          thumbnailUrl = `/uploads/${path.basename(thumbnailFile.path)}`;
+        }
+      } else {
+        thumbnailUrl = imageUrl; // Fallback to main image
       }
 
       const image = await Image.create({
         name,
         description,
         imageUrl,
-        thumbnailUrl: imageUrl, // In production, generate thumbnail
+        thumbnailUrl,
         isActive: true,
       });
 
-      return res.status(201).json(image);
+      // If a script was provided, create an initial dialogue
+      if (script && script.trim() !== "") {
+        await Dialogue.create({
+          imageId: image.id,
+          text: script,
+          language: "en", // Default to English
+          isActive: true,
+          isDefault: true,
+        });
+      }
+
+      const createdImage = await Image.findByPk(image.id, {
+        include: [{ model: Dialogue, as: "dialogues" }]
+      });
+
+      return res.status(201).json(createdImage);
     } catch (error) {
       return next(error);
     }
   }
 );
 
-// Update image
-router.put("/:id", async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { name, description, isActive } = req.body;
+// Update image with optional file updates
+router.put(
+  "/:id", 
+  uploadImage.fields([
+    { name: "image", maxCount: 1 },
+    { name: "thumbnail", maxCount: 1 },
+  ]),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { name, description, isActive, script } = req.body;
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
 
-    const image = await Image.findByPk(id);
-    if (!image) {
-      return res.status(404).json({ error: "Image not found" });
+      const image = await Image.findByPk(id, {
+        include: [{ model: Dialogue, as: "dialogues" }]
+      });
+      
+      if (!image) {
+        return res.status(404).json({ error: "Image not found" });
+      }
+
+      let imageUrl = image.imageUrl;
+      let thumbnailUrl = image.thumbnailUrl;
+
+      // Handle file updates
+      if (files) {
+        if (files["image"] && files["image"].length > 0) {
+          const mainFile = files["image"][0];
+          if (process.env.NODE_ENV === "production" && process.env.AWS_S3_BUCKET) {
+            imageUrl = await uploadToS3(mainFile);
+          } else {
+            imageUrl = `/uploads/${path.basename(mainFile.path)}`;
+          }
+        }
+
+        if (files["thumbnail"] && files["thumbnail"].length > 0) {
+          const thumbFile = files["thumbnail"][0];
+          if (process.env.NODE_ENV === "production" && process.env.AWS_S3_BUCKET) {
+            thumbnailUrl = await uploadToS3(thumbFile);
+          } else {
+            thumbnailUrl = `/uploads/${path.basename(thumbFile.path)}`;
+          }
+        }
+      }
+
+      await image.update({
+        name: name || image.name,
+        description: description !== undefined ? description : image.description,
+        isActive: isActive !== undefined ? isActive : image.isActive,
+        imageUrl,
+        thumbnailUrl,
+      });
+
+      // Update default script if provided
+      if (script !== undefined) {
+        const defaultDialogue = image.dialogues?.find((d: Dialogue) => d.isDefault);
+        if (defaultDialogue) {
+          await defaultDialogue.update({ text: script });
+        } else if (script.trim() !== "") {
+          await Dialogue.create({
+            imageId: id,
+            text: script,
+            language: "en",
+            isActive: true,
+            isDefault: true,
+          });
+        }
+      }
+
+      const updatedImage = await Image.findByPk(id, {
+        include: [{ model: Dialogue, as: "dialogues" }]
+      });
+
+      return res.json(updatedImage);
+    } catch (error) {
+      return next(error);
     }
-
-    await image.update({
-      name: name || image.name,
-      description: description !== undefined ? description : image.description,
-      isActive: isActive !== undefined ? isActive : image.isActive,
-    });
-
-    return res.json(image);
-  } catch (error) {
-    return next(error);
   }
-});
+);
 
 // Delete image
 router.delete("/:id", async (req, res, next) => {
@@ -122,6 +211,10 @@ router.delete("/:id", async (req, res, next) => {
       return res.status(404).json({ error: "Image not found" });
     }
 
+    // Manually delete related records to satisfy foreign key constraints in SQLite
+    await Dialogue.destroy({ where: { imageId: id } });
+    await ImageAvatarMapping.destroy({ where: { imageId: id } });
+    
     await image.destroy();
     return res.status(204).send();
   } catch (error) {

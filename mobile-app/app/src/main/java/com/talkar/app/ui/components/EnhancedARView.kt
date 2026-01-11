@@ -112,97 +112,19 @@ fun SimpleARView(
     var isDetecting by remember { mutableStateOf(false) }
     var detectedImage by remember { mutableStateOf<String?>(null) }
     
-    // Simulate image detection, but only while the composable's lifecycle is at least STARTED
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var isLifecycleActive by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
-
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            isLifecycleActive = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-            
-            // When lifecycle becomes inactive and we were detecting, report image lost
-            if (!isLifecycleActive && isDetecting) {
-                onImageLost()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            // When composable is disposed and we were detecting, report image lost
-            if (isDetecting) {
-                onImageLost()
-            }
-            lifecycleOwner.lifecycle.removeObserver(observer)
-        }
-    }
-
-    LaunchedEffect(isLifecycleActive) {
-        if (!isLifecycleActive) return@LaunchedEffect
-        // Only run the detection loop while the coroutine scope is active and lifecycle is STARTED
-        while (isLifecycleActive) {
-            delay(3000) // Simulate detection every 3 seconds
+    // Use the simplified camera preview
+    SimplifiedCameraPreview(
+        onImageRecognized = { imageRecognition ->
             isDetecting = true
-            detectedImage = "Test Image ${System.currentTimeMillis() % 10}"
-            onImageDetected(detectedImage ?: "")
-
-            delay(2000) // Show for 2 seconds
-            isDetecting = false
-            onImageLost() // Report image lost when detection period ends
-            detectedImage = null
-        }
-    }
+            detectedImage = imageRecognition.name
+            onImageDetected(imageRecognition.name)
+        },
+        onError = { error ->
+            Log.e("SimpleARView", "Camera error: $error")
+        },
+        modifier = modifier.fillMaxSize()
+    )
     
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        // Camera placeholder
-        Card(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "📷 AR Camera View",
-                    style = MaterialTheme.typography.headlineMedium
-                )
-            }
-        }
-        
-        // Avatar overlay when image is detected
-        if (isDetecting && detectedImage != null) {
-            AvatarPlaceholder(
-                isVisible = true,
-                modifier = Modifier
-                    .size(150.dp)
-                    .padding(16.dp)
-            )
-            
-            // Detection indicator
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    )
-                ) {
-                    Text(
-                        text = "🎯 $detectedImage Detected",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-            }
-        }
-    }
+    // Camera is now provided by SimplifiedCameraPreview
+    // Detection indicator and avatar overlay can still be shown on top
 }

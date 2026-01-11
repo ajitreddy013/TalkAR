@@ -28,10 +28,11 @@ export const ImageService = {
 
   getImageById: (id: string) => api.get(`/api/v1/images/${id}`),
 
-  // Let the browser set the correct multipart boundary automatically
+  // Create new image with multi-file support and script
   createImage: (imageData: FormData) => api.post("/api/v1/images", imageData),
 
-  updateImage: (id: string, data: Partial<Image>) =>
+  // Update image with multi-file support and metadata
+  updateImage: (id: string, data: FormData | Partial<Image>) =>
     api.put(`/api/v1/images/${id}`, data),
 
   deleteImage: (id: string) => api.delete(`/api/v1/images/${id}`),
