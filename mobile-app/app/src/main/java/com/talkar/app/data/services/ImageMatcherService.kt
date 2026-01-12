@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
-import com.talkar.app.data.api.RetrofitClient
 import com.talkar.app.data.models.BackendImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -19,8 +18,8 @@ class ImageMatcherService(private val context: Context) {
     
     companion object {
         private const val TAG = "ImageMatcherService"
-        private const val MATCH_THRESHOLD = 0.65 // Minimum similarity score (0.0 - 1.0)
-        private const val DEBOUNCE_MS = 2000L // Minimum time between same image detections
+        private const val MATCH_THRESHOLD = 0.50 // Balanced for dHash robustness
+        private const val DEBOUNCE_MS = 1000L // Faster feedback
         private const val MAX_DIMENSION = 512 // Downscale images for faster comparison
     }
     
@@ -50,7 +49,7 @@ class ImageMatcherService(private val context: Context) {
     suspend fun loadTemplatesFromBackend(): Result<Int> = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Loading reference images from backend...")
-            val apiService = RetrofitClient.getApiService(context)
+            val apiService = com.talkar.app.data.api.ApiClient.create()
             val response = apiService.getImages()
             
             if (!response.isSuccessful) {
@@ -74,7 +73,7 @@ class ImageMatcherService(private val context: Context) {
                                 name = backendImage.name,
                                 description = backendImage.description,
                                 bitmap = bitmap,
-                                dialogues = backendImage.dialogues
+                                dialogues = backendImage.dialogues as? List<Any>
                             )
                         )
                         Log.d(TAG, "Loaded template: ${backendImage.name}")
@@ -99,18 +98,8 @@ class ImageMatcherService(private val context: Context) {
      */
     private suspend fun downloadAndPrepareBitmap(imageUrl: String): Bitmap? = withContext(Dispatchers.IO) {
         try {
-            // Handle both local and remote URLs
-            val url = if (imageUrl.startsWith("http")) {
-                imageUrl
-            } else {
-                // Local URL - construct full URL from API base
-                val baseUrl = RetrofitClient.getBaseUrl(context)
-                if (imageUrl.startsWith("/")) {
-                    "$baseUrl$imageUrl"
-                } else {
-                    "$baseUrl/$imageUrl"
-                }
-            }
+            // Construct full URL using ApiConfig helper
+            val url = com.talkar.app.data.config.ApiConfig.getFullImageUrl(imageUrl)
             
             Log.d(TAG, "Downloading image from: $url")
             val inputStream = URL(url).openStream()
@@ -155,6 +144,7 @@ class ImageMatcherService(private val context: Context) {
             // Compare against all templates
             templates.forEach { template ->
                 val similarity = calculateSimilarity(scaledFrame, template.bitmap)
+                Log.v(TAG, "Comparing frame against ${template.name}: score=${String.format("%.4f", similarity)}")
                 
                 if (similarity > bestScore && similarity >= MATCH_THRESHOLD) {
                     bestScore = similarity
@@ -189,53 +179,57 @@ class ImageMatcherService(private val context: Context) {
     }
     
     /**
-     * Calculate similarity between two bitmaps using histogram comparison
-     * Returns value between 0.0 (no match) and 1.0 (perfect match)
+     * Generates a difference hash (dHash) for a given bitmap.
+     * dHash is much more robust to lighting changes as it compares adjacent pixel intensities.
      */
-    private fun calculateSimilarity(bitmap1: Bitmap, bitmap2: Bitmap): Float {
-        // Ensure same dimensions for comparison
-        if (bitmap1.width != bitmap2.width || bitmap1.height != bitmap2.height) {
-            return 0f
+    private fun generateDifferenceHash(bitmap: Bitmap): BooleanArray {
+        val hashWidth = 16 
+        val hashHeight = 16
+        // We need (width + 1) pixels to get 'width' differences
+        val resized = Bitmap.createScaledBitmap(bitmap, hashWidth + 1, hashHeight, true)
+        val pixels = IntArray((hashWidth + 1) * hashHeight)
+        resized.getPixels(pixels, 0, hashWidth + 1, 0, 0, hashWidth + 1, hashHeight)
+        
+        val grayPixels = IntArray((hashWidth + 1) * hashHeight)
+        for (i in pixels.indices) {
+            val r = (pixels[i] shr 16) and 0xFF
+            val g = (pixels[i] shr 8) and 0xFF
+            val b = pixels[i] and 0xFF
+            grayPixels[i] = (r * 0.299 + g * 0.587 + b * 0.114).toInt()
         }
         
-        // Simple pixel-by-pixel comparison with color histogram
-        val width = bitmap1.width
-        val height = bitmap1.height
-        val totalPixels = width * height
-        
-        var matchingPixels = 0
-        val colorTolerance = 40 // RGB tolerance per channel
-        
-        // Sample pixels for performance (every 4th pixel)
-        for (y in 0 until height step 4) {
-            for (x in 0 until width step 4) {
-                val pixel1 = bitmap1.getPixel(x, y)
-                val pixel2 = bitmap2.getPixel(x, y)
-                
-                val r1 = (pixel1 shr 16) and 0xFF
-                val g1 = (pixel1 shr 8) and 0xFF
-                val b1 = pixel1 and 0xFF
-                
-                val r2 = (pixel2 shr 16) and 0xFF
-                val g2 = (pixel2 shr 8) and 0xFF
-                val b2 = pixel2 and 0xFF
-                
-                val rDiff = Math.abs(r1 - r2)
-                val gDiff = Math.abs(g1 - g2)
-                val bDiff = Math.abs(b1 - b2)
-                
-                if (rDiff < colorTolerance && gDiff < colorTolerance && bDiff < colorTolerance) {
-                    matchingPixels++
-                }
+        val hash = BooleanArray(hashWidth * hashHeight)
+        for (y in 0 until hashHeight) {
+            for (x in 0 until hashWidth) {
+                val left = grayPixels[y * (hashWidth + 1) + x]
+                val right = grayPixels[y * (hashWidth + 1) + x + 1]
+                // 1 if left > right, else 0
+                hash[y * hashWidth + x] = left > right
             }
         }
         
-        val sampledPixels = (width / 4) * (height / 4)
-        return if (sampledPixels > 0) {
-            matchingPixels.toFloat() / sampledPixels.toFloat()
-        } else {
-            0f
+        resized.recycle()
+        return hash
+    }
+
+    /**
+     * Calculate similarity between two bitmaps using average hash comparison (aHash).
+     * Returns value between 0.0 (no match) and 1.0 (perfect match)
+     */
+    private fun calculateSimilarity(bitmap1: Bitmap, bitmap2: Bitmap): Float {
+        val hash1 = generateDifferenceHash(bitmap1)
+        val hash2 = generateDifferenceHash(bitmap2)
+        
+        var matchingBits = 0
+        for (i in hash1.indices) {
+            if (hash1[i] == hash2[i]) {
+                matchingBits++
+            }
         }
+        
+        val score = matchingBits.toFloat() / hash1.size.toFloat()
+        Log.v(TAG, "Hash match score: $score vs threshold $MATCH_THRESHOLD")
+        return score
     }
     
     /**
