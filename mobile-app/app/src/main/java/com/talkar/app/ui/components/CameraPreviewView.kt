@@ -39,9 +39,9 @@ fun CameraPreviewView(
     Box(modifier = modifier.fillMaxSize()) {
         val context = LocalContext.current
         
-        // Initialize both services - Backend AR service for real image detection and Simple AR as fallback
-        val backendARService = remember { BackendImageARService(context) }
-        val simpleARService = remember { SimpleARService(context) }
+        // LAZY initialization - only create services when needed to avoid ARCore classloader conflict
+        var backendARService: BackendImageARService? by remember { mutableStateOf(null) }
+        var simpleARService: SimpleARService? by remember { mutableStateOf(null) }
         var useSimpleAR by remember { mutableStateOf(false) }
         var useCameraOnly by remember { mutableStateOf(false) }
         var cameraDevice: CameraDevice? by remember { mutableStateOf(null) }
@@ -55,13 +55,15 @@ fun CameraPreviewView(
             Log.d("CameraPreviewView", "Network status: ${if (isOnline) "Online" else "Offline"}")
         }
         
-        // Initialize AR service when component is created
+        // Initialize AR service when component is created - SEQUENTIALLY to avoid classloader conflict
         LaunchedEffect(Unit) {
             try {
-                // First try to initialize the backend service only if we're online
+                // STEP 1: Try backend service first (only if online)
                 val backendInitialized = if (isOnline) {
                     Log.d("CameraPreviewView", "Device is online, attempting backend initialization")
-                    backendARService.initialize()
+                    // Create backend service instance ONLY when needed
+                    backendARService = BackendImageARService(context)
+                    backendARService?.initialize() ?: false
                 } else {
                     Log.d("CameraPreviewView", "Device is offline, skipping backend initialization")
                     false
@@ -69,23 +71,28 @@ fun CameraPreviewView(
                 
                 Log.d("CameraPreviewView", "Backend AR service initialized: $backendInitialized")
                 
-                // If backend service fails, fall back to simple AR service
+                // STEP 2: If backend service fails, fall back to simple AR service
+                // IMPORTANT: Only create SimpleARService AFTER BackendImageARService fails
                 if (!backendInitialized) {
                     Log.d("CameraPreviewView", "Falling back to simple AR service")
                     useSimpleAR = true
+                    
+                    // Create simple service instance ONLY after backend fails
+                    simpleARService = SimpleARService(context)
+                    
                     // Try to initialize with GL context, but if that fails, we'll just show camera preview
                     val simpleInitialized = try {
-                        simpleARService.initializeWithGLContext()
+                        simpleARService?.initializeWithGLContext() ?: false
                     } catch (e: Exception) {
                         Log.e("CameraPreviewView", "Failed to initialize simple AR service with GL context", e)
                         // Try basic initialization as last resort
                         try {
-                            simpleARService.initialize()
+                            simpleARService?.initialize() ?: false
                         } catch (e2: Exception) {
                             Log.e("CameraPreviewView", "Failed to initialize simple AR service with basic init", e2)
                             // Try offline-only mode as final fallback
                             try {
-                                simpleARService.initializeOfflineOnly()
+                                simpleARService?.initializeOfflineOnly() ?: false
                             } catch (e3: Exception) {
                                 Log.e("CameraPreviewView", "Failed to initialize simple AR service with offline mode", e3)
                                 false
@@ -102,21 +109,25 @@ fun CameraPreviewView(
                 }
             } catch (e: Exception) {
                 Log.e("CameraPreviewView", "Failed to initialize AR service", e)
-                // Try fallback to simple AR service
+                // Try fallback to simple AR service (create it ONLY if not already created)
                 try {
                     useSimpleAR = true
+                    if (simpleARService == null) {
+                        simpleARService = SimpleARService(context)
+                    }
+                    
                     val simpleInitialized = try {
-                        simpleARService.initializeWithGLContext()
+                        simpleARService?.initializeWithGLContext() ?: false
                     } catch (e: Exception) {
                         Log.e("CameraPreviewView", "Failed to initialize simple AR service with GL context in fallback", e)
                         // Try basic initialization as last resort
                         try {
-                            simpleARService.initialize()
+                            simpleARService?.initialize() ?: false
                         } catch (e2: Exception) {
                             Log.e("CameraPreviewView", "Failed to initialize simple AR service with basic init in fallback", e2)
                             // Try offline-only mode as final fallback
                             try {
-                                simpleARService.initializeOfflineOnly()
+                                simpleARService?.initializeOfflineOnly() ?: false
                             } catch (e3: Exception) {
                                 Log.e("CameraPreviewView", "Failed to initialize simple AR service with offline mode in fallback", e3)
                                 false
@@ -143,9 +154,9 @@ fun CameraPreviewView(
             onDispose {
                 try {
                     if (useSimpleAR) {
-                        simpleARService.pauseTracking()
+                        simpleARService?.pauseTracking()
                     } else if (!useCameraOnly) {
-                        backendARService.pauseTracking()
+                        backendARService?.pauseTracking()
                     }
                     
                     // Close camera if we're using camera only mode
@@ -192,7 +203,7 @@ fun CameraPreviewView(
                             // Use simple camera renderer if using simple AR service
                             SimpleCameraRenderer(
                                 ctx,
-                                simpleARService,
+                                simpleARService!!, // Safe to use !! here as we only set useSimpleAR=true after creating it
                                 onImageRecognized,
                                 onError
                             )
@@ -228,9 +239,9 @@ fun CameraPreviewView(
         // Handle errors for AR modes
         if (!useCameraOnly) {
             val error = if (useSimpleAR) {
-                simpleARService.error.collectAsState().value
+                simpleARService?.error?.collectAsState()?.value
             } else {
-                backendARService.error.collectAsState().value
+                backendARService?.error?.collectAsState()?.value
             }
             
             error?.let { errorMessage ->

@@ -29,8 +29,9 @@ class EnhancedARViewModel(
     
     private val TAG = "EnhancedARViewModel"
     
-    // AR Service
-    private val arService = EnhancedARService(TalkARApplication.instance)
+    // AR Service - LAZY initialization to avoid ARCore classloader conflict
+    // Only created when initializeARService() is called, not on ViewModel construction
+    private var arService: EnhancedARService? = null
     
     // UI State
     private val _isAvatarVisible = MutableStateFlow(false)
@@ -100,13 +101,33 @@ class EnhancedARViewModel(
     }
     
     /**
-     * Initialize AR service
+     * Initialize AR service - TEMPORARILY DISABLED
+     * This is disabled because SimplifiedCameraPreview uses CameraX which conflicts with ARCore's camera usage
+     * TODO: Re-enable when integrating AR features back with CameraX ImageAnalysis
      */
     private fun initializeARService() {
+        // DISABLED: Commenting out to prevent camera conflict
+        // ARCore and CameraX cannot both use the camera simultaneously
+        
+        Log.d(TAG, "AR service initialization SKIPPED (using CameraX instead)")
+        
+        /* COMMENTED OUT - Camera conflict with CameraX
         viewModelScope.launch {
             try {
                 Log.d(TAG, "Initializing AR service...")
-                val initialized = arService.initialize()
+                
+                // LAZY CREATION - only create the service when actually needed
+                if (arService == null) {
+                    synchronized(this@EnhancedARViewModel) {
+                        // Double-check inside synchronized block
+                        if (arService == null) {
+                            Log.d(TAG, "Creating EnhancedARService instance")
+                            arService = EnhancedARService(TalkARApplication.instance)
+                        }
+                    }
+                }
+                
+                val initialized = arService?.initialize() ?: false
                 if (initialized) {
                     Log.d(TAG, "AR service initialized successfully")
                     // Start observing AR service state
@@ -118,6 +139,7 @@ class EnhancedARViewModel(
                 Log.e(TAG, "Error initializing AR service: ${e.message}")
             }
         }
+        */
     }
     
     /**
@@ -143,35 +165,35 @@ class EnhancedARViewModel(
     private fun observeARServiceState() {
         viewModelScope.launch {
             // Observe tracking state
-            arService.isTracking.collect { isTracking ->
+            arService?.isTracking?.collect { isTracking ->
                 _isTracking.value = isTracking
             }
         }
         
         viewModelScope.launch {
             // Observe tracking quality
-            arService.trackingQuality.collect { quality ->
+            arService?.trackingQuality?.collect { quality ->
                 _trackingQuality.value = quality
             }
         }
         
         viewModelScope.launch {
             // Observe lighting quality
-            arService.lightingQuality.collect { quality ->
+            arService?.lightingQuality?.collect { quality ->
                 _lightingQuality.value = quality
             }
         }
         
         viewModelScope.launch {
             // Observe light estimate
-            arService.lightEstimate.collect { estimate ->
+            arService?.lightEstimate?.collect { estimate ->
                 _lightEstimate.value = estimate
             }
         }
         
         viewModelScope.launch {
             // Observe avatar speaking state
-            arService.isAvatarSpeaking.collect { isSpeaking ->
+            arService?.isAvatarSpeaking?.collect { isSpeaking ->
                 _isAvatarSpeaking.value = isSpeaking
             }
         }
@@ -366,7 +388,7 @@ class EnhancedARViewModel(
         // Start AR service
         viewModelScope.launch {
             try {
-                arService.resumeTracking()
+                arService?.resumeTracking()
                 _detectionStatus.value = "Searching for images..."
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting AR tracking: ${e.message}")
@@ -387,7 +409,7 @@ class EnhancedARViewModel(
         // Stop AR service
         viewModelScope.launch {
             try {
-                arService.stopTracking()
+                arService?.stopTracking()
             } catch (e: Exception) {
                 Log.e(TAG, "Error stopping AR tracking: ${e.message}")
             }
@@ -399,35 +421,35 @@ class EnhancedARViewModel(
      */
     fun setAvatarSpeaking(isSpeaking: Boolean) {
         _isAvatarSpeaking.value = isSpeaking
-        arService.setAvatarSpeaking(isSpeaking)
+        arService?.setAvatarSpeaking(isSpeaking)
     }
     
     /**
      * Start ambient audio
      */
     fun startAmbientAudio() {
-        arService.startAmbientAudio()
+        arService?.startAmbientAudio()
     }
     
     /**
      * Stop ambient audio
      */
     fun stopAmbientAudio() {
-        arService.stopAmbientAudio()
+        arService?.stopAmbientAudio()
     }
     
     /**
      * Pause ambient audio
      */
     fun pauseAmbientAudio() {
-        arService.pauseAmbientAudio()
+        arService?.pauseAmbientAudio()
     }
     
     /**
      * Resume ambient audio
      */
     fun resumeAmbientAudio() {
-        arService.resumeAmbientAudio()
+        arService?.resumeAmbientAudio()
     }
     
     /**
