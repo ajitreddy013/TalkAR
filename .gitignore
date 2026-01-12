@@ -343,5 +343,13 @@ docs/_build/
 # ===========================================
 *.bak
 *.backup
+*.backup-*
 *.old
 *.orig
+
+# Backend test/temporary files
+backend/sunrich_bottle.jpeg
+backend/dummy_marker.jpg
+backend/dummy_test_image.jpg
+backend/src_list.txt
+backend/.env.backup-*
