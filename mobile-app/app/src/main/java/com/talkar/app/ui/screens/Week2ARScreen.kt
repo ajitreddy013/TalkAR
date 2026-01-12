@@ -10,7 +10,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import com.talkar.app.BuildConfig
-import com.talkar.app.ui.components.CameraPreviewView
+import com.talkar.app.ui.components.SimplifiedCameraPreview
 import com.talkar.app.ui.components.FeedbackAvatarOverlay
 import com.talkar.app.ui.feedback.FeedbackModal
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
@@ -81,17 +81,12 @@ fun Week2ARScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Camera preview (shows real camera output with ARCore integration)
-            CameraPreviewView(
+            // Camera preview using CameraX (simpler, more reliable)
+            SimplifiedCameraPreview(
                 modifier = Modifier.fillMaxSize(),
-                isImageDetected = isTracking,
                 onImageRecognized = { imageRecognition ->
                     // When wired to real AR, update the VM with the recognized image
                     viewModel.onImageRecognized(imageRecognition)
-                },
-                onAugmentedImageRecognized = {
-                    // Placeholder hook if using ARCore-backed recognition
-                    android.util.Log.d("Week2ARScreen", "Augmented image recognized: ${it.name}")
                 },
                 onError = { error ->
                     android.util.Log.e("Week2ARScreen", "Camera error: $error")
@@ -122,47 +117,6 @@ fun Week2ARScreen(
                         .align(Alignment.Center)
                         .padding(16.dp)
                 )
-            }
-            
-            // Status Indicator
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isTracking) 
-                        MaterialTheme.colorScheme.primaryContainer 
-                    else 
-                        MaterialTheme.colorScheme.surfaceVariant
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "🎯 AR Status",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = MaterialTheme.typography.titleMedium.fontWeight
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = detectionStatus,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    if (isAvatarVisible) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Avatar: ${currentAvatar?.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "Image: ${currentImage?.name}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
             }
             
             // Beta Feedback Modal (only show in beta builds)
