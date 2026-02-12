@@ -1,6 +1,8 @@
 import { getPosterById } from "../utils/posterHelper";
 import { getUserPreferences } from "../utils/userHelper";
-import OpenAI from "openai";
+// OpenAI import removed
+import axios from "axios";
+import logger from "../utils/logger";
 
 interface CacheEntry {
   data: any;
@@ -27,7 +29,7 @@ interface OptimizedScriptResponse {
 import { config } from "../config";
 
 export class OptimizedScriptService {
-  private openai: OpenAI | null = null; // Changed to nullable
+  // openai property removed
   private scriptCache: Map<string, CacheEntry>;
   private posterCache: Map<string, CacheEntry>;
   private userPrefsCache: CacheEntry | null;
@@ -46,16 +48,14 @@ export class OptimizedScriptService {
   };
 
   constructor() {
-    // Lazy init OpenAI to prevent startup crash if key is missing
-    if (config.openaiKey) {
-      this.openai = new OpenAI({ 
-        apiKey: config.openaiKey 
-      });
-    }
+    // OpenAI lazy init removed
     
     this.scriptCache = new Map();
     this.posterCache = new Map();
     this.userPrefsCache = null;
+    
+    console.log(`[OptimizedScriptService] Initialized with Provider: ${config.aiProvider}`);
+    console.log(`[OptimizedScriptService] Groq Key Available: ${!!config.groqKey}`);
     
     this.performanceMetrics = {
       totalRequests: 0,
@@ -68,16 +68,6 @@ export class OptimizedScriptService {
     setInterval(() => {
       this.cleanupExpiredCache();
     }, 5 * 60 * 1000);
-  }
-
-  private getOpenAI(): OpenAI {
-    if (!this.openai) {
-      if (!config.openaiKey) {
-        throw new Error("OpenAI API Key is missing. Please check your configuration.");
-      }
-      this.openai = new OpenAI({ apiKey: config.openaiKey });
-    }
-    return this.openai;
   }
 
   /**
@@ -149,22 +139,34 @@ export class OptimizedScriptService {
     // Create optimized prompt
     const prompt = this.createOptimizedPrompt(poster, language, tone);
 
-    // Generate script with optimized parameters
+    // Generate script based on provider
     try {
-      const response = await this.getOpenAI().chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 80, // Reduced for faster generation
-        temperature: 0.7, // Slightly lower for consistency
-        top_p: 0.9,
-        frequency_penalty: 0.1,
-        presence_penalty: 0.1
-      });
-
-      const script = response.choices[0].message.content?.trim() || "";
-      return { script, language, tone };
-    } catch (error) {
-      console.error("OpenAI generation failed, using fallback:", error);
+      console.log(`[Script Generation] Using provider: ${config.aiProvider}`);
+      
+      if (config.aiProvider === "groq") {
+        if (!config.groqKey || config.groqKey === 'your-groqcloud-api-key') {
+           console.warn("[Script Generation] Groq provider selected but key is missing/default. Falling back to OpenAI.");
+           // Fall through to OpenAI logic only if key missing
+        } else {
+           return await this.callGroqAPI(prompt, language, tone);
+        }
+      } 
+      
+      
+        if (config.aiProvider === "ollama") {
+        return await this.callOllamaAPI(prompt, language, tone);
+      } 
+      
+      // Default to Groq
+      if (!config.groqKey || config.groqKey === 'your-groqcloud-api-key') {
+          throw new Error("Groq API Key is missing. OpenAI fallback has been removed.");
+      } else {
+          return await this.callGroqAPI(prompt, language, tone);
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data || error.message;
+      logger.error(`${config.aiProvider} generation failed:`, { error: errorMessage, prompt });
+      
       // Fallback script
       const fallbackScript = `Welcome to ${poster.product_name}! Experience the future of ${poster.category} with our amazing features.`;
       return { 
@@ -176,14 +178,64 @@ export class OptimizedScriptService {
   }
 
   /**
+   * Call Groq API for script generation
+   */
+  private async callGroqAPI(prompt: string, language: string, tone: string): Promise<{script: string, language: string, tone: string}> {
+    const groqApiUrl = "https://api.groq.com/openai/v1/chat/completions";
+    
+    const response = await axios.post(
+      groqApiUrl,
+      {
+        model: "llama-3.1-8b-instant",
+        messages: [
+          { role: "system", content: "You are an AI advertisement script writer. Generate 1-2 punchy lines." },
+          { role: "user", content: prompt }
+        ],
+        max_tokens: 100,
+        temperature: 0.7
+      },
+      {
+        headers: {
+          "Authorization": `Bearer ${config.groqKey}`,
+          "Content-Type": "application/json"
+        },
+        timeout: 10000
+      }
+    );
+
+    const script = response.data.choices[0].message.content.trim();
+    return { script, language, tone };
+  }
+
+  /**
+   * Call local Ollama API for script generation
+   */
+  private async callOllamaAPI(prompt: string, language: string, tone: string): Promise<{script: string, language: string, tone: string}> {
+    const ollamaHost = process.env.OLLAMA_HOST || "http://localhost:11434";
+    const ollamaModel = process.env.OLLAMA_MODEL || "llama3.2";
+    
+    const response = await axios.post(`${ollamaHost}/api/generate`, {
+      model: ollamaModel,
+      prompt: `Generate a short AR ad script based on this: ${prompt}. Only return the script text.`,
+      stream: false,
+      options: {
+        temperature: 0.7,
+        num_predict: 100
+      }
+    });
+
+    const script = response.data.response.trim();
+    return { script, language, tone };
+  }
+
+  /**
    * Create optimized prompt for faster generation
    */
   private createOptimizedPrompt(poster: any, language: string, tone: string): string {
     // Use a more concise prompt for faster generation
-    return `Create 2 short ad lines for ${poster.product_name} (${poster.category}).
+    return `Create 1 concise, punchy ad line for ${poster.product_name}.
 Tone: ${tone}, Language: ${language}.
-Key features: ${poster.features.slice(0, 3).join(', ')}.
-Under 25 words, catchy, AR-friendly.`;
+Limit to 15 words. ONLY return the script text, no introduction or quotes.`;
   }
 
   /**

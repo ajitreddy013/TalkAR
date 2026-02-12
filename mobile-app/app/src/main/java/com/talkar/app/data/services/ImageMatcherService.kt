@@ -7,8 +7,19 @@ import android.util.Log
 import com.talkar.app.data.models.BackendImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.net.Uri
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import java.io.IOException
 import java.net.URL
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.cancel
+
 
 /**
  * Service for matching camera frames against backend reference images
@@ -19,7 +30,8 @@ class ImageMatcherService(private val context: Context) {
     companion object {
         private const val TAG = "ImageMatcherService"
         private const val MATCH_THRESHOLD = 0.50 // Balanced for dHash robustness
-        private const val DEBOUNCE_MS = 1000L // Faster feedback
+        private const val DEBOUNCE_MS = 1000L // Fast frame analysis check
+        private const val COOLDOWN_MS = 8000L // 8s cooldown for same product
         private const val MAX_DIMENSION = 512 // Downscale images for faster comparison
     }
     
@@ -31,6 +43,18 @@ class ImageMatcherService(private val context: Context) {
         val dialogues: List<Any>?
     )
     
+    private val activeReaders = java.util.concurrent.atomic.AtomicInteger(0)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var preloadJob: kotlinx.coroutines.Job? = null
+
+    init {
+        // 🔥 Pre-load fallback templates immediately
+        preloadJob = serviceScope.launch {
+            loadTemplatesFromAssets()
+            Log.d(TAG, "Fallback templates pre-loaded")
+        }
+    }
+    
     data class MatchResult(
         val imageId: String,
         val imageName: String,
@@ -40,55 +64,161 @@ class ImageMatcherService(private val context: Context) {
     )
     
     private val templates = mutableListOf<ImageTemplate>()
+    private val mutex = Mutex()
+    
+    @Volatile
     private var lastDetectionTime: Long = 0
+    
+    @Volatile
     private var lastDetectedImageId: String? = null
     
+    @Volatile
+    var isUsingFallback: Boolean = false
+        private set
+    
     /**
-     * Load reference images from backend API
+     * Load reference images from backend API with fallback to local assets
      */
     suspend fun loadTemplatesFromBackend(): Result<Int> = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Loading reference images from backend...")
+            // If we already have local templates, we're good to go immediately
+            // But still try to fetch fresh ones from backend
+            Log.d(TAG, "Attempting to load reference images from backend...")
             val apiService = com.talkar.app.data.api.ApiClient.create()
-            val response = apiService.getImages()
+            
+            val response = try {
+                apiService.getImages()
+            } catch (e: Exception) {
+                Log.w(TAG, "Backend network error, failing over to local templates: ${e.message}")
+                return@withContext loadTemplatesFromAssets()
+            }
             
             if (!response.isSuccessful) {
-                Log.e(TAG, "Failed to fetch images: ${response.code()}")
-                return@withContext Result.failure(IOException("API returned ${response.code()}"))
+                Log.e(TAG, "Backend returned error ${response.code()}, failing over to local templates")
+                return@withContext loadTemplatesFromAssets()
             }
             
             val backendImages = response.body() ?: emptyList()
+            if (backendImages.isEmpty()) {
+                Log.w(TAG, "Backend returned empty image list, falling back to local assets")
+                return@withContext loadTemplatesFromAssets()
+            }
+
             Log.d(TAG, "Fetched ${backendImages.size} images from backend")
             
-            templates.clear()
+            mutex.withLock {
+                // Do NOT recycle immediately. Copy to local list then clear main list.
+                // This allows us to recycle safely outside the lock after readers finish.
+                toRecycle = templates.toList()
+                templates.clear()
+            }
+            
+            // Wait for readers then recycle
+            try {
+                while (activeReaders.get() > 0) {
+                    kotlinx.coroutines.delay(10)
+                }
+                toRecycle.forEach { it.bitmap.recycle() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error recycling bitmaps", e)
+            }
             
             // Download and prepare each image
             backendImages.forEach { backendImage ->
                 try {
                     val bitmap = downloadAndPrepareBitmap(backendImage.imageUrl)
                     if (bitmap != null) {
-                        templates.add(
-                            ImageTemplate(
-                                id = backendImage.id,
-                                name = backendImage.name,
-                                description = backendImage.description,
-                                bitmap = bitmap,
-                                dialogues = backendImage.dialogues as? List<Any>
+                        mutex.withLock {
+                            templates.add(
+                                ImageTemplate(
+                                    id = backendImage.id,
+                                    name = backendImage.name,
+                                    description = backendImage.description,
+                                    bitmap = bitmap,
+                                    dialogues = backendImage.dialogues as? List<Any>
+                                )
                             )
-                        )
-                        Log.d(TAG, "Loaded template: ${backendImage.name}")
-                    } else {
-                        Log.w(TAG, "Failed to download image: ${backendImage.name}")
+                        }
+                        Log.d(TAG, "Loaded backend template: ${backendImage.name}")
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error loading image ${backendImage.name}", e)
+                    Log.e(TAG, "Error loading backend image ${backendImage.name}", e)
                 }
             }
             
-            Log.d(TAG, "Successfully loaded ${templates.size} reference images")
+            if (getTemplateCount() == 0) {
+                Log.w(TAG, "Failed to load any backend images. Trying asset fallback as last resort...")
+                return@withContext loadTemplatesFromAssets()
+            }
+
+            Log.d(TAG, "Successfully loaded ${templates.size} images from backend")
+            isUsingFallback = false
             Result.success(templates.size)
         } catch (e: Exception) {
-            Log.e(TAG, "Error loading templates from backend", e)
+            Log.e(TAG, "Critical error during backend load", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Load reference images from local assets (Offline Fallback)
+     */
+    suspend fun loadTemplatesFromAssets(): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            Log.i(TAG, "Loading fallback templates from local assets...")
+            val jsonString = context.assets.open("fallbacks.json").bufferedReader().use { it.readText() }
+            val listType = object : TypeToken<List<BackendImage>>() {}.type
+            val fallbackImages: List<BackendImage> = Gson().fromJson(jsonString, listType)
+            
+            mutex.withLock {
+                 // Do NOT recycle immediately. Copy to local list then clear main list.
+                toRecycle = templates.toList()
+                templates.clear()
+            }
+            
+            // Wait for readers then recycle
+            try {
+                while (activeReaders.get() > 0) {
+                    kotlinx.coroutines.delay(10)
+                }
+                toRecycle.forEach { it.bitmap.recycle() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error recycling bitmaps", e)
+            }
+            
+            fallbackImages.forEach { item ->
+                try {
+                    val bitmap = context.assets.open(item.imageUrl).use { inputStream ->
+                        BitmapFactory.decodeStream(inputStream)
+                    }
+                    
+                    if (bitmap != null) {
+                        val scaled = scaleBitmap(bitmap, MAX_DIMENSION)
+                        bitmap.recycle()
+                        
+                        mutex.withLock {
+                            templates.add(
+                                ImageTemplate(
+                                    id = item.id,
+                                    name = item.name,
+                                    description = item.description,
+                                    bitmap = scaled,
+                                    dialogues = item.dialogues as? List<Any>
+                                )
+                            )
+                        }
+                        Log.d(TAG, "Loaded fallback template: ${item.name}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error loading asset fallback ${item.imageUrl}", e)
+                }
+            }
+            
+            Log.i(TAG, "Successfully loaded ${templates.size} local fallback templates")
+            isUsingFallback = true
+            Result.success(templates.size)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load any templates (backend or asset)", e)
             Result.failure(e)
         }
     }
@@ -135,6 +265,8 @@ class ImageMatcherService(private val context: Context) {
         }
         
         try {
+            activeReaders.incrementAndGet()
+            
             // Prepare frame for matching
             val scaledFrame = scaleBitmap(frameBitmap, MAX_DIMENSION)
             
@@ -142,7 +274,9 @@ class ImageMatcherService(private val context: Context) {
             var bestScore = 0f
             
             // Compare against all templates
-            templates.forEach { template ->
+            val currentTemplates = mutex.withLock { templates.toList() }
+            
+            currentTemplates.forEach { template ->
                 val similarity = calculateSimilarity(scaledFrame, template.bitmap)
                 Log.v(TAG, "Comparing frame against ${template.name}: score=${String.format("%.4f", similarity)}")
                 
@@ -161,20 +295,26 @@ class ImageMatcherService(private val context: Context) {
             scaledFrame.recycle()
             
             if (bestMatch != null) {
-                // Only return if it's a different image or enough time has passed
-                if (bestMatch!!.imageId != lastDetectedImageId || 
-                    currentTime - lastDetectionTime > DEBOUNCE_MS * 2) {
-                    lastDetectionTime = currentTime
-                    lastDetectedImageId = bestMatch!!.imageId
-                    Log.d(TAG, "Match found: ${bestMatch!!.imageName} (${(bestMatch!!.confidence * 100).toInt()}%)")
-                    return@withContext bestMatch
+                // Hotfix: Strict Cooldown for the same product to prevent infinite play loops
+                if (bestMatch!!.imageId == lastDetectedImageId && 
+                    currentTime - lastDetectionTime < COOLDOWN_MS) {
+                    Log.v(TAG, "Skipping re-detection of ${bestMatch!!.imageName} (Cooldown active)")
+                    return@withContext null
                 }
+
+                // Only return if it's a different image or enough time has passed
+                lastDetectionTime = currentTime
+                lastDetectedImageId = bestMatch!!.imageId
+                Log.d(TAG, "MATCH CONFIRMED: ${bestMatch!!.imageName} (ID: ${bestMatch!!.imageId}) confidence=${String.format("%.2f", bestMatch!!.confidence)}")
+                return@withContext bestMatch
             }
             
             null
         } catch (e: Exception) {
             Log.e(TAG, "Error matching frame", e)
             null
+        } finally {
+            activeReaders.decrementAndGet()
         }
     }
     
@@ -258,14 +398,44 @@ class ImageMatcherService(private val context: Context) {
     /**
      * Clear all loaded templates
      */
-    fun clearTemplates() {
-        templates.forEach { it.bitmap.recycle() }
-        templates.clear()
+    suspend fun clearTemplates() {
+        mutex.withLock {
+            toRecycle = templates.toList()
+            templates.clear()
+        }
+        
+        // Wait for readers then recycle
+        try {
+                while (activeReaders.get() > 0) {
+                kotlinx.coroutines.delay(10)
+            }
+            toRecycle.forEach { it.bitmap.recycle() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error recycling bitmaps", e)
+        }
         Log.d(TAG, "Cleared all templates")
     }
     
+    fun onVideoStarted() {
+        // Extend cooldown to prevent detection DURING video
+        lastDetectionTime = System.currentTimeMillis()
+        Log.d(TAG, "Cooldown extended: Video started")
+    }
+
     /**
      * Get number of loaded templates
      */
     fun getTemplateCount(): Int = templates.size
+
+    fun destroy() {
+        preloadJob?.cancel()
+        serviceScope.cancel()
+        
+        // Synchronously clear native resources to prevent leaks
+        runBlocking(Dispatchers.IO) { 
+            val job = serviceScope.coroutineContext[kotlinx.coroutines.Job]
+            job?.join()
+            clearTemplates() 
+        }
+    }
 }

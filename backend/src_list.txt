@@ -1,0 +1,123 @@
+total 48
+drwxr-xr-x@ 15 ajitreddy  staff   480 Jan 10 23:44 .
+drwxr-xr-x@ 65 ajitreddy  staff  2080 Jan 11 00:41 ..
+-rw-r--r--@  1 ajitreddy  staff  8196 Nov 20 03:13 .DS_Store
+-rw-r--r--@  1 ajitreddy  staff   308 Nov 21 03:19 bootstrap.ts
+drwxr-xr-x@  3 ajitreddy  staff    96 Oct 21 01:00 config
+-rw-r--r--@  1 ajitreddy  staff   480 Nov 21 03:19 config.ts
+-rw-r--r--@  1 ajitreddy  staff   455 Nov 20 19:38 db.ts
+drwxr-xr-x@  6 ajitreddy  staff   192 Oct 21 01:00 middleware
+drwxr-xr-x@ 13 ajitreddy  staff   416 Nov 25 03:08 models
+drwxr-xr-x@ 18 ajitreddy  staff   576 Jan 10 23:44 routes
+drwxr-xr-x@  4 ajitreddy  staff   128 Oct 22 23:00 scripts
+drwxr-xr-x@ 15 ajitreddy  staff   480 Nov 20 03:41 services
+drwxr-xr-x@  9 ajitreddy  staff   288 Nov 23 03:32 tests
+drwxr-xr-x@  3 ajitreddy  staff    96 Oct 21 01:00 types
+drwxr-xr-x@  9 ajitreddy  staff   288 Nov 23 03:28 utils
+
+src/config:
+total 8
+drwxr-xr-x@  3 ajitreddy  staff    96 Oct 21 01:00 .
+drwxr-xr-x@ 15 ajitreddy  staff   480 Jan 10 23:44 ..
+-rw-r--r--@  1 ajitreddy  staff  1706 Jan 10 00:58 database.ts
+
+src/middleware:
+total 32
+drwxr-xr-x@  6 ajitreddy  staff   192 Oct 21 01:00 .
+drwxr-xr-x@ 15 ajitreddy  staff   480 Jan 10 23:44 ..
+-rw-r--r--@  1 ajitreddy  staff  1414 Oct  1 02:31 auth.ts
+-rw-r--r--@  1 ajitreddy  staff   994 Oct 24 18:37 errorHandler.ts
+-rw-r--r--@  1 ajitreddy  staff   220 Oct  1 01:50 notFound.ts
+-rw-r--r--@  1 ajitreddy  staff  2609 Oct 22 00:15 validation.ts
+
+src/models:
+total 96
+drwxr-xr-x@ 13 ajitreddy  staff   416 Nov 25 03:08 .
+drwxr-xr-x@ 15 ajitreddy  staff   480 Jan 10 23:44 ..
+-rw-r--r--@  1 ajitreddy  staff  1300 Oct 26 01:20 AIConfig.ts
+-rw-r--r--@  1 ajitreddy  staff  1687 Oct 21 01:00 Avatar.ts
+-rw-r--r--@  1 ajitreddy  staff  1688 Nov 25 03:08 BetaFeedback.ts
+-rw-r--r--@  1 ajitreddy  staff  1433 Oct 27 02:30 Feedback.ts
+-rw-r--r--@  1 ajitreddy  staff  4101 Oct 23 17:32 Image.ts
+-rw-r--r--@  1 ajitreddy  staff  1816 Oct 25 01:25 ImageAvatarMapping.ts
+-rw-r--r--@  1 ajitreddy  staff  2046 Nov 20 03:39 Interaction.ts
+-rw-r--r--@  1 ajitreddy  staff  1434 Nov 20 03:39 Metric.ts
+-rw-r--r--@  1 ajitreddy  staff  1324 Oct 27 02:38 Settings.ts
+-rw-r--r--@  1 ajitreddy  staff  1475 Oct  1 02:31 User.ts
+-rw-r--r--@  1 ajitreddy  staff  1284 Nov 20 03:39 associations.ts
+
+src/routes:
+total 248
+drwxr-xr-x@ 18 ajitreddy  staff    576 Jan 10 23:44 .
+drwxr-xr-x@ 15 ajitreddy  staff    480 Jan 10 23:44 ..
+-rw-r--r--@  1 ajitreddy  staff   6818 Nov 20 19:11 admin.ts
+-rw-r--r--@  1 ajitreddy  staff   6395 Oct 26 02:17 aiConfig.ts
+-rw-r--r--@  1 ajitreddy  staff  20776 Nov 20 03:50 aiPipeline.ts
+-rw-r--r--@  1 ajitreddy  staff   5162 Oct 26 01:20 analytics.ts
+-rw-r--r--@  1 ajitreddy  staff   3825 Oct 21 01:00 auth.ts
+-rw-r--r--@  1 ajitreddy  staff   4990 Oct 21 01:00 avatars.ts
+-rw-r--r--@  1 ajitreddy  staff   1158 Nov 25 03:08 betaFeedbackRoutes.ts
+-rw-r--r--@  1 ajitreddy  staff   3000 Oct 21 01:00 enhancedLipSync.ts
+-rw-r--r--@  1 ajitreddy  staff   5287 Nov  1 01:12 feedback.ts
+-rw-r--r--@  1 ajitreddy  staff   7234 Nov 21 03:00 generateDynamicScript.ts
+-rw-r--r--@  1 ajitreddy  staff   2286 Oct  7 02:14 lipSync.ts
+-rw-r--r--@  1 ajitreddy  staff   9926 Nov 25 02:29 multiImageRoutes.ts
+-rw-r--r--@  1 ajitreddy  staff   2416 Oct 25 22:47 performance.ts
+-rw-r--r--@  1 ajitreddy  staff   4910 Oct 21 01:00 scripts.ts
+-rw-r--r--@  1 ajitreddy  staff   6809 Oct 27 02:45 settings.ts
+-rw-r--r--@  1 ajitreddy  staff   2017 Oct 25 01:36 sync.ts
+
+src/scripts:
+total 32
+drwxr-xr-x@  4 ajitreddy  staff    128 Oct 22 23:00 .
+drwxr-xr-x@ 15 ajitreddy  staff    480 Jan 10 23:44 ..
+-rw-r--r--@  1 ajitreddy  staff  11286 Oct 21 01:00 populateTestData.ts
+-rw-r--r--@  1 ajitreddy  staff   1733 Oct 22 23:02 testAIPipeline.ts
+
+src/services:
+total 728
+drwxr-xr-x@ 15 ajitreddy  staff    480 Nov 20 03:41 .
+drwxr-xr-x@ 15 ajitreddy  staff    480 Jan 10 23:44 ..
+-rw-r--r--@  1 ajitreddy  staff   3132 Oct 26 02:09 aiConfigService.ts
+-rw-r--r--@  1 ajitreddy  wheel  96619 Nov 29 02:13 aiPipelineService.ts
+-rw-r--r--@  1 ajitreddy  staff  91193 Oct 31 00:48 aiPipelineService.ts.backup
+-rw-r--r--@  1 ajitreddy  staff  91194 Oct 31 00:53 aiPipelineService.ts.backup2
+-rw-r--r--@  1 ajitreddy  staff  11718 Oct 26 01:20 analyticsService.ts
+-rw-r--r--@  1 ajitreddy  staff   4090 Nov 20 03:41 analyticsWorker.ts
+-rw-r--r--@  1 ajitreddy  staff   5626 Oct 24 21:45 authService.ts
+-rw-r--r--@  1 ajitreddy  staff   8989 Nov 23 03:42 enhancedLipSyncService.ts
+-rw-r--r--@  1 ajitreddy  staff   5056 Oct  7 02:14 mockLipSyncService.ts
+-rw-r--r--@  1 ajitreddy  staff  11068 Nov 23 03:28 optimizedScriptService.ts
+-rw-r--r--@  1 ajitreddy  staff   8919 Nov 25 02:29 performanceMetricsService.ts
+-rw-r--r--@  1 ajitreddy  staff   4396 Oct 25 01:04 syncService.ts
+-rw-r--r--@  1 ajitreddy  staff   2832 Oct  1 23:13 uploadService.ts
+
+src/tests:
+total 88
+drwxr-xr-x@  9 ajitreddy  staff   288 Nov 23 03:32 .
+drwxr-xr-x@ 15 ajitreddy  staff   480 Jan 10 23:44 ..
+-rw-r--r--@  1 ajitreddy  staff   829 Oct 22 23:02 aiPipelineService.test.ts
+-rw-r--r--@  1 ajitreddy  staff  7579 Oct 21 01:00 api.test.ts
+-rw-r--r--@  1 ajitreddy  staff  6251 Oct 21 01:00 authService.test.ts
+-rw-r--r--@  1 ajitreddy  staff  7590 Oct 21 01:00 performance.test.ts
+-rw-r--r--@  1 ajitreddy  staff   771 Nov 23 03:32 rateLimit.test.ts
+-rw-r--r--@  1 ajitreddy  staff  3473 Oct 25 01:38 setup.ts
+-rw-r--r--@  1 ajitreddy  staff  6188 Nov 25 02:30 syncService.test.ts
+
+src/types:
+total 8
+drwxr-xr-x@  3 ajitreddy  staff   96 Oct 21 01:00 .
+drwxr-xr-x@ 15 ajitreddy  staff  480 Jan 10 23:44 ..
+-rw-r--r--@  1 ajitreddy  staff  204 Oct  1 02:31 express.d.ts
+
+src/utils:
+total 72
+drwxr-xr-x@  9 ajitreddy  staff   288 Nov 23 03:28 .
+drwxr-xr-x@ 15 ajitreddy  staff   480 Jan 10 23:44 ..
+-rw-r--r--@  1 ajitreddy  staff  8720 Oct 29 02:08 dynamicScriptLogger.ts
+-rw-r--r--@  1 ajitreddy  staff  2871 Nov  1 01:17 interactionLogger.ts
+-rw-r--r--@  1 ajitreddy  staff  1555 Nov 23 03:28 logger.ts
+-rw-r--r--@  1 ajitreddy  staff  1977 Nov  1 01:11 memoryHelper.ts
+-rw-r--r--@  1 ajitreddy  staff  1910 Oct 29 02:08 posterHelper.ts
+-rw-r--r--@  1 ajitreddy  staff  1741 Nov 29 02:13 simpleCache.ts
+-rw-r--r--@  1 ajitreddy  staff  2280 Oct 29 02:08 userHelper.ts

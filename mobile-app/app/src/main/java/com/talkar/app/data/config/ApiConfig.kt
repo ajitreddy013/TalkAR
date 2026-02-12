@@ -47,6 +47,11 @@ object ApiConfig {
     val API_BASE_URL = "$BASE_URL/api"
     val API_V1_URL = "$API_BASE_URL/$API_VERSION"
 
+    init {
+        Log.i(TAG, "Initializing ApiConfig with BASE_URL: $BASE_URL")
+        Log.i(TAG, "API V1 URL: $API_V1_URL")
+    }
+
     // Specific endpoints
     val IMAGES_ENDPOINT = "$API_V1_URL/images"
     val AVATARS_ENDPOINT = "$API_V1_URL/avatars"

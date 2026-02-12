@@ -21,10 +21,10 @@ android {
     }
 
     // Allow overriding API host/protocol via project properties (e.g., -PAPI_HOST=... or in gradle.properties)
-    def apiProtocolDebug = project.hasProperty('API_PROTOCOL') ? project.API_PROTOCOL : 'http'
-    def apiHostDebug = project.hasProperty('API_HOST') ? project.API_HOST : '10.0.2.2'
+    def apiProtocolDebug = project.hasProperty('API_PROTOCOL') ? project.API_PROTOCOL : 'https'
+    def apiHostDebug = project.hasProperty('API_HOST') ? project.API_HOST : 'de65955214bb1e.lhr.life'
     // Ports should be integers for buildConfigField "int"
-    def apiPortDebug = project.hasProperty('API_PORT') ? project.API_PORT.toInteger() : 4000
+    def apiPortDebug = project.hasProperty('API_PORT') ? project.API_PORT.toInteger() : 443
     def apiVersion = project.hasProperty('API_VERSION') ? project.API_VERSION : 'v1'
 
     // Release (production) defaults should use HTTPS and a production host. CI or local overrides can set API_HOST_RELEASE etc.
@@ -144,7 +144,8 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
     
     // ML Kit for image recognition
-    implementation 'com.google.mlkit:face-detection:16.1.6'
+    implementation 'com.google.mlkit:face-detection:16.1.7'
+    implementation 'com.google.android.gms:play-services-mlkit-face-detection:17.1.0'
     implementation 'com.google.mlkit:image-labeling:17.0.7'
     implementation 'com.google.mlkit:object-detection:17.0.1'
     implementation 'com.google.mlkit:vision-common:17.3.0'

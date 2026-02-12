@@ -1,0 +1,26 @@
+[
+  {
+    "id": "fallback_water_bottle",
+    "name": "Sunrich Water Bottle",
+    "description": "Eco-friendly hydration companion",
+    "imageUrl": "fallbacks/water-bottle.jpg"
+  },
+  {
+    "id": "fallback_backpack",
+    "name": "Adventure Backpack",
+    "description": "Durable and spacious for any journey",
+    "imageUrl": "fallbacks/backpack.jpg"
+  },
+  {
+    "id": "fallback_shoes",
+    "name": "Stride Pro Shoes",
+    "description": "Maximum comfort for everyday walking",
+    "imageUrl": "fallbacks/shoes.jpg"
+  },
+  {
+    "id": "fallback_headphones",
+    "name": "Acoustic Pro Headphones",
+    "description": "Immersive sound discovery",
+    "imageUrl": "fallbacks/headphones.jpg"
+  }
+]

@@ -5,8 +5,7 @@ import { authenticateAdmin } from "../middleware/auth";
 
 const router = express.Router();
 
-// Apply admin authentication to all routes
-router.use(authenticateAdmin);
+// router.use(authenticateAdmin); - Moved to specific routes
 
 // Get all AI configurations
 router.get("/", async (req, res, next) => {
@@ -44,7 +43,7 @@ router.get("/defaults/tone", async (req, res, next) => {
 });
 
 // Set default tone
-router.post("/defaults/tone", async (req, res, next) => {
+router.post("/defaults/tone", authenticateAdmin, async (req, res, next) => {
   try {
     const { tone } = req.body;
 
@@ -92,7 +91,7 @@ router.get("/prompt-template", async (req, res, next) => {
 });
 
 // Set prompt template
-router.post("/prompt-template", async (req, res, next) => {
+router.post("/prompt-template", authenticateAdmin, async (req, res, next) => {
   try {
     const { value } = req.body;
 
@@ -140,7 +139,7 @@ router.get("/defaults/language", async (req, res, next) => {
 });
 
 // Set default language
-router.post("/defaults/language", async (req, res, next) => {
+router.post("/defaults/language", authenticateAdmin, async (req, res, next) => {
   try {
     const { language } = req.body;
 
@@ -194,7 +193,7 @@ router.get("/defaults/avatar", async (req, res, next) => {
 });
 
 // Set default avatar
-router.post("/defaults/avatar", async (req, res, next) => {
+router.post("/defaults/avatar", authenticateAdmin, async (req, res, next) => {
   try {
     const { avatarId } = req.body;
 
@@ -257,7 +256,7 @@ router.get("/:key", async (req, res, next) => {
 });
 
 // Update AI configuration
-router.post("/:key", async (req, res, next) => {
+router.post("/:key", authenticateAdmin, async (req, res, next) => {
   try {
     const { key } = req.params;
     const { value, description } = req.body;

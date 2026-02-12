@@ -28,7 +28,7 @@ router.post("/generate", async (req: Request, res: Response, next: NextFunction)
       // For now, we'll simulate this with a mock
       Promise.resolve({
         script: `Check out this amazing ${poster.product_name}!`,
-        audioUrl: `http://localhost:3000/audio/mock-audio-${Date.now()}.mp3`
+        audioUrl: `http://localhost:4000/audio/mock-audio-${Date.now()}.mp3`
       })
     ]);
 
@@ -523,6 +523,61 @@ router.post("/conversational_query", async (req: Request, res: Response, next: N
     }
   }
 });
+
+// Handle visual queries (multipart/form-data with image)
+import { uploadImage, uploadToS3 } from "../services/uploadService";
+import path from "path";
+
+router.post(
+  "/visual-chat",
+  uploadImage.single("image"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { text, posterId } = req.body;
+      const file = req.file;
+
+      if (!text) {
+        return res.status(400).json({ error: "Missing required parameter: text" });
+      }
+
+      let imageUrl: string | undefined;
+
+      // Handle image upload if present
+      if (file) {
+        if (process.env.NODE_ENV === "production" && process.env.AWS_S3_BUCKET) {
+          imageUrl = await uploadToS3(file);
+        } else {
+          // In dev, serve from local uploads
+          imageUrl = `/uploads/${path.basename(file.path)}`;
+        }
+      } else if (posterId) {
+          // If no new image, but posterId is provided, we might use that logic, 
+          // but for visual chat typically we want the real-time frame.
+          // For now, we'll proceed even without image if not provided, basically acting as text-only
+          // or we could enforce image.
+      }
+
+      console.log(`Processing visual query: "${text}" with image: ${imageUrl}`);
+
+      const result = await AIPipelineService.processVisualQuery({
+          query: text,
+          imageUrl,
+          posterId
+      });
+
+      return res.json({
+        success: true,
+        response: result.response,
+        audioUrl: result.audioUrl,
+        emotion: result.emotion
+      });
+
+    } catch (error: any) {
+      console.error("Visual chat error:", error);
+      return next(error);
+    }
+  }
+);
 
 // Handle voice interaction queries with context
 router.post("/voice_query", async (req: Request, res: Response, next: NextFunction) => {

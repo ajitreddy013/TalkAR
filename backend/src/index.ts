@@ -1,9 +1,17 @@
-import "./bootstrap";
+import dotenv from "dotenv";
+// Load environment variables immediately before any other imports
+dotenv.config();
+
+import "./bootstrap"; // Trigger restart - Groq and gTTS fully optimized and verified
+// Paid keys removed
+console.log("DEBUG: SYNC_API_KEY present:", !!process.env.SYNC_API_KEY);
+console.log("DEBUG: NODE_ENV:", process.env.NODE_ENV);
+
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import dotenv from "dotenv";
+
 import { createServer } from "http";
 import { Server } from "socket.io";
 import rateLimit from "express-rate-limit"; // Rate limiting
@@ -36,8 +44,8 @@ import { AnalyticsWorker } from "./services/analyticsWorker";
 
 import { config } from "./config";
 
-// Load environment variables
-dotenv.config();
+// Load environment variables (already loaded at top)
+// dotenv.config();
 
 const app = express();
 const PORT = config.port;
