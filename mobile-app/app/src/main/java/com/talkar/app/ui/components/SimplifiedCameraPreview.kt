@@ -73,12 +73,20 @@ fun SimplifiedCameraPreview(
     var isTemplatesLoading by remember { mutableStateOf(true) } // 🔥 New loading state
     val haptic = LocalHapticFeedback.current
     
+    // 🔥 Job reference for managing high-frequency detection coroutines
+    val detectionJobRef = remember { java.util.concurrent.atomic.AtomicReference<kotlinx.coroutines.Job?>(null) }
+    
     // Search timing logic
     var searchStartTime by remember { mutableStateOf(System.currentTimeMillis()) }
     var currentSessionMatched by remember { mutableStateOf(false) }
     
     // 🔥 New Guidance Logic Variable
     var guidanceMessage by remember { mutableStateOf("") }
+    
+    // 🔥 Detection Cooldown state
+    var lastDetectedId by remember { mutableStateOf<String?>(null) }
+    var lastDetectedTimestamp by remember { mutableStateOf(0L) }
+    private val COOLDOWN_WINDOW_MS = 5000L
     
     // Load reference images from backend on startup
     LaunchedEffect(Unit) {
@@ -113,10 +121,10 @@ fun SimplifiedCameraPreview(
         val startTime = System.currentTimeMillis()
         while(isActive && isFaceDetected && !isHybridMatched) {
             val elapsed = System.currentTimeMillis() - startTime
-            if (elapsed > 7000) { // > 7 seconds
-                 guidanceMessage = "Move closer to the product"
-            } else if (elapsed > 12000) {
+            if (elapsed > 12000) { // Check larger threshold first
                  guidanceMessage = "Ensure product is centered"
+            } else if (elapsed > 7000) {
+                 guidanceMessage = "Move closer to the product"
             }
             kotlinx.coroutines.delay(1000)
         }
@@ -171,91 +179,103 @@ fun SimplifiedCameraPreview(
                                             val image = InputImage.fromMediaImage(
                                                 mediaImage,
                                                 imageProxy.imageInfo.rotationDegrees
-                                            )
                                             
-                                            coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
-                                                if (isPaused || isImageMatched) {
-                                                    imageProxy.close()
-                                                    return@launch
-                                                }
+                                            // Detection handled via a separate LaunchedEffect using shared state
+                                            // We'll store the bitmap in a state for the effect or just pass it to a handler.
+                                            // Actually, launching from here is the source of the exception.
+                                            // Let's refactor to ensure it's safe.
+                                            // Refactored to use a managed job for safety
+                                            if (isPaused || isImageMatched) {
+                                                imageProxy.close()
+                                            } else {
+                                                // Cancel previous detection if it's still running (throttle)
+                                                detectionJobRef.get()?.cancel()
                                                 
-                                                try {
-                                                    // Convert to Bitmap and ROTATE for ImageMatcher
-                                                    val originalBitmap = imageProxy.toBitmap()
-                                                    val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-                                                    val bitmap = if (rotationDegrees != 0) {
-                                                        val matrix = android.graphics.Matrix()
-                                                        matrix.postRotate(rotationDegrees.toFloat())
-                                                        android.graphics.Bitmap.createBitmap(
-                                                            originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true
+                                                detectionJobRef.set(coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+                                                    try {
+                                                        // Convert to Bitmap and ROTATE for ImageMatcher
+                                                        val originalBitmap = imageProxy.toBitmap()
+                                                        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                                                        val bitmap = if (rotationDegrees != 0) {
+                                                            val matrix = android.graphics.Matrix()
+                                                            matrix.postRotate(rotationDegrees.toFloat())
+                                                            android.graphics.Bitmap.createBitmap(
+                                                                originalBitmap, 0, 0, originalBitmap.width, originalBitmap.height, matrix, true
+                                                            )
+                                                        } else {
+                                                            originalBitmap
+                                                        }
+                                                        
+                                                        // Run both detections
+                                                        val image = InputImage.fromMediaImage(
+                                                            mediaImage,
+                                                            imageProxy.imageInfo.rotationDegrees
                                                         )
-                                                    } else {
-                                                        originalBitmap
-                                                    }
-                                                    
-                                                    // Run both detections
-                                                    val faceResult = faceDetector.detectFaceAndLips(image)
-                                                    val matchResult = imageMatcher.matchFrame(bitmap)
-                                                    
-                                                    // Update UI states on main thread
-                                                    launch(kotlinx.coroutines.Dispatchers.Main) {
-                                                        isFaceDetected = faceResult.hasFace
-                                                        isImageMatched = matchResult != null
-                                                    }
-                                                    
-                                                    // Granular telemetry for diagnosis
-                                                    val faceInfo = if (faceResult.hasFace) {
-                                                        "Face[Bounds=${faceResult.faceBounds}, Mouth=${faceResult.mouthOutline.size} pts]"
-                                                    } else "NoFace"
-                                                    
-                                                    val matchInfo = if (matchResult != null) {
-                                                        val source = if (imageMatcher.isUsingFallback) "Local" else "Backend"
-                                                        "Match[ID=${matchResult.imageId}, Name=${matchResult.imageName}, Source=$source, Score=${String.format("%.2f", matchResult.confidence)}]"
-                                                    } else {
-                                                        val templateCount = imageMatcher.getTemplateCount()
-                                                        val source = if (imageMatcher.isUsingFallback) "Local" else "Backend"
-                                                        "NoMatch[Templates=$templateCount, Source=$source]"
-                                                    }
-                                                    
-                                                    Log.d("SimplifiedCamera", "Diagnostics: $faceInfo, $matchInfo")
-                                                    
-                                                    // Only "Matched" if image is found (Face is optional)
-                                                    val isMatched = matchResult != null
-                                                    isHybridMatched = isMatched
-                                                    
-                                                    if (isMatched && matchResult != null) {
+                                                        val faceResult = faceDetector.detectFaceAndLips(image)
+                                                        val matchResult = imageMatcher.matchFrame(bitmap)
+                                                        
+                                                        // Update UI states on main thread
                                                         launch(kotlinx.coroutines.Dispatchers.Main) {
-                                                            if (!currentSessionMatched) {
-                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                currentSessionMatched = true
+                                                            isFaceDetected = faceResult.hasFace
+                                                            // Keep isImageMatched true only if it's a NEW match (cooldown check happens later)
+                                                        }
+                                                        
+                                                        // Gate diagnostic logs
+                                                        if (com.talkar.app.BuildConfig.DEBUG) {
+                                                            val faceInfo = if (faceResult.hasFace) "Face" else "NoFace"
+                                                            val matchInfo = if (matchResult != null) "Match[${matchResult.imageName}]" else "NoMatch"
+                                                            Log.v("SimplifiedCamera", "Diagnostics: $faceInfo, $matchInfo")
+                                                        }
+                                                        
+                                                        if (matchResult != null) {
+                                                            val currentTime = System.currentTimeMillis()
+                                                            val isSameObject = matchResult.imageId == lastDetectedId
+                                                            val withinCooldown = (currentTime - lastDetectedTimestamp) < COOLDOWN_WINDOW_MS
+                                                            
+                                                            if (isSameObject && withinCooldown) {
+                                                                // Skip re-triggering within cooldown
+                                                                if (com.talkar.app.BuildConfig.DEBUG) {
+                                                                    Log.v("SimplifiedCamera", "Skipping re-detection of ${matchResult.imageName} (Cooldown)")
+                                                                }
+                                                            } else {
+                                                                // Legitimate match or cooldown expired
+                                                                lastDetectedId = matchResult.imageId
+                                                                lastDetectedTimestamp = currentTime
+                                                                
+                                                                isHybridMatched = true
+                                                                launch(kotlinx.coroutines.Dispatchers.Main) {
+                                                                    isImageMatched = true
+                                                                    if (!currentSessionMatched) {
+                                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                        currentSessionMatched = true
+                                                                    }
+                                                                    
+                                                                    val recognition = ImageRecognition(
+                                                                        id = matchResult.imageId,
+                                                                        imageUrl = "",
+                                                                        name = matchResult.imageName,
+                                                                        description = matchResult.description,
+                                                                        dialogues = (matchResult.dialogues as? List<com.talkar.app.data.models.Dialogue>) ?: emptyList(),
+                                                                        createdAt = System.currentTimeMillis().toString(),
+                                                                        updatedAt = System.currentTimeMillis().toString()
+                                                                    )
+                                                                    onImageRecognized(recognition)
+                                                                }
+                                                                Log.i("SimplifiedCamera", "MATCH CONFIRMED: ${matchResult.imageName}")
                                                             }
                                                         }
                                                         
-                                                        Log.i("SimplifiedCamera", "MATCH SUCCESS: ${matchResult.imageName} (Confidence: ${String.format("%.2f", matchResult.confidence)})")
-                                                        
-                                                        launch(kotlinx.coroutines.Dispatchers.Main) {
-                                                            val recognition = ImageRecognition(
-                                                                id = matchResult.imageId,
-                                                                imageUrl = "",
-                                                                name = matchResult.imageName,
-                                                                description = matchResult.description,
-                                                                dialogues = (matchResult.dialogues as? List<com.talkar.app.data.models.Dialogue>) ?: emptyList(),
-                                                                createdAt = System.currentTimeMillis().toString(),
-                                                                updatedAt = System.currentTimeMillis().toString()
-                                                            )
-                                                            onImageRecognized(recognition)
+                                                        if (bitmap != originalBitmap) bitmap.recycle()
+                                                        originalBitmap.recycle()
+                                                    } catch (e: Exception) {
+                                                        if (e !is kotlinx.coroutines.CancellationException) {
+                                                            Log.e("SimplifiedCamera", "Hybrid detection error", e)
                                                         }
-                                                    } else if (faceResult.hasFace && matchResult == null) {
-                                                        Log.v("SimplifiedCamera", "FACE TRACKED: Waiting for high-confidence image match...")
+                                                    } finally {
+                                                        imageProxy.close()
                                                     }
-                                                    
-                                                    if (bitmap != originalBitmap) bitmap.recycle()
-                                                    originalBitmap.recycle()
-                                                } catch (e: Exception) {
-                                                    Log.e("SimplifiedCamera", "Hybrid detection error", e)
-                                                } finally {
-                                                    imageProxy.close()
                                                 }
+                                            }
                                             }
                                         } else {
                                             imageProxy.close()
@@ -268,38 +288,6 @@ fun SimplifiedCameraPreview(
                                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                                 .build()
 
-                            // Link the controller to this capture instance
-                            captureController?.captureImage = { onResult: (Bitmap) -> Unit ->
-                                imageCapture.takePicture(
-                                    ContextCompat.getMainExecutor(ctx),
-                                    object : ImageCapture.OnImageCapturedCallback() {
-                                        override fun onCaptureSuccess(image: ImageProxy) {
-                                            try {
-                                                val bitmap = image.toBitmap() // Uses existing extension
-                                                val rotation = image.imageInfo.rotationDegrees
-                                                val finalBitmap = if (rotation != 0) {
-                                                    val matrix = android.graphics.Matrix()
-                                                    matrix.postRotate(rotation.toFloat())
-                                                    android.graphics.Bitmap.createBitmap(
-                                                        bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
-                                                    )
-                                                } else {
-                                                    bitmap
-                                                }
-                                                onResult(finalBitmap)
-                                            } catch (e: Exception) {
-                                                Log.e("SimplifiedCamera", "Failed to process captured image", e)
-                                            } finally {
-                                                image.close()
-                                            }
-                                        }
-
-                                        override fun onError(exception: ImageCaptureException) {
-                                            Log.e("SimplifiedCamera", "Image capture failed", exception)
-                                        }
-                                    }
-                                )
-                            }
 
                             // Select back camera
                             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -330,7 +318,46 @@ fun SimplifiedCameraPreview(
 
                     previewView
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                update = { _ ->
+                    // 🔥 Link/Update the controller to the current capture instance on each recomposition
+                    captureController?.captureImage = { onResult: (Bitmap) -> Unit ->
+                        imageCapture.takePicture(
+                            ContextCompat.getMainExecutor(context),
+                            object : ImageCapture.OnImageCapturedCallback() {
+                                override fun onCaptureSuccess(image: ImageProxy) {
+                                    try {
+                                        val bitmap = image.toBitmap() // Uses existing extension
+                                        val rotation = image.imageInfo.rotationDegrees
+                                        val finalBitmap = if (rotation != 0) {
+                                            val matrix = android.graphics.Matrix()
+                                            matrix.postRotate(rotation.toFloat())
+                                            val rotated = android.graphics.Bitmap.createBitmap(
+                                                bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
+                                            )
+                                            // Recycle original bitmap if a new one was created
+                                            if (rotated != bitmap) {
+                                                bitmap.recycle()
+                                            }
+                                            rotated
+                                        } else {
+                                            bitmap
+                                        }
+                                        onResult(finalBitmap)
+                                    } catch (e: Exception) {
+                                        Log.e("SimplifiedCamera", "Failed to process captured image", e)
+                                    } finally {
+                                        image.close()
+                                    }
+                                }
+
+                                override fun onError(exception: ImageCaptureException) {
+                                    Log.e("SimplifiedCamera", "Image capture failed", exception)
+                                }
+                            }
+                        )
+                    }
+                }
             )
             
             // Google Lens Style Corners
@@ -431,6 +458,7 @@ fun SimplifiedCameraPreview(
             
             DisposableEffect(Unit) {
                 onDispose {
+                    detectionJobRef.value?.cancel()
                     faceDetector.stop()
                     imageMatcher.clearTemplates()
                     cameraExecutor.shutdown()

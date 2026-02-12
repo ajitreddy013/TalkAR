@@ -54,11 +54,31 @@ fun Week2ARScreen(
     val betaFeedbackService = remember { BetaFeedbackService() }
     val isBeta = BuildConfig.IS_BETA
     
+    // Initialize Core Services (Unify instances to sync cooldowns)
+    val speechManager = remember { SpeechRecognitionManager(context) }
+    val imageMatcher = remember { ImageMatcherService(context) }
+    val arService = remember { ConversationalARService(context, speechManager, imageMatcher) }
+    
+    // 🔥 ALWAYS Ensure cleanup runs at top-level
+    DisposableEffect(Unit) {
+        onDispose {
+            arService.destroy()
+            speechManager.destroy()
+            imageMatcher.destroy()
+        }
+    }
+    
     // Permission State
     val permissions = remember { 
         arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
     }
-    var permissionsGranted by remember { mutableStateOf(false) }
+    var permissionsGranted by remember { 
+        mutableStateOf(
+            permissions.all { 
+                androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED 
+            }
+        )
+    }
     
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -67,13 +87,11 @@ fun Week2ARScreen(
     }
     
     LaunchedEffect(Unit) {
-        launcher.launch(permissions)
+        // Only launch if not all permissions are granted
+        if (!permissionsGranted) {
+            launcher.launch(permissions)
+        }
     }
-    
-    // Initialize Core Services (Unify instances to sync cooldowns)
-    val speechManager = remember { SpeechRecognitionManager(context) }
-    val imageMatcher = remember { ImageMatcherService(context) }
-    val arService = remember { ConversationalARService(context, speechManager, imageMatcher) }
     
     // Observe Service State
     val arState by arService.state.collectAsState()
@@ -172,9 +190,19 @@ fun Week2ARScreen(
                                     arService.confirmSelection()
                                     
                                     // 2. Capture "Visual Context" for the upcoming query
-                                    captureController.capture { bitmap ->
-                                        android.util.Log.d("Week2ARScreen", "Captured visual context for query")
-                                        arService.setContextImage(bitmap)
+                                    try {
+                                        captureController.capture { bitmap ->
+                                            if (bitmap != null) {
+                                                android.util.Log.d("Week2ARScreen", "Captured visual context for query")
+                                                arService.setContextImage(bitmap)
+                                            } else {
+                                                android.util.Log.e("Week2ARScreen", "Captured bitmap is null")
+                                                Toast.makeText(context, "Failed to capture visual context", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("Week2ARScreen", "Capture execution failed", e)
+                                        Toast.makeText(context, "Camera busy. Please try again.", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             )
@@ -318,12 +346,6 @@ fun Week2ARScreen(
                 )
             }
             
-            DisposableEffect(Unit) {
-                onDispose {
-                    arService.reset()
-                    speechManager.destroy()
-                }
-            }
         }
     }
 }

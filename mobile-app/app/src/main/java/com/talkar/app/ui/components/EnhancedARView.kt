@@ -115,6 +115,12 @@ fun SimpleARView(
     
     val imageMatcher = remember { ImageMatcherService(context) }
     
+    DisposableEffect(imageMatcher) {
+        onDispose {
+            imageMatcher.destroy()
+        }
+    }
+    
     // Use the simplified camera preview
     SimplifiedCameraPreview(
         modifier = modifier.fillMaxSize(),

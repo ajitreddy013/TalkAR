@@ -83,6 +83,21 @@ fun VideoOverlayView(
             update = { /* Surface callback handles updates */ },
             modifier = Modifier.fillMaxSize()
         )
+
+        DisposableEffect(arService.mediaPlayer) {
+            onDispose {
+                arService.mediaPlayer?.apply {
+                    try {
+                        setOnPreparedListener(null)
+                        setOnCompletionListener(null)
+                        setOnErrorListener(null)
+                        setDisplay(null)
+                    } catch (e: Exception) {
+                        android.util.Log.e("VideoOverlay", "Error cleaning up MediaPlayer", e)
+                    }
+                }
+            }
+        }
         
         if (isBuffering) {
             CircularProgressIndicator(
