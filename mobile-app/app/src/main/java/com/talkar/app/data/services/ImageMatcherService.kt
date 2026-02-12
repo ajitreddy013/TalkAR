@@ -109,19 +109,18 @@ class ImageMatcherService(private val context: Context) {
             mutex.withLock {
                 // Do NOT recycle immediately. Copy to local list then clear main list.
                 // This allows us to recycle safely outside the lock after readers finish.
-                val toRecycle = templates.toList()
+                toRecycle = templates.toList()
                 templates.clear()
-                
-                // Release lock, then wait for readers
-                mutex.unlock() 
-                try {
-                    while (activeReaders.get() > 0) {
-                        kotlinx.coroutines.delay(10)
-                    }
-                    toRecycle.forEach { it.bitmap.recycle() }
-                } finally {
-                    mutex.lock() // Re-acquire logic for consistency if needed, but actually we are done with this block
+            }
+            
+            // Wait for readers then recycle
+            try {
+                while (activeReaders.get() > 0) {
+                    kotlinx.coroutines.delay(10)
                 }
+                toRecycle.forEach { it.bitmap.recycle() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error recycling bitmaps", e)
             }
             
             // Download and prepare each image
@@ -173,19 +172,18 @@ class ImageMatcherService(private val context: Context) {
             
             mutex.withLock {
                  // Do NOT recycle immediately. Copy to local list then clear main list.
-                val toRecycle = templates.toList()
+                toRecycle = templates.toList()
                 templates.clear()
-                
-                // Release lock, wait for readers, then recycle
-                mutex.unlock()
-                try {
-                    while (activeReaders.get() > 0) {
-                        kotlinx.coroutines.delay(10)
-                    }
-                    toRecycle.forEach { it.bitmap.recycle() }
-                } finally {
-                    mutex.lock()
+            }
+            
+            // Wait for readers then recycle
+            try {
+                while (activeReaders.get() > 0) {
+                    kotlinx.coroutines.delay(10)
                 }
+                toRecycle.forEach { it.bitmap.recycle() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error recycling bitmaps", e)
             }
             
             fallbackImages.forEach { item ->
@@ -402,18 +400,18 @@ class ImageMatcherService(private val context: Context) {
      */
     suspend fun clearTemplates() {
         mutex.withLock {
-            val toRecycle = templates.toList()
+            toRecycle = templates.toList()
             templates.clear()
-            
-            mutex.unlock()
-            try {
-                 while (activeReaders.get() > 0) {
-                    kotlinx.coroutines.delay(10)
-                }
-                toRecycle.forEach { it.bitmap.recycle() }
-            } finally {
-                mutex.lock()
+        }
+        
+        // Wait for readers then recycle
+        try {
+                while (activeReaders.get() > 0) {
+                kotlinx.coroutines.delay(10)
             }
+            toRecycle.forEach { it.bitmap.recycle() }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error recycling bitmaps", e)
         }
         Log.d(TAG, "Cleared all templates")
     }
