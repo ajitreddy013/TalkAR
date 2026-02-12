@@ -14,6 +14,7 @@ import http from "http";
 import { SimpleCache } from "../utils/simpleCache";
 import { storeInteraction } from "../utils/memoryHelper";
 import { logInteraction } from "../utils/interactionLogger";
+import { config } from "../config";
 
 interface ScriptGenerationRequest {
   imageId: string;
@@ -105,6 +106,14 @@ const productMetadataCache = new Map<string, ProductMetadata>();
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
 
+// Global error tracker for debugging
+let lastAIPipelineErrors: Record<string, string | null> = {
+  script: null,
+  audio: null,
+  lipsync: null,
+  general: null
+};
+
 export class AIPipelineService {
   /**
    * Generate complete AI pipeline: script → audio → lipsync
@@ -155,6 +164,47 @@ export class AIPipelineService {
     PerformanceMetricsService.startTracking(requestId, imageId);
     
     try {
+      // Step 0: Check DB cache for previously generated lip-sync video
+      const cachedAvatar = await Avatar.findOne({ 
+        where: { 
+          name: { [require('sequelize').Op.like]: `%${imageId}%` }
+        }
+      });
+      
+      if (cachedAvatar && (cachedAvatar as any).avatarVideoUrl) {
+        const cachedVideoUrl = (cachedAvatar as any).avatarVideoUrl;
+        console.log(`🎬 Cache HIT: Returning cached lip-sync video for ${imageId}: ${cachedVideoUrl}`);
+        
+        // Still generate script for the response metadata
+        const scriptResponse = await this.generateDynamicScript(imageId, userId);
+        const { script, language, tone, image_url, product_name } = scriptResponse;
+        
+        // Generate audio (also cached by in-memory cache)
+        const audioResponse = await this.generateAudioStreaming({
+          text: script,
+          language: language.toLowerCase() === 'hindi' ? 'hi' : 'en',
+          emotion: tone
+        });
+        
+        return {
+          script,
+          audioUrl: audioResponse.audioUrl,
+          videoUrl: cachedVideoUrl,
+          metadata: {
+            image_id: imageId,
+            product_name,
+            language,
+            tone,
+            image_url: image_url.replace("http://localhost:4000", config.baseUrl),
+            generated_at: new Date().toISOString(),
+            user_id: userId || "anonymous",
+            cached: true
+          }
+        };
+      }
+      
+      console.log(`🎬 Cache MISS: Generating new lip-sync video for ${imageId}`);
+      
       // Step 1: Pre-generate placeholder audio while generating script
       const placeholderAudioPromise = this.generatePlaceholderAudio();
       
@@ -221,12 +271,22 @@ export class AIPipelineService {
           product_name,
           language,
           tone,
-          image_url,
+          image_url: image_url.replace("http://localhost:4000", config.baseUrl),
           generated_at: new Date().toISOString(),
-          user_id: userId || "anonymous"
+          user_id: userId || "anonymous",
+          debug_keys: {
+            openai: !!process.env.OPENAI_API_KEY,
+            elevenlabs: !!process.env.ELEVENLABS_API_KEY,
+            groq: !!process.env.GROQCLOUD_API_KEY,
+            gtts: process.env.TTS_PROVIDER === 'gtts',
+            sync: !!process.env.SYNC_API_KEY,
+            node_env: process.env.NODE_ENV,
+            errors: lastAIPipelineErrors
+          }
         }
       };
-    } catch (error) {
+    } catch (error: any) {
+      lastAIPipelineErrors.general = error.message;
       console.error("Dynamic ad content generation error:", error);
       PerformanceMetricsService.recordFailure(requestId, error instanceof Error ? error.message : "Unknown error");
       
@@ -603,7 +663,7 @@ export class AIPipelineService {
       }
 
       // In development, use mock implementation
-      if (process.env.NODE_ENV === "development" || (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY)) {
+      if (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY) {
         console.log("Using mock script generation");
         const result = this.generateMockScript(request);
         this.setInCache(cacheKey, result);
@@ -624,7 +684,8 @@ export class AIPipelineService {
 
       this.setInCache(cacheKey, result);
       return result;
-    } catch (error) {
+    } catch (error: any) {
+      lastAIPipelineErrors.script = error.message;
       console.error("Script generation error:", error);
       // Fallback to mock implementation if real API fails
       console.log("Falling back to mock script generation");
@@ -649,7 +710,7 @@ export class AIPipelineService {
       };
 
       // In development, use mock implementation
-      if (process.env.NODE_ENV === "development" || (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY)) {
+      if (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY) {
         console.log("Using mock metadata-based script generation");
         const result = this.generateMockMetadataScript(metadata, userPreferences);
         return result;
@@ -659,17 +720,21 @@ export class AIPipelineService {
       const aiProvider = process.env.AI_PROVIDER || "openai"; // Default to OpenAI
 
       let result: ScriptGenerationResponse;
-      if (aiProvider === "groq" && process.env.GROQCLOUD_API_KEY) {
+      if (aiProvider === "groq" && process.env.GROQCLOUD_API_KEY && process.env.GROQCLOUD_API_KEY !== 'your-groqcloud-api-key') {
         console.log("Calling GroqCloud API for metadata-based script generation");
         result = await this.callGroqCloudAPI(request);
+      } else if (aiProvider === "ollama") {
+        console.log("Calling Ollama for metadata-based script generation");
+        result = await this.callOllamaAPI(request);
       } else {
         console.log("Calling OpenAI API for metadata-based script generation");
         result = await this.callOpenAIAPI(request);
       }
 
       return result;
-    } catch (error) {
-      console.error("Metadata-based script generation error:", error);
+    } catch (error: any) {
+      lastAIPipelineErrors.script = `Metadata script error: ${error.response?.data || error.message}`;
+      console.error("Metadata-based script generation error:", error.response?.data || error.message);
       // Fallback to mock implementation if real API fails
       console.log("Falling back to mock metadata-based script generation");
       return this.generateMockMetadataScript(metadata, userPreferences);
@@ -741,7 +806,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // Validate emotion if provided
-      const validEmotions = ["neutral", "happy", "surprised", "serious"];
+      const validEmotions = ["neutral", "happy", "surprised", "serious", "excited", "friendly"];
       if (request.emotion && !validEmotions.includes(request.emotion)) {
         throw new Error(`Invalid emotion. Valid emotions: ${validEmotions.join(", ")}`);
       }
@@ -755,7 +820,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // In development, use mock implementation
-      if (process.env.NODE_ENV === "development" || (!process.env.ELEVENLABS_API_KEY && !process.env.GOOGLE_CLOUD_TTS_API_KEY)) {
+      if (!process.env.GOOGLE_CLOUD_TTS_API_KEY && !process.env.TTS_PROVIDER) {
         console.log("Using mock audio generation");
         const result = this.generateMockAudio(request);
         this.setInCache(cacheKey, result);
@@ -763,20 +828,22 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // Determine which TTS provider to use
-      const ttsProvider = process.env.TTS_PROVIDER || "elevenlabs"; // Default to ElevenLabs
+      const ttsProvider = process.env.TTS_PROVIDER || "gtts"; // Default to gTTS
 
       let result: AudioGenerationResponse;
       if (ttsProvider === "google" && process.env.GOOGLE_CLOUD_TTS_API_KEY) {
         console.log("Calling Google Cloud TTS API for audio generation");
         result = await this.callGoogleCloudTTS(request);
       } else {
-        console.log("Calling ElevenLabs API for audio generation");
-        result = await this.callElevenLabsAPI(request);
+        // Default to gTTS
+        console.log("Calling gTTS (Google Translate TTS) for free audio generation");
+        result = await this.callGTTSAPI(request);
       }
 
       this.setInCache(cacheKey, result);
       return result;
-    } catch (error) {
+    } catch (error: any) {
+      lastAIPipelineErrors.audio = error.message;
       console.error("Audio generation error:", error);
       // Fallback to mock implementation if real API fails
       console.log("Falling back to mock audio generation");
@@ -816,7 +883,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // In development, use mock implementation
-      if (process.env.NODE_ENV === "development" || (!process.env.ELEVENLABS_API_KEY && !process.env.GOOGLE_CLOUD_TTS_API_KEY)) {
+      if (!process.env.ELEVENLABS_API_KEY && !process.env.GOOGLE_CLOUD_TTS_API_KEY && process.env.TTS_PROVIDER !== 'gtts') {
         console.log("Using mock audio generation for streaming");
         const result = this.generateMockAudio(request);
         this.setInCache(cacheKey, result);
@@ -824,15 +891,16 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // Determine which TTS provider to use
-      const ttsProvider = process.env.TTS_PROVIDER || "elevenlabs"; // Default to ElevenLabs
+      const ttsProvider = process.env.TTS_PROVIDER || "gtts"; // Default to gTTS
 
       let result: AudioGenerationResponse;
       if (ttsProvider === "google" && process.env.GOOGLE_CLOUD_TTS_API_KEY) {
         console.log("Calling Google Cloud TTS API for streaming audio generation");
         result = await this.callGoogleCloudTTS(request);
       } else {
-        console.log("Calling ElevenLabs API for streaming audio generation");
-        result = await this.callElevenLabsAPI(request);
+        // Default to gTTS
+        console.log("Calling gTTS for streaming audio generation");
+        result = await this.callGTTSAPI(request);
       }
 
       this.setInCache(cacheKey, result);
@@ -859,7 +927,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // In development, use mock implementation
-      if (process.env.NODE_ENV === "development" || !process.env.SYNC_API_KEY) {
+      if (!process.env.SYNC_API_KEY) {
         console.log("Using mock lip-sync generation");
         const result = this.generateMockLipSync(request);
         this.setInCache(cacheKey, result);
@@ -871,7 +939,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       const result = await this.callSyncAPI(request);
       this.setInCache(cacheKey, result);
       return result;
-    } catch (error) {
+    } catch (error: any) {
+      lastAIPipelineErrors.lipsync = error.message;
       console.error("Lip-sync generation error:", error);
       // Fallback to mock implementation if real API fails
       console.log("Falling back to mock lip-sync generation");
@@ -894,7 +963,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // In development, use mock implementation
-      if (process.env.NODE_ENV === "development" || !process.env.SYNC_API_KEY) {
+      if (!process.env.SYNC_API_KEY) {
         console.log("Using mock lip-sync generation for streaming");
         const result = this.generateMockLipSync(request);
         this.setInCache(cacheKey, result);
@@ -1029,7 +1098,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // Validate emotion if provided
-      const validEmotions = ["neutral", "happy", "surprised", "serious"];
+      const validEmotions = ["neutral", "happy", "surprised", "serious", "excited", "friendly"];
       if (request.emotion && !validEmotions.includes(request.emotion)) {
         throw new Error(`Invalid emotion. Valid emotions: ${validEmotions.join(", ")}`);
       }
@@ -1102,72 +1171,44 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
   }
 
   /**
-   * Call ElevenLabs API for audio generation
+   * Call gTTS (Google Translate TTS) for free audio generation
+   * This uses a public endpoint and requires no API key
    */
-  private static async callElevenLabsAPI(request: AudioGenerationRequest): Promise<AudioGenerationResponse> {
+  private static async callGTTSAPI(request: AudioGenerationRequest): Promise<AudioGenerationResponse> {
     try {
-      const elevenLabsApiKey = process.env.ELEVENLABS_API_KEY;
-      const elevenLabsApiUrl = "https://api.elevenlabs.io/v1/text-to-speech";
+      // Use Google Translate TTS public endpoint
+      // format: http://translate.google.com/translate_tts?ie=UTF-8&total=1&idx=0&textlen=32&client=tw-ob&q=TEXT&tl=en
+      const baseUrl = "http://translate.google.com/translate_tts";
+      const language = request.language || "en";
       
-      if (!elevenLabsApiKey) {
-        throw new Error("ElevenLabs API key not configured");
-      }
-
-      // Validate request parameters
-      if (!request.text || request.text.length === 0) {
-        throw new Error("Text is required for audio generation");
-      }
-
-      if (request.text.length > 5000) {
-        throw new Error("Text too long for audio generation (max 5000 characters)");
-      }
-
-      if (request.language && request.language.length !== 2) {
-        throw new Error("Invalid language code (should be 2 characters)");
-      }
-
-      // Validate emotion if provided
-      const validEmotions = ["neutral", "happy", "surprised", "serious"];
-      if (request.emotion && !validEmotions.includes(request.emotion)) {
-        throw new Error(`Invalid emotion. Valid emotions: ${validEmotions.join(", ")}`);
-      }
-
-      // Select voice based on language and emotion
-      const voiceId = this.selectVoiceId(request.language, request.emotion);
+      // Sanitize text: remove newlines, extra spaces, and problematic characters
+      const sanitizedText = request.text
+        .replace(/[\n\r]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 200); // gTTS limit is roughly 200 chars for this endpoint
       
-      // Get HTTP agent from app for keep-alive
-      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
-      
-      const response = await axios.post(
-        `${elevenLabsApiUrl}/${voiceId}`,
-        {
-          text: request.text,
-          model_id: "eleven_monolingual_v1",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.5
-          }
+      const response = await axios.get(baseUrl, {
+        params: {
+          ie: "UTF-8",
+          tl: language,
+          client: "tw-ob",
+          q: sanitizedText,
+          total: 1,
+          idx: 0,
+          textlen: sanitizedText.length
         },
-        {
-          headers: {
-            "xi-api-key": elevenLabsApiKey,
-            "Content-Type": "application/json"
-          },
-          responseType: "arraybuffer",
-          timeout: 10000, // Reduced timeout for faster failure
-          httpAgent: agent
+        responseType: "arraybuffer",
+        timeout: 10000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
-      );
-
-      // Validate response
-      if (!response.data) {
-        throw new Error("Empty response from ElevenLabs API");
-      }
+      });
 
       // Save audio to file
       const audioBuffer = response.data;
       const audioFilename = await this.saveAudioToFile(audioBuffer, request.text, request.language, request.emotion);
-      const audioUrl = `http://localhost:3000/audio/${audioFilename}`;
+      const audioUrl = `${config.baseUrl}/audio/${audioFilename}`;
       
       // Calculate approximate duration based on text length
       const duration = Math.max(5, Math.min(30, request.text.length / 15));
@@ -1176,27 +1217,17 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
         audioUrl,
         duration
       };
+
     } catch (error: any) {
-      console.error("ElevenLabs API error:", error.response?.data || error.message);
-      
-      // Handle specific error cases
-      if (error.response?.status === 401) {
-        throw new Error("Invalid ElevenLabs API key");
-      } else if (error.response?.status === 429) {
-        throw new Error("ElevenLabs API rate limit exceeded");
-      } else if (error.response?.status === 400) {
-        throw new Error(`ElevenLabs API bad request: ${error.response.data?.error?.message || 'Invalid request'}`);
-      } else if (error.response?.status >= 500) {
-        throw new Error("ElevenLabs API service unavailable");
-      } else if (error.code === 'ECONNABORTED') {
-        throw new Error("ElevenLabs API request timeout");
-      } else if (error.code === 'ENOTFOUND') {
-        throw new Error("ElevenLabs API service unreachable");
-      }
-      
-      throw new Error(`Failed to generate audio with ElevenLabs API: ${error.message}`);
+      console.error("gTTS API error:", error.message);
+      throw new Error(`Failed to generate audio with gTTS: ${error.message}`);
     }
   }
+
+  /**
+   * Call ElevenLabs API for audio generation
+   */
+  // callElevenLabsAPI method removed
 
   /**
    * Call Google Cloud TTS API for audio generation
@@ -1224,7 +1255,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // Validate emotion if provided
-      const validEmotions = ["neutral", "happy", "surprised", "serious"];
+      const validEmotions = ["neutral", "happy", "surprised", "serious", "excited", "friendly"];
       if (request.emotion && !validEmotions.includes(request.emotion)) {
         throw new Error(`Invalid emotion. Valid emotions: ${validEmotions.join(", ")}`);
       }
@@ -1264,7 +1295,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       // Save audio to file
       const audioBuffer = response.data;
       const audioFilename = await this.saveAudioToFile(audioBuffer, request.text, request.language, request.emotion);
-      const audioUrl = `http://localhost:3000/audio/${audioFilename}`;
+      const audioUrl = `${config.baseUrl}/audio/${audioFilename}`;
       
       // Calculate approximate duration based on text length
       const duration = Math.max(5, Math.min(30, request.text.length / 15));
@@ -1296,51 +1327,38 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
   }
 
   /**
-   * Call GroqCloud API for script generation
+  /**
+   * Call GroqCloud API for script generation (Modern Chat Completions)
    */
   private static async callGroqCloudAPI(request: ScriptGenerationRequest): Promise<ScriptGenerationResponse> {
     try {
       const groqCloudApiKey = process.env.GROQCLOUD_API_KEY;
-      const groqCloudApiUrl = "https://api.groqcloud.com/v1/generate";
+      const groqCloudApiUrl = "https://api.groq.com/openai/v1/chat/completions";
       
       if (!groqCloudApiKey) {
         throw new Error("GroqCloud API key not configured");
       }
 
-      // Validate request parameters
-      if (request.productName && request.productName.length > 100) {
-        throw new Error("Product name too long (max 100 characters)");
-      }
-
-      if (request.language && request.language.length !== 2) {
-        throw new Error("Invalid language code (should be 2 characters)");
-      }
-
-      // Create a prompt based on the request type
-      let prompt: string;
+      // Create a system prompt
+      const systemPrompt = "You are an AI advertisement script writer. Generate concise, engaging scripts for augmented reality experiences.";
+      
+      // Create user prompt
+      let userPrompt: string;
       if (request.productName) {
-        // Product description prompt
-        prompt = `Describe the product "${request.productName}" in 2 engaging lines for an advertisement.`;
+        userPrompt = `Generate a 2-line punchy advertisement script for ${request.productName}. Language: ${request.language}. Emotion: ${request.emotion || "excited"}. Only return the script text.`;
       } else {
-        // Museum guide prompt (existing)
-        prompt = `Generate a short, engaging script for an interactive museum guide. 
-        The guide should welcome visitors and provide interesting information about the exhibit.
-        Language: ${request.language}
-        Emotion: ${request.emotion || "neutral"}
-        Keep it concise and conversational.`;
-      }
-
-      // Validate emotion if provided
-      const validEmotions = ["neutral", "happy", "surprised", "serious"];
-      if (request.emotion && !validEmotions.includes(request.emotion)) {
-        throw new Error(`Invalid emotion. Valid emotions: ${validEmotions.join(", ")}`);
+        userPrompt = `Generate a short, engaging script for an interactive museum guide about exhibit ${request.imageId}. Language: ${request.language}. Emotion: ${request.emotion || "neutral"}. Keep it under 200 characters. Only return the script text.`;
       }
 
       const response = await axios.post(
         groqCloudApiUrl,
         {
-          prompt,
-          max_tokens: request.productName ? 100 : 150,
+          model: "llama-3.1-8b-instant",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          max_tokens: 150,
           temperature: 0.7
         },
         {
@@ -1348,19 +1366,14 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
             "Authorization": `Bearer ${groqCloudApiKey}`,
             "Content-Type": "application/json"
           },
-          timeout: 10000 // 10 second timeout
+          timeout: 10000
         }
       );
 
-      const text = response.data.choices[0].text.trim();
+      const text = response.data.choices[0].message.content.trim();
       
-      // Validate response
-      if (!text || text.length === 0) {
-        throw new Error("Empty response from GroqCloud API");
-      }
-
-      if (text.length > 500) {
-        throw new Error("Response too long from GroqCloud API");
+      if (!text) {
+        throw new Error("Empty response from Groq API");
       }
 
       return {
@@ -1369,24 +1382,60 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
         emotion: request.emotion
       };
     } catch (error: any) {
-      console.error("GroqCloud API error:", error.response?.data || error.message);
+      console.error("Groq API error:", error.response?.data || error.message);
       
-      // Handle specific error cases
       if (error.response?.status === 401) {
-        throw new Error("Invalid GroqCloud API key");
+        throw new Error("Invalid Groq API key");
       } else if (error.response?.status === 429) {
-        throw new Error("GroqCloud API rate limit exceeded");
-      } else if (error.response?.status === 400) {
-        throw new Error(`GroqCloud API bad request: ${error.response.data?.error?.message || 'Invalid request'}`);
-      } else if (error.response?.status >= 500) {
-        throw new Error("GroqCloud API service unavailable");
-      } else if (error.code === 'ECONNABORTED') {
-        throw new Error("GroqCloud API request timeout");
-      } else if (error.code === 'ENOTFOUND') {
-        throw new Error("GroqCloud API service unreachable");
+        throw new Error("Groq API rate limit exceeded");
       }
       
-      throw new Error(`Failed to generate script with GroqCloud API: ${error.message}`);
+      throw new Error(`Failed to generate script with Groq API: ${error.message}`);
+    }
+  }
+
+  /**
+   * Call local Ollama API for script generation
+   */
+  private static async callOllamaAPI(request: ScriptGenerationRequest): Promise<ScriptGenerationResponse> {
+    try {
+      const ollamaHost = process.env.OLLAMA_HOST || "http://localhost:11434";
+      const ollamaModel = process.env.OLLAMA_MODEL || "llama3.2";
+      
+      const systemPrompt = "You are an AI advertisement script writer. Generate concise, engaging scripts for augmented reality experiences.";
+      let userPrompt: string;
+      
+      if (request.productName) {
+        userPrompt = `Generate a 2-line punchy advertisement script for ${request.productName}. Language: ${request.language}. Emotion: ${request.emotion || "excited"}. Only return the script text.`;
+      } else {
+        userPrompt = `Generate a short, engaging script for an interactive museum guide about exhibit ${request.imageId}. Language: ${request.language}. Emotion: ${request.emotion || "neutral"}. Keep it under 200 characters. Only return the script text.`;
+      }
+
+      console.log(`Calling Ollama model ${ollamaModel} at ${ollamaHost}...`);
+      const response = await axios.post(`${ollamaHost}/api/generate`, {
+        model: ollamaModel,
+        prompt: `${systemPrompt}\n\n${userPrompt}`,
+        stream: false,
+        options: {
+          temperature: 0.7,
+          num_predict: 150
+        }
+      });
+
+      const text = response.data.response.trim();
+      
+      if (!text) {
+        throw new Error("Empty response from Ollama API");
+      }
+
+      return {
+        text,
+        language: request.language,
+        emotion: request.emotion
+      };
+    } catch (error: any) {
+      console.error("Ollama API error:", error.message);
+      throw new Error(`Failed to generate script with Ollama: ${error.message}`);
     }
   }
 
@@ -1409,21 +1458,44 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
         throw new Error("Audio URL is required for lip-sync generation");
       }
 
-      // Prepare request body matching Sync.so API requirements
-      const requestBody: any = {
-        audio_url: request.audioUrl
-      };
-
-      // Add avatar if provided, otherwise use imageId
+      // Determine avatar URL first
       let avatarUrl: string;
       if (request.avatar) {
-        requestBody.avatar = request.avatar;
-        avatarUrl = request.avatar;
+        // If it's just a filename, convert to full URL
+        if (!request.avatar.startsWith('http')) {
+          avatarUrl = `${config.baseUrl}/uploads/${request.avatar}`;
+        } else {
+          avatarUrl = request.avatar;
+        }
       } else {
-        // Get image URL from database or use default
-        avatarUrl = `https://talkar-image-storage.com/${request.imageId}.jpg`;
-        requestBody.avatar = avatarUrl;
+        // Fallback: Use current BASE_URL to construct avatar URL
+        avatarUrl = `${config.baseUrl}/uploads/${request.imageId}.jpg`;
       }
+
+      // Upload local files to public host so Sync.so can access them
+      // (localhost.run tunnels are unreliable for external API access)
+      const publicAudioUrl = await this.uploadToPublicHost(request.audioUrl, 'audio');
+      const publicAvatarUrl = await this.uploadToPublicHost(avatarUrl, 'avatar');
+      
+      console.log(`Sync.so inputs - Avatar: ${publicAvatarUrl}, Audio: ${publicAudioUrl}`);
+
+      // Prepare request body matching Sync.so API v2 requirements
+      const requestBody: any = {
+        model: "lipsync-2",
+        input: [
+          {
+            type: "video",
+            url: publicAvatarUrl
+          },
+          {
+            type: "audio",
+            url: publicAudioUrl
+          }
+        ],
+        options: {
+          sync_mode: "loop"
+        }
+      };
 
       // Add emotion if provided
       if (request.emotion) {
@@ -1449,21 +1521,21 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       );
 
       // Handle job ID and polling if needed
-      if (response.data.jobId) {
-        // This is an async job, need to poll for completion
-        const jobId = response.data.jobId;
-        console.log(`Sync.so job started with ID: ${jobId}`);
+      if (response.data.id) {
+        // This is an async job, poll for completion
+        const jobId = response.data.id;
+        console.log(`Sync.so job started with ID: ${jobId}. Polling for completion...`);
         
-        // Poll for completion (in a real implementation, this would be done asynchronously)
-        // For now, we'll return the job ID and let the client poll
-        return {
-          videoUrl: response.data.videoUrl || response.data.outputUrl || "",
-          duration: response.data.duration || 15,
-          jobId: jobId
-        };
+        // Poll until video is ready (up to ~60s)
+        const pollResult = await this.pollSyncJob(jobId);
+        
+        // Save completed video URL to database
+        await this.saveVideoUrlToDatabase(request.imageId, pollResult.videoUrl, avatarUrl, request.emotion);
+        
+        return pollResult;
       } else {
         // Job completed immediately
-        const videoUrl = response.data.videoUrl || response.data.outputUrl;
+        const videoUrl = response.data.outputUrl || response.data.videoUrl;
         const duration = response.data.duration || 15;
 
         // Save video URL to database
@@ -1475,11 +1547,15 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
         };
       }
     } catch (error: any) {
-      console.error("Sync.so API error:", error.response?.data || error.message);
+      console.error("Sync.so API error:", JSON.stringify(error.response?.data, null, 2) || error.message);
+      console.error("Sync.so API status:", error.response?.status);
       
       // Handle specific error cases
       if (error.response?.status === 401) {
         throw new Error("Invalid Sync API key");
+      } else if (error.response?.status === 422) {
+        const detail = JSON.stringify(error.response.data);
+        throw new Error(`Sync API validation error (422): ${detail}`);
       } else if (error.response?.status === 429) {
         throw new Error("Sync API rate limit exceeded");
       } else if (error.response?.status === 400) {
@@ -1493,6 +1569,143 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
       
       throw new Error(`Failed to generate lip-sync video with Sync.so API: ${error.message}`);
+    }
+  }
+
+  /**
+   * Upload a local file to a public temporary hosting service (tmpfiles.org)
+   * so that external APIs like Sync.so can access it.
+   * For audio files, converts to WAV format first (Sync.so requires proper audio headers).
+   */
+  private static async uploadToPublicHost(url: string, fileType: string): Promise<string> {
+    try {
+      // Resolve the URL to a local file path
+      let localPath: string | null = null;
+      
+      if (url.includes('/audio/')) {
+        const filename = url.split('/audio/').pop();
+        if (filename) {
+          localPath = path.join(process.cwd(), 'audio', filename);
+        }
+      } else if (url.includes('/uploads/')) {
+        const filename = url.split('/uploads/').pop();
+        if (filename) {
+          localPath = path.join(process.cwd(), 'uploads', filename);
+        }
+      }
+      
+      if (!localPath || !fs.existsSync(localPath)) {
+        console.warn(`Cannot find local file for ${url} (resolved: ${localPath}). Using original URL.`);
+        return url;
+      }
+      
+      // For audio files, convert to WAV format with proper headers
+      let uploadPath = localPath;
+      if (fileType === 'audio') {
+        const wavPath = localPath.replace(/\.\w+$/, '.wav');
+        try {
+          const { execSync } = require('child_process');
+          // Convert to 16-bit PCM WAV (Sync.so requirement)
+          execSync(`ffmpeg -y -i "${localPath}" -ar 44100 -ac 1 -sample_fmt s16 "${wavPath}"`, {
+            timeout: 10000,
+            stdio: 'pipe'
+          });
+          if (fs.existsSync(wavPath)) {
+            console.log(`Converted audio to WAV: ${wavPath}`);
+            uploadPath = wavPath;
+          }
+        } catch (convErr: any) {
+          console.warn(`ffmpeg audio conversion failed, uploading original: ${convErr.message}`);
+        }
+      } else if (fileType === 'avatar') {
+        // Sync.so lipsync-2 requires VIDEO input, not static image.
+        // Convert image to 5-second loopable MP4 video.
+        const mp4Path = localPath.replace(/\.\w+$/, '.mp4');
+        try {
+          const { execSync } = require('child_process');
+          // Create 5s video, 25fps, H.264, yuv420p (compatible pixel format)
+          // Scale to even dimensions to satisfy x264
+          execSync(`ffmpeg -y -loop 1 -i "${localPath}" -c:v libx264 -t 5 -pix_fmt yuv420p -r 25 -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" "${mp4Path}"`, {
+            timeout: 20000,
+            stdio: 'pipe'
+          });
+          if (fs.existsSync(mp4Path)) {
+            console.log(`Converted avatar image to MP4 video: ${mp4Path}`);
+            uploadPath = mp4Path;
+          }
+        } catch (convErr: any) {
+           console.warn(`ffmpeg video conversion failed, uploading original: ${convErr.message}`);
+        }
+      }
+      
+      console.log(`Uploading ${fileType} file to public host: ${uploadPath}`);
+      
+      // Upload to uguu.se (Primary - reliable, supports HTTPS and HEAD requests)
+      const FormData = (await import('form-data')).default;
+      let directUrl: string | null = null;
+      
+      try {
+        console.log(`Uploading to uguu.se: ${uploadPath}`);
+        const form = new FormData();
+        form.append('files[]', fs.createReadStream(uploadPath));
+        
+        const response = await axios.post('https://uguu.se/upload.php', form, {
+          headers: form.getHeaders(),
+          timeout: 60000
+        });
+        
+        if (response.data?.success && response.data?.files?.[0]?.url) {
+          directUrl = response.data.files[0].url;
+          console.log(`Uploaded ${fileType} to uguu.se: ${directUrl}`);
+        }
+      } catch (err: any) {
+        console.warn(`uguu.se upload failed: ${err.message}. Trying backup host...`);
+      }
+      
+      // Fallback to tmpfiles.org if uguu.se failed
+      if (!directUrl) {
+         try {
+           console.log(`Uploading to tmpfiles.org (backup): ${uploadPath}`);
+           const form = new FormData();
+           form.append('file', fs.createReadStream(uploadPath));
+           
+           const response = await axios.post('https://tmpfiles.org/api/v1/upload', form, {
+             headers: form.getHeaders(),
+             timeout: 60000 
+           });
+           
+           if (response.data?.status === 'success' && response.data?.data?.url) {
+             let tmpUrl = response.data.data.url;
+             // Ensure HTTPS
+             if (tmpUrl.startsWith('http:')) {
+               tmpUrl = tmpUrl.replace('http:', 'https:');
+             }
+             directUrl = tmpUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
+             console.log(`Uploaded ${fileType} to tmpfiles.org: ${directUrl}`);
+           }
+         } catch (err: any) {
+           console.error(`tmpfiles.org upload failed: ${err.message}`);
+         }
+      }
+
+      // Clean up temporary converted files
+      if (uploadPath !== localPath && fs.existsSync(uploadPath)) {
+        fs.unlinkSync(uploadPath);
+      }
+      
+      if (directUrl) {
+        return directUrl;
+      }
+      
+      console.warn(`All public upload attempts failed for ${fileType}. Using original URL.`);
+      return url;
+      
+      console.warn(`tmpfiles.org upload failed for ${fileType}. Using original URL.`);
+      return url;
+    } catch (error: any) {
+      console.error(`Failed to upload ${fileType} to public host:`, error.message);
+      // Fallback to original URL
+      return url;
     }
   }
 
@@ -1520,7 +1733,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
           const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
           
           const response = await axios.get(
-            `${syncApiUrl}/jobs/${jobId}`,
+            `${syncApiUrl}/generations/${jobId}`,
             {
               headers: {
                 "x-api-key": syncApiKey,
@@ -1531,20 +1744,22 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
             }
           );
 
-          const jobStatus = response.data.status?.toLowerCase();
+          const jobStatus = response.data.status;
           
-          if (jobStatus === "completed") {
-            const videoUrl = response.data.videoUrl || response.data.outputUrl;
+          if (jobStatus === "COMPLETED") {
+            const videoUrl = response.data.output_url || response.data.outputUrl || response.data.videoUrl;
             const duration = response.data.duration || 15;
             
-            console.log(`Sync.so job ${jobId} completed successfully`);
+            console.log(`Sync.so job ${jobId} completed successfully. Video: ${videoUrl}`);
             return {
               videoUrl,
               duration
             };
-          } else if (jobStatus === "failed") {
-            throw new Error(`Sync.so job failed: ${response.data.error || 'Unknown error'}`);
-          } else if (jobStatus === "processing" || jobStatus === "queued") {
+          } else if (jobStatus === "FAILED" || jobStatus === "REJECTED") {
+            const errorDetail = response.data.error || response.data.message || JSON.stringify(response.data);
+            console.error(`Sync.so job ${jobId} failed. Full response:`, JSON.stringify(response.data, null, 2));
+            throw new Error(`Sync.so job failed: ${errorDetail}`);
+          } else if (jobStatus === "PROCESSING" || jobStatus === "PENDING") {
             // Job still processing, wait and retry
             if (attempt < maxAttempts) {
               await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -2050,7 +2265,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       };
 
       // In development, use mock implementation
-      if (process.env.NODE_ENV === "development" || (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY)) {
+      if (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY) {
         console.log("Using mock product script generation");
         const result = this.generateMockProductScript(productName);
         this.setInCache(cacheKey, { text: result });
@@ -2178,7 +2393,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       
       // Save mock audio to file
       const audioFilename = this.saveMockAudioToFile(audioContent, request.text, request.language, request.emotion);
-      const audioUrl = `http://localhost:3000/audio/${audioFilename}`;
+      const audioUrl = `${config.baseUrl}/audio/${audioFilename}`;
 
       return {
         audioUrl,
@@ -2247,7 +2462,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
     // Generate mock video URL
     const videoId = uuidv4().substring(0, 8);
     const emotionSuffix = request.emotion ? `-${request.emotion}` : "";
-    const videoUrl = `https://mock-lipsync-service.com/videos/${videoId}${emotionSuffix}.mp4`;
+    // Use local fallback video instead of fake URL
+    const videoUrl = `${config.baseUrl}/uploads/sunrich_lipsync.mp4`;
     
     // Mock duration
     const duration = 15; // 15 seconds
@@ -2397,8 +2613,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
   }> {
     try {
       // In development, use mock implementation
-      if (process.env.NODE_ENV === "development" || 
-          (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY)) {
+      if (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY) {
         console.log("Using mock conversational response");
         return this.generateMockConversationalResponse(request);
       }
@@ -2588,7 +2803,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       const response = await axios.post(
         groqApiUrl,
         {
-          model: "llama3-groq-70b-8192-tool-use-preview", // or "llama-3.2-90b-vision-preview"
+          model: "llama-3.3-70b-versatile", 
           messages: [
             {
               role: "system",
@@ -2643,4 +2858,227 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       throw new Error(`Failed to generate conversational response with GroqCloud API: ${error.message}`);
     }
   }
+
+  /**
+   * Process a visual query using multimodal AI (GPT-4o or LLaMA Vision)
+   */
+  static async processVisualQuery(request: {
+    query: string;
+    imageUrl?: string;
+    posterId?: string;
+  }): Promise<{ response: string; audioUrl?: string; videoUrl?: string; emotion?: string }> {
+    try {
+        // Validation
+        if (!process.env.OPENAI_API_KEY && !process.env.GROQCLOUD_API_KEY) {
+             console.log("Using mock visual response (No API Keys)");
+             return {
+                 response: `I see you are asking about "${request.query}". Since I am running in mock mode, I can't analyze the image, but it looks interesting!`,
+                 emotion: "friendly"
+             }
+        }
+
+        const aiProvider = process.env.AI_PROVIDER || "openai";
+        
+        // Construct System Prompt
+        const systemPrompt = `You are a Visual AI assistant for TalkAR. 
+        User is showing you an image from their camera and asking a question.
+        Analyze the image and answer the question concisely and conversationally.
+        Keep the response under 50 words unless asked for more detail.
+        Tone: Friendly and helpful.`;
+
+        let resultText = "";
+
+        if (aiProvider === "openai" && process.env.OPENAI_API_KEY) {
+            // GPT-4o supports image_url natively
+            const messages: any[] = [
+                { role: "system", content: systemPrompt },
+                {
+                    role: "user",
+                    content: [
+                        { type: "text", text: request.query },
+                    ]
+                }
+            ];
+
+            // Add image if available
+            if (request.imageUrl) {
+                // If local path (starts with /uploads), we need to handle it. 
+                // OpenAI requires public URL or base64. 
+                // For dev (localhost), we must use Base64 if not exposed via ngrok.
+                
+                let imageUrlToSend = request.imageUrl;
+                if (!imageUrlToSend.startsWith('http')) {
+                    // It's a local path like /uploads/xyz.jpg
+                     // We need to read file and convert to base64
+                     try {
+                        const fs = require('fs');
+                        const path = require('path');
+                        // Assuming running from backend root or dist
+                        // Our uploads dir is at project root/uploads
+                        // request.imageUrl is like "/uploads/foo.jpg"
+                        const relativePath = request.imageUrl.startsWith('/') ? request.imageUrl.slice(1) : request.imageUrl;
+                        const fullPath = path.join(process.cwd(), relativePath);
+                        
+                        if (fs.existsSync(fullPath)) {
+                            const imageBuffer = fs.readFileSync(fullPath);
+                            const base64Image = imageBuffer.toString('base64');
+                            const mimeType = path.extname(fullPath) === '.png' ? 'image/png' : 'image/jpeg';
+                            imageUrlToSend = `data:${mimeType};base64,${base64Image}`;
+                        } else {
+                            console.warn("Image file not found locally:", fullPath);
+                        }
+                     } catch (e) {
+                         console.error("Failed to read local image for base64 conversion", e);
+                     }
+                }
+
+                messages[1].content.push({
+                    type: "image_url",
+                    image_url: {
+                        url: imageUrlToSend,
+                        detail: "low" // 'low' is cheaper/faster, 'high' for detail
+                    }
+                });
+            }
+
+            const openaiApiUrl = "https://api.openai.com/v1/chat/completions";
+             const response = await axios.post(
+                openaiApiUrl,
+                {
+                  model: "gpt-4o", // Or gpt-4o-mini if it supports vision (check docs) - gpt-4o-mini does support vision
+                  messages: messages,
+                  max_tokens: 150,
+                  temperature: 0.7
+                },
+                {
+                  headers: {
+                    "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+                    "Content-Type": "application/json"
+                  },
+                  timeout: 20000
+                }
+              );
+              resultText = response.data.choices[0].message.content.trim();
+
+        } else if (aiProvider === "groq" && process.env.GROQCLOUD_API_KEY) {
+             // LLaMA 3.2 90b Vision Preview or 11b Vision Preview
+             // Groq Vision Implementation
+             
+             // Similar logic for image handling
+             const messages: any[] = [
+                 { role: "system", content: systemPrompt },
+                 {
+                    role: "user",
+                    content: [
+                        { type: "text", text: request.query }
+                    ]
+                 }
+            ];
+            
+            if (request.imageUrl) {
+                 // Logic to convert to standard format Groq accepts (often similar to OpenAI)
+                 // Or just pass URL if hosted.
+                 // For now, assuming text-only fallback if specialized vision logic isn't perfect
+                 
+                 // TODO: Implement Groq Vision specific payload
+                 messages[1].content.push({
+                     type: "image_url",
+                     image_url: {
+                         url: request.imageUrl // Ensure this is reachable or base64
+                     }
+                 });
+            }
+            
+            const response = await axios.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                {
+                    model: "llama-3.2-90b-vision-preview",
+                    messages: messages,
+                    max_tokens: 150,
+                    temperature: 0.7
+                },
+                {
+                    headers: {
+                        "Authorization": `Bearer ${process.env.GROQCLOUD_API_KEY}`,
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+            resultText = response.data.choices[0].message.content.trim();
+        } else {
+            // Fallback
+             return {
+                 response: "I'm sorry, my vision capabilities are currently unavailable.",
+                 emotion: "neutral"
+             };
+        }
+
+        // Generate Audio
+        console.log("Generating audio for visual response...");
+        const audioResponse = await this.generateAudioStreaming({
+            text: resultText,
+            language: "en",
+            emotion: "friendly"
+        });
+
+        // Determine Avatar
+        let avatarUrl = "default";
+        if (request.posterId === "poster_sunrich_123") {
+             const port = process.env.PORT || 4000;
+             // Use local IP if feasible or localhost. Android emulator needs special handling if localhost.
+             // But the backend is generating the video via external API or internal?
+             // generateLipSyncStreaming likely calls Sync.so or similar.
+             // If Sync.so, it needs a public URL or at least reachable.
+             // If running locally with Sync.so, untunnelled localhost won't work for them to download the image.
+             // BUT, if we have ngrok, we should use that.
+             // If no ngrok, maybe we can't do custom avatar easily without S3.
+             // For now, let's assume standard behavior or fallback.
+             
+             // However, for this specific demo, if we don't have public URL, 
+             // we might rely on a pre-hosted URL or S3 if configured.
+             if (process.env.AWS_S3_BUCKET) {
+                 // If S3 is enabled, we should assuming the avatar is there or we uploaded it.
+                 // For now, let's construct a localhost URL and hope the lipsync service can handle it 
+                 // (e.g. if it's a local mock or if we are using a tunnel).
+                 const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
+                 avatarUrl = `${baseUrl}/uploads/sunrich_avatar.jpeg`;
+             } else {
+                 const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
+                 avatarUrl = `${baseUrl}/uploads/sunrich_avatar.jpeg`;
+             }
+        } else if (request.imageUrl && request.imageUrl.startsWith('http')) {
+             avatarUrl = request.imageUrl;
+        }
+
+        // Generate LipSync
+        console.log(`Generating lip-sync with avatar: ${avatarUrl}`);
+        // We use catching here to not fail the whole request if lipsync fails
+        let videoUrl: string | undefined;
+        try {
+            const lipSyncResponse = await this.generateLipSyncStreaming({
+                imageId: request.posterId || "visual_query",
+                audioUrl: audioResponse.audioUrl,
+                emotion: "friendly",
+                avatar: avatarUrl
+            });
+            videoUrl = lipSyncResponse.videoUrl;
+        } catch (e) {
+            console.error("Failed to generate lip-sync for visual query", e);
+        }
+
+        return {
+            response: resultText,
+            audioUrl: audioResponse.audioUrl,
+            videoUrl: videoUrl,
+            emotion: "friendly",
+        };
+    } catch (error: any) {
+        console.error("Visual Query Error:", error.response?.data || error.message);
+        return {
+            response: "I'm having trouble seeing right now. Please try again.",
+            emotion: "sad"
+        };
+    }
+  }
+
 }
