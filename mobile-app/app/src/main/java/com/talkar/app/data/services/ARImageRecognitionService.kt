@@ -115,6 +115,13 @@ class ARImageRecognitionService(private val context: Context) {
         }
     }
     
+    // HTTP client with timeout configuration
+    private val httpClient = okhttp3.OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     /**
      * Load images from backend and add to ARCore database
      */
@@ -125,78 +132,137 @@ class ARImageRecognitionService(private val context: Context) {
             // Move heavy image processing to background thread to avoid ANR
             coroutineScope.launch {
                 try {
-                    Log.d(tag, "Creating test images for AR recognition on background thread")
+                    Log.d(tag, "Fetching images from API...")
                     
-                    // Create test images on background thread with delays to prevent overwhelming
-                    createTestImage("test_image")
-                    delay(500) // Small delay between images
+                    // Get API client from application
+                    val apiClient = com.talkar.app.TalkARApplication.instance.apiClient
+                    val response = apiClient.getImages()
                     
-                    createTestImage("test_image_2")
-                    delay(500)
-                    
-                    createTestImage("test_image_3")
-                    
-                    Log.d(tag, "Completed loading test images for AR recognition")
-                    Log.d(tag, "Image database initialized successfully")
+                    if (response.isSuccessful && response.body() != null) {
+                        val images = response.body()!!
+                        Log.d(tag, "Found ${images.size} images from backend")
+                        
+                        var addedCount = 0
+                        
+                        // Download and add each image
+                        images.forEach { image ->
+                            if (image.isActive) {
+                                // Use full image URL
+                                val fullImageUrl = com.talkar.app.data.config.ApiConfig.getFullImageUrl(image.imageUrl)
+                                Log.d(tag, "Downloading image: ${image.name} from $fullImageUrl")
+                                
+                                val bitmap = downloadImageBitmap(fullImageUrl)
+                                if (bitmap != null) {
+                                    // Add to AR database
+                                    // Use image.id as the key for deterministic matching
+                                    imageDatabase?.let { database ->
+                                        // We use image.id as the ARCore name so we can match it back easily
+                                        // But we also log the real name
+                                        try {
+                                             // Preprocess the image for better AR tracking
+                                            val processedBitmap = preprocessImageForAR(bitmap)
+                                            
+                                            // Validate
+                                            if (validateImageQuality(processedBitmap)) {
+                                                database.addImage(image.id, processedBitmap)
+                                                Log.d(tag, "Added to AR database: ${image.name} (ID: ${image.id})")
+                                                addedCount++
+                                            } else {
+                                                Log.w(tag, "Skipping ${image.name} - insufficient quality")
+                                            }
+                                        } catch (e: Exception) {
+                                            Log.e(tag, "Failed to add ${image.name} to database", e)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Log.d(tag, "Successfully added $addedCount images to AR database")
+                        
+                    } else {
+                        Log.e(tag, "Failed to fetch images: ${response.code()}")
+                        // Fallback to test images if API fails
+                        createTestImage("test_image")
+                    }
                     
                 } catch (e: Exception) {
-                    Log.e(tag, "Failed to create test images on background thread", e)
+                    Log.e(tag, "Failed to load images from backend", e)
+                    // Fallback to test images
+                    createTestImage("test_image")
                 }
             }
             
         } catch (e: Exception) {
-            Log.e(tag, "Failed to load images from backend", e)
+            Log.e(tag, "Failed to initiate backend image loading", e)
         }
     }
-    
+
     /**
-     * Load images from backend API and add to ARCore database
+     * Load images from backend API (called by ViewModel)
      */
     suspend fun loadImagesFromAPI(images: List<ImageRecognition>) {
         try {
-            images.forEach { image ->
-                // Download image from URL and add to ARCore database
-                loadImageFromUrl(image.name, image.imageUrl)
+            Log.d(tag, "Loading ${images.size} images from API via ViewModel")
+            
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                var addedCount = 0
+                images.forEach { image ->
+                    try {
+                        val fullImageUrl = com.talkar.app.data.config.ApiConfig.getFullImageUrl(image.imageUrl)
+                        val bitmap = downloadImageBitmap(fullImageUrl)
+                        
+                        if (bitmap != null) {
+                                val processedBitmap = preprocessImageForAR(bitmap)
+                                if (validateImageQuality(processedBitmap)) {
+                                    imageDatabase?.let { db ->
+                                        db.addImage(image.id, processedBitmap)
+                                        Log.d(tag, "Added image from VM: ${image.name} (ID: ${image.id})")
+                                        addedCount++
+                                    }
+                                }
+                            }
+                    } catch (e: Exception) {
+                        Log.e(tag, "Failed to load image from VM: ${image.name}", e)
+                    }
+                }
+                Log.d(tag, "ViewModel loaded $addedCount images into AR database")
             }
-            Log.d(tag, "Loaded ${images.size} images from backend")
         } catch (e: Exception) {
             Log.e(tag, "Failed to load images from API", e)
         }
     }
-    
+
     /**
-     * Load a single image from URL and add to ARCore database
+     * Download single image bitmap from URL using OkHttp
      */
-    private fun loadImageFromUrl(name: String, imageUrl: String) {
-        try {
-            // This would download the image from the URL and convert to bitmap
-            // For now, we'll create a placeholder
-            val testBitmap = createTestPatternBitmap()
-            
-            // Preprocess the image for better AR tracking
-            val processedBitmap = preprocessImageForAR(testBitmap)
-            
-            // Validate image quality before adding to database
-            if (validateImageQuality(processedBitmap)) {
-                imageDatabase?.let { database ->
-                    database.addImage(name, processedBitmap)
-                    Log.d(tag, "Added image to ARCore database: $name")
+    private suspend fun downloadImageBitmap(imageUrl: String): android.graphics.Bitmap? {
+        return kotlinx.coroutines.withContext(Dispatchers.IO) {
+            try {
+                val request = okhttp3.Request.Builder()
+                    .url(imageUrl)
+                    .build()
+                
+                httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.e(tag, "Failed to download image: HTTP ${response.code}")
+                        return@use null
+                    }
+                    
+                    val inputStream = response.body?.byteStream()
+                    if (inputStream == null) return@use null
+                    
+                    android.graphics.BitmapFactory.decodeStream(inputStream)
                 }
-            } else {
-                Log.w(tag, "Image failed quality validation: $name")
-                _error.value = "Image '$name' does not meet ARCore quality requirements"
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to download image from URL: $imageUrl", e)
+                null
             }
-        } catch (e: ImageInsufficientQualityException) {
-            Log.e(tag, "Image has insufficient quality for ARCore: $name", e)
-            _error.value = "Image '$name' quality is insufficient for AR tracking. Please ensure images have good contrast and multiple distinct features."
-        } catch (e: Exception) {
-            Log.e(tag, "Failed to load image from URL: $imageUrl", e)
-            _error.value = "Failed to load image '$name': ${e.message}"
         }
     }
-    
+
     /**
-     * Create a test image for AR recognition
+     * Create a test image for AR recognition (Fallback)
      */
     private fun createTestImage(name: String = "test_image") {
         try {
@@ -206,19 +272,12 @@ class ARImageRecognitionService(private val context: Context) {
             // Validate image quality before adding to database
             if (validateImageQuality(testBitmap)) {
                 imageDatabase?.let { database ->
-                    val augmentedImage = database.addImage(name, testBitmap)
+                    database.addImage(name, testBitmap)
                     Log.d(tag, "Added test image to ARCore database: $name")
                 }
-            } else {
-                Log.w(tag, "Test image failed quality validation: $name")
-                _error.value = "Test image '$name' does not meet ARCore quality requirements"
             }
-        } catch (e: ImageInsufficientQualityException) {
-            Log.e(tag, "Test image has insufficient quality for ARCore", e)
-            _error.value = "Test image quality is insufficient for AR tracking. Please ensure images have good contrast and multiple distinct features."
         } catch (e: Exception) {
             Log.e(tag, "Failed to create test image", e)
-            _error.value = "Failed to create test image: ${e.message}"
         }
     }
     
@@ -661,7 +720,7 @@ class ARImageRecognitionService(private val context: Context) {
                 
                 // Validate image quality before adding to database
                 if (validateImageQuality(processedBitmap)) {
-                    val augmentedImage = database.addImage(imageName, processedBitmap)
+                    database.addImage(imageName, processedBitmap)
                     Log.d(tag, "Added reference image: $imageName")
                     true
                 } else {

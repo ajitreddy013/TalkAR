@@ -1,5 +1,22 @@
 [
   {
+    "image_id": "poster_sunrich_123",
+    "product_name": "Sunrich Water Bottle",
+    "category": "Beverage",
+    "tone": "excited",
+    "language": "English",
+    "image_url": "http://localhost:4000/uploads/Sunrich_Water_Bottle_avatar.png",
+    "brand": "Sunrich",
+    "price": 29.99,
+    "currency": "USD",
+    "features": [
+      "Eco-friendly materials",
+      "Keeps drinks cold for 24 hours",
+      "Leak-proof design"
+    ],
+    "description": "Stay hydrated in style with our premium water bottle made from sustainable materials."
+  },
+  {
     "image_id": "poster_01",
     "product_name": "Sunrich Water Bottle",
     "category": "Beverage",

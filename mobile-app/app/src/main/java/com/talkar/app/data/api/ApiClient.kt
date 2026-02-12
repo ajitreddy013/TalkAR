@@ -2,6 +2,8 @@ package com.talkar.app.data.api
 
 import com.talkar.app.data.models.*
 import com.talkar.app.data.config.ApiConfig
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 import okhttp3.Interceptor
@@ -74,6 +76,15 @@ interface ApiService {
     
     @GET("images/{id}")
     suspend fun getImageById(@Path("id") id: String): Response<BackendImage>
+    // AI Pipeline
+    
+    @Multipart
+    @POST("visual-chat")
+    suspend fun sendVisualQuery(
+        @Part image: MultipartBody.Part,
+        @Part("text") text: RequestBody,
+        @Part("posterId") posterId: RequestBody? = null
+    ): Response<ConversationalQueryResponse>
     
     @POST("sync/generate")
     suspend fun generateSyncVideo(@Body request: SyncRequest): Response<SyncResponse>
@@ -171,8 +182,9 @@ object ApiClient {
                     .build()
                 chain.proceed(request)
             }
-            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
             .build()
 
         return retrofit2.Retrofit.Builder()

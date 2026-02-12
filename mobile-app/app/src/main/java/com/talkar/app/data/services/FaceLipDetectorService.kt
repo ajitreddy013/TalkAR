@@ -17,7 +17,7 @@ class FaceLipDetectorService {
     private val detector = FaceDetection.getClient(
         FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
             .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
             .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
             .setMinFaceSize(0.15f)
@@ -42,7 +42,7 @@ class FaceLipDetectorService {
                 FaceLipResult(false)
             } else {
                 val face = faces[0] // Focus on the primary face
-                
+
                 val upperLipTop = face.getContour(FaceContour.UPPER_LIP_TOP)?.points ?: emptyList<android.graphics.PointF>()
                 val upperLipBottom = face.getContour(FaceContour.UPPER_LIP_BOTTOM)?.points ?: emptyList<android.graphics.PointF>()
                 val lowerLipTop = face.getContour(FaceContour.LOWER_LIP_TOP)?.points ?: emptyList<android.graphics.PointF>()
@@ -57,7 +57,7 @@ class FaceLipDetectorService {
                 )
             }
         } catch (e: Exception) {
-            Log.e("FaceLipDetector", "Face detection failed", e)
+            Log.e("FaceLipDetector", "Face detection failed: ${e.message}")
             FaceLipResult(false)
         }
     }

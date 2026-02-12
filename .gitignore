@@ -345,3 +345,4 @@ docs/_build/
 *.backup
 *.old
 *.orig
+.aider*

@@ -23,6 +23,7 @@ import com.talkar.app.ui.components.EmotionalAvatarView // Add import for Emotio
 import com.talkar.app.ui.components.StreamingAvatarView // Add import for StreamingAvatarView
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
 import com.talkar.app.ui.components.AvatarPlaceholder
+import com.talkar.app.data.services.ImageMatcherService
 import kotlinx.coroutines.delay
 
 /**
@@ -112,8 +113,12 @@ fun SimpleARView(
     var isDetecting by remember { mutableStateOf(false) }
     var detectedImage by remember { mutableStateOf<String?>(null) }
     
+    val imageMatcher = remember { ImageMatcherService(context) }
+    
     // Use the simplified camera preview
     SimplifiedCameraPreview(
+        modifier = modifier.fillMaxSize(),
+        imageMatcher = imageMatcher,
         onImageRecognized = { imageRecognition ->
             isDetecting = true
             detectedImage = imageRecognition.name
@@ -121,8 +126,7 @@ fun SimpleARView(
         },
         onError = { error ->
             Log.e("SimpleARView", "Camera error: $error")
-        },
-        modifier = modifier.fillMaxSize()
+        }
     )
     
     // Camera is now provided by SimplifiedCameraPreview

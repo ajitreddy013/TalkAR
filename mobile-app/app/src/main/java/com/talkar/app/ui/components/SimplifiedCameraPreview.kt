@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -33,6 +34,7 @@ import com.talkar.app.data.services.FaceLipDetectorService
 import com.talkar.app.data.services.ImageMatcherService
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -42,9 +44,12 @@ import java.util.concurrent.Executors
  */
 @Composable
 fun SimplifiedCameraPreview(
+    modifier: Modifier = Modifier,
+    isPaused: Boolean = false,
+    imageMatcher: ImageMatcherService, // 🔥 Shared instance
     onImageRecognized: (ImageRecognition) -> Unit,
     onError: (String) -> Unit,
-    modifier: Modifier = Modifier
+    captureController: CaptureController? = null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -59,33 +64,63 @@ fun SimplifiedCameraPreview(
         )
     }
 
-    // Initialize face and image matcher services
+    // Initialize face detector service
     val faceDetector = remember { FaceLipDetectorService() }
-    val imageMatcher = remember { ImageMatcherService(context) }
     
     var isHybridMatched by remember { mutableStateOf(false) }
     var isFaceDetected by remember { mutableStateOf(false) }
     var isImageMatched by remember { mutableStateOf(false) }
+    var isTemplatesLoading by remember { mutableStateOf(true) } // 🔥 New loading state
     val haptic = LocalHapticFeedback.current
     
     // Search timing logic
     var searchStartTime by remember { mutableStateOf(System.currentTimeMillis()) }
     var currentSessionMatched by remember { mutableStateOf(false) }
-    val elapsedSeconds = remember { derivedStateOf { (System.currentTimeMillis() - searchStartTime) / 1000 } }
-
+    
+    // 🔥 New Guidance Logic Variable
+    var guidanceMessage by remember { mutableStateOf("") }
+    
     // Load reference images from backend on startup
     LaunchedEffect(Unit) {
         coroutineScope.launch {
             Log.d("SimplifiedCamera", "Loading reference images for hybrid matching...")
+            isTemplatesLoading = true // Start loading
+            
+            // Note: Fallback templates are already pre-loaded in ImageMatcherService init
+            // This call now tries to fetch fresh ones from backend with 5s timeout
             val result = imageMatcher.loadTemplatesFromBackend()
+            
             result.fold(
-                onSuccess = { count -> Log.d("SimplifiedCamera", "Loaded $count reference images") },
+                onSuccess = { count -> 
+                    Log.d("SimplifiedCamera", "Loaded $count reference images") 
+                },
                 onFailure = { error -> 
-                    Log.e("SimplifiedCamera", "Failed to load images", error)
-                    onError("Failed to load images: ${error.message}")
+                    Log.e("SimplifiedCamera", "Failed to refresh images (using fallbacks)", error)
+                    // No error UI needed as fallbacks are active
                 }
             )
+            isTemplatesLoading = false // Done loading
         }
+    }
+
+    // 🔥 Guidance Logic Loop
+    LaunchedEffect(isFaceDetected, isHybridMatched) {
+        if (isHybridMatched) {
+            guidanceMessage = ""
+            return@LaunchedEffect
+        }
+        
+        val startTime = System.currentTimeMillis()
+        while(isActive && isFaceDetected && !isHybridMatched) {
+            val elapsed = System.currentTimeMillis() - startTime
+            if (elapsed > 7000) { // > 7 seconds
+                 guidanceMessage = "Move closer to the product"
+            } else if (elapsed > 12000) {
+                 guidanceMessage = "Ensure product is centered"
+            }
+            kotlinx.coroutines.delay(1000)
+        }
+        if (!isFaceDetected) guidanceMessage = ""
     }
 
     // Launcher for camera permission
@@ -138,7 +173,12 @@ fun SimplifiedCameraPreview(
                                                 imageProxy.imageInfo.rotationDegrees
                                             )
                                             
-                                            coroutineScope.launch {
+                                            coroutineScope.launch(kotlinx.coroutines.Dispatchers.Default) {
+                                                if (isPaused || isImageMatched) {
+                                                    imageProxy.close()
+                                                    return@launch
+                                                }
+                                                
                                                 try {
                                                     // Convert to Bitmap and ROTATE for ImageMatcher
                                                     val originalBitmap = imageProxy.toBitmap()
@@ -157,39 +197,56 @@ fun SimplifiedCameraPreview(
                                                     val faceResult = faceDetector.detectFaceAndLips(image)
                                                     val matchResult = imageMatcher.matchFrame(bitmap)
                                                     
-                                                    // Detailed state update
-                                                    isFaceDetected = faceResult.hasFace
-                                                    isImageMatched = matchResult != null
+                                                    // Update UI states on main thread
+                                                    launch(kotlinx.coroutines.Dispatchers.Main) {
+                                                        isFaceDetected = faceResult.hasFace
+                                                        isImageMatched = matchResult != null
+                                                    }
                                                     
-                                                    // Logging for diagnosis
-                                                    Log.d("SimplifiedCamera", "Diagnostics: Face=${faceResult.hasFace}, Match=${matchResult != null}")
+                                                    // Granular telemetry for diagnosis
+                                                    val faceInfo = if (faceResult.hasFace) {
+                                                        "Face[Bounds=${faceResult.faceBounds}, Mouth=${faceResult.mouthOutline.size} pts]"
+                                                    } else "NoFace"
                                                     
-                                                    // Only "Matched" if both are found
-                                                    val isMatched = faceResult.hasFace && matchResult != null
+                                                    val matchInfo = if (matchResult != null) {
+                                                        val source = if (imageMatcher.isUsingFallback) "Local" else "Backend"
+                                                        "Match[ID=${matchResult.imageId}, Name=${matchResult.imageName}, Source=$source, Score=${String.format("%.2f", matchResult.confidence)}]"
+                                                    } else {
+                                                        val templateCount = imageMatcher.getTemplateCount()
+                                                        val source = if (imageMatcher.isUsingFallback) "Local" else "Backend"
+                                                        "NoMatch[Templates=$templateCount, Source=$source]"
+                                                    }
+                                                    
+                                                    Log.d("SimplifiedCamera", "Diagnostics: $faceInfo, $matchInfo")
+                                                    
+                                                    // Only "Matched" if image is found (Face is optional)
+                                                    val isMatched = matchResult != null
                                                     isHybridMatched = isMatched
                                                     
                                                     if (isMatched && matchResult != null) {
-                                                        if (!currentSessionMatched) {
-                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                            currentSessionMatched = true
+                                                        launch(kotlinx.coroutines.Dispatchers.Main) {
+                                                            if (!currentSessionMatched) {
+                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                currentSessionMatched = true
+                                                            }
                                                         }
                                                         
-                                                        Log.i("SimplifiedCamera", "HYBRID SUCCESS: Face + ${matchResult.imageName}")
+                                                        Log.i("SimplifiedCamera", "MATCH SUCCESS: ${matchResult.imageName} (Confidence: ${String.format("%.2f", matchResult.confidence)})")
                                                         
-                                                        val recognition = ImageRecognition(
-                                                            id = matchResult.imageId,
-                                                            imageUrl = "",
-                                                            name = matchResult.imageName,
-                                                            description = matchResult.description,
-                                                            dialogues = (matchResult.dialogues as? List<com.talkar.app.data.models.Dialogue>) ?: emptyList(),
-                                                            createdAt = System.currentTimeMillis().toString(),
-                                                            updatedAt = System.currentTimeMillis().toString()
-                                                        )
-                                                        onImageRecognized(recognition)
-                                                    } else if (matchResult != null && !faceResult.hasFace) {
-                                                        Log.w("SimplifiedCamera", "MATCH DISCARDED: Found ${matchResult.imageName} BUT NO FACE DETECTED.")
+                                                        launch(kotlinx.coroutines.Dispatchers.Main) {
+                                                            val recognition = ImageRecognition(
+                                                                id = matchResult.imageId,
+                                                                imageUrl = "",
+                                                                name = matchResult.imageName,
+                                                                description = matchResult.description,
+                                                                dialogues = (matchResult.dialogues as? List<com.talkar.app.data.models.Dialogue>) ?: emptyList(),
+                                                                createdAt = System.currentTimeMillis().toString(),
+                                                                updatedAt = System.currentTimeMillis().toString()
+                                                            )
+                                                            onImageRecognized(recognition)
+                                                        }
                                                     } else if (faceResult.hasFace && matchResult == null) {
-                                                        Log.v("SimplifiedCamera", "FACE DETECTED BUT NO MATCH FOUND in backend.")
+                                                        Log.v("SimplifiedCamera", "FACE TRACKED: Waiting for high-confidence image match...")
                                                     }
                                                     
                                                     if (bitmap != originalBitmap) bitmap.recycle()
@@ -206,6 +263,44 @@ fun SimplifiedCameraPreview(
                                     }
                                 }
 
+                            // Image Capture use case
+                            val imageCapture = ImageCapture.Builder()
+                                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                                .build()
+
+                            // Link the controller to this capture instance
+                            captureController?.captureImage = { onResult: (Bitmap) -> Unit ->
+                                imageCapture.takePicture(
+                                    ContextCompat.getMainExecutor(ctx),
+                                    object : ImageCapture.OnImageCapturedCallback() {
+                                        override fun onCaptureSuccess(image: ImageProxy) {
+                                            try {
+                                                val bitmap = image.toBitmap() // Uses existing extension
+                                                val rotation = image.imageInfo.rotationDegrees
+                                                val finalBitmap = if (rotation != 0) {
+                                                    val matrix = android.graphics.Matrix()
+                                                    matrix.postRotate(rotation.toFloat())
+                                                    android.graphics.Bitmap.createBitmap(
+                                                        bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true
+                                                    )
+                                                } else {
+                                                    bitmap
+                                                }
+                                                onResult(finalBitmap)
+                                            } catch (e: Exception) {
+                                                Log.e("SimplifiedCamera", "Failed to process captured image", e)
+                                            } finally {
+                                                image.close()
+                                            }
+                                        }
+
+                                        override fun onError(exception: ImageCaptureException) {
+                                            Log.e("SimplifiedCamera", "Image capture failed", exception)
+                                        }
+                                    }
+                                )
+                            }
+
                             // Select back camera
                             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
@@ -218,10 +313,11 @@ fun SimplifiedCameraPreview(
                                     lifecycleOwner,
                                     cameraSelector,
                                     preview,
-                                    imageAnalyzer
+                                    imageAnalyzer,
+                                    imageCapture
                                 )
 
-                                Log.d("SimplifiedCamera", "Camera started successfully with image recognition")
+                                Log.d("SimplifiedCamera", "Camera started successfully with image recognition & capture")
                             } catch (exc: Exception) {
                                 Log.e("SimplifiedCamera", "Use case binding failed", exc)
                                 onError("Failed to start camera: ${exc.message}")
@@ -240,13 +336,30 @@ fun SimplifiedCameraPreview(
             // Google Lens Style Corners
             ScanningOverlay(isMatched = isHybridMatched)
             
+            // Backend Status Overlay
+            Box(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .align(Alignment.TopStart)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (imageMatcher.isUsingFallback) Color(0xFFFF9800) else Color(0xFF4CAF50))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = if (imageMatcher.isUsingFallback) "OFFLINE MODE" else "BACKEND ONLINE",
+                    color = Color.White,
+                    fontSize = androidx.compose.ui.unit.TextUnit.Unspecified,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
             // Visual indicator for face detection
             Box(
                 modifier = Modifier
                     .padding(16.dp)
                     .align(Alignment.TopEnd)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (isHybridMatched) Color(0xFF4CAF50) else Color(0xFFF44336))
+                    .background(if (isHybridMatched) Color(0xFF4CAF50) else Color(0xFF2196F3))
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -266,46 +379,53 @@ fun SimplifiedCameraPreview(
                 }
             }
 
-            // Guidance messages for search timeout
-            if (!isHybridMatched) {
-                var guidanceText by remember { mutableStateOf("") }
-                
-                LaunchedEffect(Unit) {
-                    while (true) {
-                        val elapsed = (System.currentTimeMillis() - searchStartTime) / 1000
-                        guidanceText = when {
-                            elapsed > 12 -> "No match found yet. Try another character."
-                            elapsed > 5 -> "Keep steady and ensure good lighting..."
-                            else -> ""
-                        }
-                        kotlinx.coroutines.delay(1000)
-                    }
-                }
-
-                if (guidanceText.isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 80.dp)
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 32.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color.Black.copy(alpha = 0.7f))
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = guidanceText,
+            // 🔥 Loading Indicator
+            if (isTemplatesLoading) {
+                 Box(
+                    modifier = Modifier
+                        .padding(top = 60.dp)
+                        .align(Alignment.TopCenter)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.Black.copy(alpha = 0.6f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
                             color = Color.White,
-                            fontWeight = FontWeight.Medium,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Loading resources...",
+                            color = Color.White,
+                            fontSize = androidx.compose.ui.unit.TextUnit.Unspecified,
+                            fontWeight = FontWeight.Medium
                         )
                     }
                 }
-            } else {
-                // Reset search timer on match so if it's lost it starts fresh
-                SideEffect {
-                    searchStartTime = System.currentTimeMillis()
+            }
+
+            // 🔥 Guidance Messages
+            if (guidanceMessage.isNotEmpty() && !isTemplatesLoading) {
+                 Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 100.dp)
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 32.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = guidanceMessage,
+                        color = Color.Yellow, // High visibility
+                        fontWeight = FontWeight.Bold,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        fontSize = 18.sp // Larger text
+                    )
                 }
             }
             
