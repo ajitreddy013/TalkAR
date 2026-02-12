@@ -134,7 +134,8 @@ class ARImageRecognitionService(private val context: Context) {
         return try {
             val uri = java.net.URI(url)
             if (uri.query == null) return url
-            "${uri.scheme}://${uri.host}${uri.path}?redacted"
+            val authority = if (uri.port != -1) "${uri.host}:${uri.port}" else uri.host
+            "${uri.scheme}://${authority}${uri.path}?redacted"
         } catch (e: Exception) {
             "invalid-url"
         }
@@ -201,7 +202,7 @@ class ARImageRecognitionService(private val context: Context) {
                                 } finally {
                                     // Recycle bitmaps to prevent memory leaks
                                     bitmap?.let { if (!it.isRecycled) it.recycle() }
-                                    processedBitmap?.let { if (!it.isRecycled) it.recycle() }
+                                    // processedBitmap passed to ARCore - do NOT recycle immediately
                                 }
                             }
                         }
@@ -260,7 +261,7 @@ class ARImageRecognitionService(private val context: Context) {
                         Log.e(tag, "Failed to load image from VM: ${image.name}", e)
                     } finally {
                         bitmap?.let { if (!it.isRecycled) it.recycle() }
-                        processedBitmap?.let { if (!it.isRecycled) it.recycle() }
+                        // processedBitmap passed to ARCore - do NOT recycle immediately
                     }
                 }
                 Log.d(tag, "ViewModel loaded $addedCount images into AR database")

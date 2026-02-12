@@ -17,6 +17,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.cancel
+
 
 /**
  * Service for matching camera frames against backend reference images
@@ -103,6 +106,8 @@ class ImageMatcherService(private val context: Context) {
             Log.d(TAG, "Fetched ${backendImages.size} images from backend")
             
             mutex.withLock {
+                // Recycle existing bitmaps before clearing to prevent native memory leaks
+                templates.forEach { it.bitmap.recycle() }
                 templates.clear()
             }
             
@@ -154,6 +159,8 @@ class ImageMatcherService(private val context: Context) {
             val fallbackImages: List<BackendImage> = Gson().fromJson(jsonString, listType)
             
             mutex.withLock {
+                // Recycle existing bitmaps before clearing
+                templates.forEach { it.bitmap.recycle() }
                 templates.clear()
             }
             
@@ -386,8 +393,11 @@ class ImageMatcherService(private val context: Context) {
 
     fun destroy() {
         preloadJob?.cancel()
-        kotlinx.coroutines.cancel(serviceScope)
-        // Note: clearTemplates is suspend, so we can't call it here easily
-        // But the scope cancellation handles the coroutines.
+        serviceScope.cancel()
+        
+        // Synchronously clear native resources to prevent leaks
+        runBlocking { 
+            clearTemplates() 
+        }
     }
 }

@@ -95,7 +95,7 @@ class SpeechRecognitionManager(private val context: Context) {
         try {
             silenceJob?.cancel()
             noSpeechTimeoutJob?.cancel() // Cancel no-speech timeout job
-            speechRecognizer?.cancel() // 🔥 Cancel pending requests 
+            // speechRecognizer?.cancel() // Removed redundant cancel, preferring stopListening to deliver results
             speechRecognizer?.stopListening()
             _isListening.value = false
         } catch (e: Exception) {

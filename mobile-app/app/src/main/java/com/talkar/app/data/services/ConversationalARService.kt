@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.cancel
 
 enum class ConversationState {
     IDLE,
@@ -208,9 +209,9 @@ class ConversationalARService(
                 }
                 
                 if (response.isSuccessful && response.body()?.success == true) {
-                    val body = response.body()
+                    val introBody = response.body()
                     // Check multiple potential field names for robustness
-                    val url = body?.video_url ?: body?.introVideoUrl
+                    val url = introBody?.video_url ?: introBody?.introVideoUrl
                     
                     if (!url.isNullOrEmpty()) {
                         Log.d(TAG, "Fetched intro video URL: $url (Attempt ${attempt + 1})")
@@ -309,9 +310,11 @@ class ConversationalARService(
         if (content == null || posterId == null) {
             Log.w(TAG, "Cannot process query: Missing content ($content) or posterId ($posterId)")
             _state.value = ConversationState.DETECTED // Go back to detected instead of idle
-            _uiMessage.value = "Scan an object first"
-            delay(2000)
-            _uiMessage.value = null
+            scope.launch {
+                _uiMessage.value = "Scan an object first"
+                delay(2000)
+                _uiMessage.value = null
+            }
             return
         }
         
@@ -381,8 +384,8 @@ class ConversationalARService(
                         if (lipSyncResponse.isSuccessful && lipSyncResponse.body()?.success == true) {
                             // Clear context image after successful use
                             _contextImageFile = null
-                            val body = lipSyncResponse.body()
-                            return@withContext body?.videoUrl ?: body?.video_url
+                            val lipSyncBody = lipSyncResponse.body()
+                            return@withContext lipSyncBody?.videoUrl ?: lipSyncBody?.video_url
                         }
                     }
                 }
@@ -419,8 +422,8 @@ class ConversationalARService(
                         )
                         
                         if (lipSyncResponse.isSuccessful && lipSyncResponse.body()?.success == true) {
-                            val body = lipSyncResponse.body()
-                            return@withContext body?.videoUrl ?: body?.video_url
+                            val lipSyncBody = lipSyncResponse.body()
+                            return@withContext lipSyncBody?.videoUrl ?: lipSyncBody?.video_url
                         }
                     }
                 }
@@ -484,7 +487,7 @@ class ConversationalARService(
 
     fun destroy() {
         reset()
-        kotlinx.coroutines.cancel(scope)
+        scope.cancel()
     }
 
 
