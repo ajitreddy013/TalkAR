@@ -43,6 +43,7 @@ class ImageMatcherService(private val context: Context) {
         val dialogues: List<Any>?
     )
     
+    private val activeReaders = java.util.concurrent.atomic.AtomicInteger(0)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var preloadJob: kotlinx.coroutines.Job? = null
 
@@ -106,9 +107,21 @@ class ImageMatcherService(private val context: Context) {
             Log.d(TAG, "Fetched ${backendImages.size} images from backend")
             
             mutex.withLock {
-                // Recycle existing bitmaps before clearing to prevent native memory leaks
-                templates.forEach { it.bitmap.recycle() }
+                // Do NOT recycle immediately. Copy to local list then clear main list.
+                // This allows us to recycle safely outside the lock after readers finish.
+                val toRecycle = templates.toList()
                 templates.clear()
+                
+                // Release lock, then wait for readers
+                mutex.unlock() 
+                try {
+                    while (activeReaders.get() > 0) {
+                        kotlinx.coroutines.delay(10)
+                    }
+                    toRecycle.forEach { it.bitmap.recycle() }
+                } finally {
+                    mutex.lock() // Re-acquire logic for consistency if needed, but actually we are done with this block
+                }
             }
             
             // Download and prepare each image
@@ -159,9 +172,20 @@ class ImageMatcherService(private val context: Context) {
             val fallbackImages: List<BackendImage> = Gson().fromJson(jsonString, listType)
             
             mutex.withLock {
-                // Recycle existing bitmaps before clearing
-                templates.forEach { it.bitmap.recycle() }
+                 // Do NOT recycle immediately. Copy to local list then clear main list.
+                val toRecycle = templates.toList()
                 templates.clear()
+                
+                // Release lock, wait for readers, then recycle
+                mutex.unlock()
+                try {
+                    while (activeReaders.get() > 0) {
+                        kotlinx.coroutines.delay(10)
+                    }
+                    toRecycle.forEach { it.bitmap.recycle() }
+                } finally {
+                    mutex.lock()
+                }
             }
             
             fallbackImages.forEach { item ->
@@ -243,6 +267,8 @@ class ImageMatcherService(private val context: Context) {
         }
         
         try {
+            activeReaders.incrementAndGet()
+            
             // Prepare frame for matching
             val scaledFrame = scaleBitmap(frameBitmap, MAX_DIMENSION)
             
@@ -289,6 +315,8 @@ class ImageMatcherService(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error matching frame", e)
             null
+        } finally {
+            activeReaders.decrementAndGet()
         }
     }
     
@@ -374,8 +402,18 @@ class ImageMatcherService(private val context: Context) {
      */
     suspend fun clearTemplates() {
         mutex.withLock {
-            templates.forEach { it.bitmap.recycle() }
+            val toRecycle = templates.toList()
             templates.clear()
+            
+            mutex.unlock()
+            try {
+                 while (activeReaders.get() > 0) {
+                    kotlinx.coroutines.delay(10)
+                }
+                toRecycle.forEach { it.bitmap.recycle() }
+            } finally {
+                mutex.lock()
+            }
         }
         Log.d(TAG, "Cleared all templates")
     }
@@ -396,7 +434,9 @@ class ImageMatcherService(private val context: Context) {
         serviceScope.cancel()
         
         // Synchronously clear native resources to prevent leaks
-        runBlocking { 
+        runBlocking(Dispatchers.IO) { 
+            val job = serviceScope.coroutineContext[kotlinx.coroutines.Job]
+            job?.join()
             clearTemplates() 
         }
     }
