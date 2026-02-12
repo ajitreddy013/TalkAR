@@ -22,6 +22,11 @@ class ARImageRecognitionService(private val context: Context) {
     private val tag = "ARImageRecognitionService"
     private var session: Session? = null
     private var imageDatabase: AugmentedImageDatabase? = null
+    private val databaseLock = Any() // Lock for imageDatabase synchronization
+    
+    companion object {
+        private const val MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB limit
+    }
     
     // Dynamic script service for generating personalized content
     private val dynamicScriptService = DynamicScriptService(context)
@@ -123,6 +128,19 @@ class ARImageRecognitionService(private val context: Context) {
         .build()
 
     /**
+     * Sanitize or redact sensitive query parameters from a URL for logging.
+     */
+    private fun sanitizeUrl(url: String): String {
+        return try {
+            val uri = java.net.URI(url)
+            if (uri.query == null) return url
+            "${uri.scheme}://${uri.host}${uri.path}?redacted"
+        } catch (e: Exception) {
+            "invalid-url"
+        }
+    }
+
+    /**
      * Load images from backend and add to ARCore database
      */
     private fun loadImagesFromBackend() {
@@ -149,31 +167,41 @@ class ARImageRecognitionService(private val context: Context) {
                             if (image.isActive) {
                                 // Use full image URL
                                 val fullImageUrl = com.talkar.app.data.config.ApiConfig.getFullImageUrl(image.imageUrl)
-                                Log.d(tag, "Downloading image: ${image.name} from $fullImageUrl")
+                                Log.d(tag, "Downloading image: ${image.name} from ${sanitizeUrl(fullImageUrl)}")
                                 
-                                val bitmap = downloadImageBitmap(fullImageUrl)
-                                if (bitmap != null) {
-                                    // Add to AR database
-                                    // Use image.id as the key for deterministic matching
-                                    imageDatabase?.let { database ->
-                                        // We use image.id as the ARCore name so we can match it back easily
-                                        // But we also log the real name
-                                        try {
-                                             // Preprocess the image for better AR tracking
-                                            val processedBitmap = preprocessImageForAR(bitmap)
-                                            
-                                            // Validate
-                                            if (validateImageQuality(processedBitmap)) {
-                                                database.addImage(image.id, processedBitmap)
-                                                Log.d(tag, "Added to AR database: ${image.name} (ID: ${image.id})")
-                                                addedCount++
-                                            } else {
-                                                Log.w(tag, "Skipping ${image.name} - insufficient quality")
+                                var bitmap: android.graphics.Bitmap? = null
+                                var processedBitmap: android.graphics.Bitmap? = null
+                                
+                                try {
+                                    bitmap = downloadImageBitmap(fullImageUrl)
+                                    if (bitmap != null) {
+                                        // Capture a local immutable reference for thread-safety (TOCTOU)
+                                        val db = synchronized(databaseLock) { imageDatabase }
+                                        
+                                        db?.let { database ->
+                                            try {
+                                                // Preprocess the image for better AR tracking
+                                                processedBitmap = preprocessImageForAR(bitmap!!)
+                                                
+                                                // Validate
+                                                if (validateImageQuality(processedBitmap!!)) {
+                                                    synchronized(databaseLock) {
+                                                        database.addImage(image.id, processedBitmap)
+                                                    }
+                                                    Log.d(tag, "Added to AR database: ${image.name} (ID: ${image.id})")
+                                                    addedCount++
+                                                } else {
+                                                    Log.w(tag, "Skipping ${image.name} - insufficient quality")
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e(tag, "Failed to add ${image.name} to database", e)
                                             }
-                                        } catch (e: Exception) {
-                                            Log.e(tag, "Failed to add ${image.name} to database", e)
                                         }
                                     }
+                                } finally {
+                                    // Recycle bitmaps to prevent memory leaks
+                                    bitmap?.let { if (!it.isRecycled) it.recycle() }
+                                    processedBitmap?.let { if (!it.isRecycled) it.recycle() }
                                 }
                             }
                         }
@@ -208,22 +236,31 @@ class ARImageRecognitionService(private val context: Context) {
             kotlinx.coroutines.withContext(Dispatchers.IO) {
                 var addedCount = 0
                 images.forEach { image ->
+                    var bitmap: android.graphics.Bitmap? = null
+                    var processedBitmap: android.graphics.Bitmap? = null
                     try {
                         val fullImageUrl = com.talkar.app.data.config.ApiConfig.getFullImageUrl(image.imageUrl)
-                        val bitmap = downloadImageBitmap(fullImageUrl)
+                        bitmap = downloadImageBitmap(fullImageUrl)
                         
                         if (bitmap != null) {
-                                val processedBitmap = preprocessImageForAR(bitmap)
-                                if (validateImageQuality(processedBitmap)) {
-                                    imageDatabase?.let { db ->
-                                        db.addImage(image.id, processedBitmap)
-                                        Log.d(tag, "Added image from VM: ${image.name} (ID: ${image.id})")
-                                        addedCount++
+                            processedBitmap = preprocessImageForAR(bitmap!!)
+                            if (validateImageQuality(processedBitmap!!)) {
+                                // Capture local reference and sync access
+                                val db = synchronized(databaseLock) { imageDatabase }
+                                db?.let { database ->
+                                    synchronized(databaseLock) {
+                                        database.addImage(image.id, processedBitmap)
                                     }
+                                    Log.d(tag, "Added image from VM: ${image.name} (ID: ${image.id})")
+                                    addedCount++
                                 }
                             }
+                        }
                     } catch (e: Exception) {
                         Log.e(tag, "Failed to load image from VM: ${image.name}", e)
+                    } finally {
+                        bitmap?.let { if (!it.isRecycled) it.recycle() }
+                        processedBitmap?.let { if (!it.isRecycled) it.recycle() }
                     }
                 }
                 Log.d(tag, "ViewModel loaded $addedCount images into AR database")
@@ -249,13 +286,33 @@ class ARImageRecognitionService(private val context: Context) {
                         return@use null
                     }
                     
-                    val inputStream = response.body?.byteStream()
-                    if (inputStream == null) return@use null
+                    val body = response.body
+                    if (body == null) return@use null
                     
-                    android.graphics.BitmapFactory.decodeStream(inputStream)
+                    // Check content length if available
+                    val contentLength = body.contentLength()
+                    if (contentLength > MAX_IMAGE_SIZE_BYTES) {
+                        Log.e(tag, "Image too large (${contentLength} bytes) from ${sanitizeUrl(imageUrl)}")
+                        return@use null
+                    }
+                    
+                    // Read bytes with a limit to prevent OOM if contentLength is unknown or misleading
+                    val bytes = try {
+                        val source = body.source()
+                        if (source.request((MAX_IMAGE_SIZE_BYTES + 1).toLong())) {
+                            Log.e(tag, "Image exceeds maximum size limit from ${sanitizeUrl(imageUrl)}")
+                            return@use null
+                        }
+                        body.bytes()
+                    } catch (e: java.io.IOException) {
+                        Log.e(tag, "Error reading image bytes from ${sanitizeUrl(imageUrl)}", e)
+                        return@use null
+                    }
+                    
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                 }
             } catch (e: Exception) {
-                Log.e(tag, "Failed to download image from URL: $imageUrl", e)
+                Log.e(tag, "Failed to download image from URL: ${sanitizeUrl(imageUrl)}", e)
                 null
             }
         }
@@ -789,7 +846,9 @@ class ARImageRecognitionService(private val context: Context) {
         try {
             session?.close()
             session = null
-            imageDatabase = null
+            synchronized(databaseLock) {
+                imageDatabase = null
+            }
             _isTracking.value = false
             _recognizedImages.value = emptyList()
             recognizedImageCache.clear()
@@ -921,6 +980,11 @@ class ARImageRecognitionService(private val context: Context) {
             
             // Stop tracking and clean up ARCore resources
             stopTracking()
+            
+            // Shut down HTTP client resources
+            httpClient.dispatcher.executorService.shutdown()
+            httpClient.connectionPool.evictAll()
+            httpClient.cache?.close()
             
             // Cancel all coroutines to prevent memory leaks
             Log.d(tag, "ARImageRecognitionService resources cleaned up successfully")

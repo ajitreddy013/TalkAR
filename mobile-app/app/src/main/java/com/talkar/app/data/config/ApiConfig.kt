@@ -43,8 +43,7 @@ object ApiConfig {
     }
 
     // Constructed URLs
-    // Updated for localtunnel (port 4000)
-    const val BASE_URL = "https://violet-guests-battle.loca.lt"
+    val BASE_URL = "$PROTOCOL://$HOST:$PORT"
     val API_BASE_URL = "$BASE_URL/api"
     val API_V1_URL = "$API_BASE_URL/$API_VERSION"
 

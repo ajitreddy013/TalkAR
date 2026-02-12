@@ -41,9 +41,11 @@ class ConversationalARService(
     private val imageMatcher: ImageMatcherService // 🔥 Shared instance
 ) {
     private val TAG = "ConversationalARService"
-    private val scope = CoroutineScope(Dispatchers.Main)
+    private val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
     private var apiService = ApiClient.create()
-    var mediaPlayer: android.media.MediaPlayer? = null // 🔥 SINGLE INSTANCE - Shared with UI
+    private var mediaPlayer: android.media.MediaPlayer? = null 
+
+    private var finishJob: kotlinx.coroutines.Job? = null
 
     private val _state = MutableStateFlow(ConversationState.IDLE)
     val state: StateFlow<ConversationState> = _state.asStateFlow()
@@ -123,6 +125,7 @@ class ConversationalARService(
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to resolve object", e)
+                _uiMessage.value = null // Clear stale loading message
                 _state.value = ConversationState.SCANNING
             }
         }
@@ -140,8 +143,17 @@ class ConversationalARService(
         
         scope.launch {
             try {
-                // Fetch intro video (Logic moved here from onObjectDetected)
-                val videoSource = fetchIntroFromBackend(content.posterId!!)
+                // Fetch intro video if posterId is valid
+                val posterId = content.posterId
+                if (posterId == null) {
+                    Log.e(TAG, "Cannot fetch intro: posterId is null")
+                    _uiMessage.value = "Product data missing"
+                    delay(2000)
+                    _state.value = ConversationState.DETECTED
+                    return@launch
+                }
+
+                val videoSource = fetchIntroFromBackend(posterId)
                 
                 if (videoSource == null) {
                     val fallback = getLocalFallback(content.objectName)
@@ -183,29 +195,43 @@ class ConversationalARService(
     
 
     
-    private suspend fun fetchIntroFromBackend(posterId: String): Any? {
-        return withContext(Dispatchers.IO) {
+    private suspend fun fetchIntroFromBackend(posterId: String): String? {
+        var currentDelay = 1000L
+        val maxRetries = 3
+        
+        repeat(maxRetries) { attempt ->
             try {
-                // Call generateAdContentFromPoster to get the intro video
-                val response = apiService.generateAdContentFromPoster(
-                    PosterAdContentRequest(image_id = posterId)
-                )
+                val response = withContext(Dispatchers.IO) {
+                    apiService.generateAdContentFromPoster(
+                        com.talkar.app.data.api.PosterAdContentRequest(image_id = posterId)
+                    )
+                }
                 
                 if (response.isSuccessful && response.body()?.success == true) {
-                    val url = response.body()?.video_url
+                    val body = response.body()
+                    // Check multiple potential field names for robustness
+                    val url = body?.video_url ?: body?.introVideoUrl
+                    
                     if (!url.isNullOrEmpty()) {
-                        Log.d(TAG, "Fetched intro video URL: $url")
-                        return@withContext url
+                        Log.d(TAG, "Fetched intro video URL: $url (Attempt ${attempt + 1})")
+                        return url
                     }
                 }
                 
-                Log.w(TAG, "Backend returned no video URL for intro")
-                return@withContext null
+                Log.w(TAG, "Backend returned no video URL for intro (Attempt ${attempt + 1})")
             } catch (e: Exception) {
-                Log.e(TAG, "API Error fetching intro", e)
-                return@withContext null
+                Log.e(TAG, "API Error fetching intro (Attempt ${attempt + 1})", e)
+            }
+            
+            if (attempt < maxRetries - 1) {
+                _uiMessage.value = "Retrying connection... (${attempt + 1})"
+                delay(currentDelay)
+                currentDelay *= 2 // Exponential backoff
             }
         }
+        
+        Log.e(TAG, "Failed to fetch intro video after $maxRetries attempts")
+        return null
     }
     private fun playIntro() {
         val content = _currentContent.value ?: return
@@ -231,7 +257,7 @@ class ConversationalARService(
     private fun startListening() {
         _state.value = ConversationState.LISTENING
         _currentVideoSource.value = null // Clear video
-        _uiMessage.value = "Listening..."
+        _uiMessage.value = "🎙️ Speak now..."
         
         // Start speech recognition
         speechManager.startListening(onSilence = {
@@ -253,9 +279,9 @@ class ConversationalARService(
         scope.launch(Dispatchers.IO) {
             try {
                 val file = java.io.File(context.cacheDir, "context_image.jpg")
-                val stream = java.io.FileOutputStream(file)
-                bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
-                stream.close()
+                java.io.FileOutputStream(file).use { stream ->
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, stream)
+                }
                 _contextImageFile = file
                 Log.d(TAG, "Context image saved: ${file.length()} bytes")
             } catch (e: Exception) {
@@ -277,8 +303,17 @@ class ConversationalARService(
         _state.value = ConversationState.LOADING
         _uiMessage.value = "Thinking..."
         
-        val content = _currentContent.value ?: return
-        val posterId = content.posterId ?: return
+        val content = _currentContent.value
+        val posterId = content?.posterId
+        
+        if (content == null || posterId == null) {
+            Log.w(TAG, "Cannot process query: Missing content ($content) or posterId ($posterId)")
+            _state.value = ConversationState.DETECTED // Go back to detected instead of idle
+            _uiMessage.value = "Scan an object first"
+            delay(2000)
+            _uiMessage.value = null
+            return
+        }
         
         scope.launch {
             try {
@@ -326,10 +361,10 @@ class ConversationalARService(
     private suspend fun fetchVisualResponseFromBackend(query: String, posterId: String, imageFile: java.io.File): String? {
         return withContext(Dispatchers.IO) {
             try {
-                val requestFile = okhttp3.RequestBody.create("image/jpeg".tookhttpMediaTypeOrNull(), imageFile)
+                val requestFile = okhttp3.RequestBody.create("image/jpeg".toMediaTypeOrNull(), imageFile)
                 val body = okhttp3.MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
-                val textPart = okhttp3.RequestBody.create("text/plain".tookhttpMediaTypeOrNull(), query)
-                val posterIdPart = okhttp3.RequestBody.create("text/plain".tookhttpMediaTypeOrNull(), posterId)
+                val textPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), query)
+                val posterIdPart = okhttp3.RequestBody.create("text/plain".toMediaTypeOrNull(), posterId)
 
                 val response = apiService.sendVisualQuery(body, textPart, posterIdPart)
 
@@ -346,7 +381,8 @@ class ConversationalARService(
                         if (lipSyncResponse.isSuccessful && lipSyncResponse.body()?.success == true) {
                             // Clear context image after successful use
                             _contextImageFile = null
-                            return@withContext lipSyncResponse.body()?.videoUrl
+                            val body = lipSyncResponse.body()
+                            return@withContext body?.videoUrl ?: body?.video_url
                         }
                     }
                 }
@@ -370,8 +406,6 @@ class ConversationalARService(
                 )
                 
                 if (response.isSuccessful && response.body()?.success == true) {
-                    val url = response.body()?.audioUrl
-                    
                     val textResponse = response.body()?.response
                     if (!textResponse.isNullOrEmpty()) {
                         Log.d(TAG, "Got text response: $textResponse, generating video...")
@@ -385,7 +419,8 @@ class ConversationalARService(
                         )
                         
                         if (lipSyncResponse.isSuccessful && lipSyncResponse.body()?.success == true) {
-                            return@withContext lipSyncResponse.body()?.videoUrl
+                            val body = lipSyncResponse.body()
+                            return@withContext body?.videoUrl ?: body?.video_url
                         }
                     }
                 }
@@ -415,10 +450,14 @@ class ConversationalARService(
         _currentVideoSource.value = null
         _uiMessage.value = null
         
-        // Auto-restart scanning after a delay (Emergency Hotfix: 3s strict delay)
-        scope.launch {
+        // Auto-restart scanning after a delay
+        finishJob?.cancel()
+        finishJob = scope.launch {
             Log.d(TAG, "Video completed, re-enabling detection in 3 seconds...")
-            delay(3000) // Strictly 3 seconds as requested
+            delay(3000) 
+            
+            if (!kotlinx.coroutines.isActive) return@launch
+
             _isDetectionPaused.value = false
             Log.d(TAG, "Detection re-enabled")
             
@@ -431,6 +470,8 @@ class ConversationalARService(
     }
 
     fun reset() {
+        finishJob?.cancel()
+        finishJob = null
         speechManager.destroy()
         mediaPlayer?.release()
         mediaPlayer = null
@@ -438,6 +479,12 @@ class ConversationalARService(
         _currentContent.value = null
         _currentVideoSource.value = null
         _uiMessage.value = null
+        _contextImageFile = null
+    }
+
+    fun destroy() {
+        reset()
+        kotlinx.coroutines.cancel(scope)
     }
 
 
@@ -462,7 +509,4 @@ class ConversationalARService(
         }
     }
 
-    private fun String.tookhttpMediaTypeOrNull(): okhttp3.MediaType? {
-        return this.toMediaTypeOrNull()
-    }
 }
