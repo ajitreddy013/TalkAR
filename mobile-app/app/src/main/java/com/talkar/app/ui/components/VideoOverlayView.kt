@@ -84,7 +84,7 @@ fun VideoOverlayView(
             modifier = Modifier.fillMaxSize()
         )
 
-        DisposableEffect(arService.mediaPlayer) {
+        DisposableEffect(Unit) {
             onDispose {
                 arService.mediaPlayer?.apply {
                     try {

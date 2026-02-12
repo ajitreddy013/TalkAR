@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import com.talkar.app.BuildConfig
@@ -197,12 +199,16 @@ fun Week2ARScreen(
                                                 arService.setContextImage(bitmap)
                                             } else {
                                                 android.util.Log.e("Week2ARScreen", "Captured bitmap is null")
-                                                Toast.makeText(context, "Failed to capture visual context", Toast.LENGTH_SHORT).show()
+                                                Handler(Looper.getMainLooper()).post {
+                                                    Toast.makeText(context, "Failed to capture visual context", Toast.LENGTH_SHORT).show()
+                                                }
                                             }
                                         }
                                     } catch (e: Exception) {
                                         android.util.Log.e("Week2ARScreen", "Capture execution failed", e)
-                                        Toast.makeText(context, "Camera busy. Please try again.", Toast.LENGTH_SHORT).show()
+                                        Handler(Looper.getMainLooper()).post {
+                                            Toast.makeText(context, "Camera busy. Please try again.", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 }
                             )
