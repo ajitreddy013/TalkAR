@@ -29,7 +29,7 @@ class ImageMatcherService(private val context: Context) {
     
     companion object {
         private const val TAG = "ImageMatcherService"
-        private const val MATCH_THRESHOLD = 0.50 // Balanced for dHash robustness
+        private const val MATCH_THRESHOLD = 0.50 // Threshold with dual verification
         private const val DEBOUNCE_MS = 1000L // Fast frame analysis check
         private const val COOLDOWN_MS = 8000L // 8s cooldown for same product
         private const val MAX_DIMENSION = 512 // Downscale images for faster comparison
@@ -64,6 +64,7 @@ class ImageMatcherService(private val context: Context) {
     )
     
     private val templates = mutableListOf<ImageTemplate>()
+    private var toRecycle = mutableListOf<ImageTemplate>()
     private val mutex = Mutex()
     
     @Volatile
@@ -109,7 +110,7 @@ class ImageMatcherService(private val context: Context) {
             mutex.withLock {
                 // Do NOT recycle immediately. Copy to local list then clear main list.
                 // This allows us to recycle safely outside the lock after readers finish.
-                toRecycle = templates.toList()
+                toRecycle = templates.toMutableList()
                 templates.clear()
             }
             
@@ -172,7 +173,7 @@ class ImageMatcherService(private val context: Context) {
             
             mutex.withLock {
                  // Do NOT recycle immediately. Copy to local list then clear main list.
-                toRecycle = templates.toList()
+                toRecycle = templates.toMutableList()
                 templates.clear()
             }
             
@@ -400,7 +401,7 @@ class ImageMatcherService(private val context: Context) {
      */
     suspend fun clearTemplates() {
         mutex.withLock {
-            toRecycle = templates.toList()
+            toRecycle = templates.toMutableList()
             templates.clear()
         }
         

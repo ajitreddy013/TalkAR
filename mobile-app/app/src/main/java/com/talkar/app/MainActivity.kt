@@ -107,12 +107,11 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     
-                    // Week 2 AR Screen with Avatar Overlay
+                    // Week2 AR Screen - hash-based matching
                     Week2ARScreen(
                         viewModel = enhancedViewModel,
                         hasCameraPermission = hasCameraPermission,
                         onPermissionCheck = {
-                            // Re-check permission when requested
                             hasCameraPermission = ContextCompat.checkSelfPermission(
                                 this@MainActivity,
                                 Manifest.permission.CAMERA

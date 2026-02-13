@@ -106,39 +106,10 @@ fun ARCoreOnlyView(
 private suspend fun loadImagesIntoARCore(arService: ARImageRecognitionService) {
     withContext(Dispatchers.IO) {
         try {
-            android.util.Log.d("ARCoreOnlyView", "Loading images from backend into ARCore on background thread...")
-            val imageRepository = TalkARApplication.instance.imageRepository
-
-            imageRepository.getAllImages().collect { images ->
-                android.util.Log.d("ARCoreOnlyView", "Loaded ${images.size} images from backend")
-
-                // Limit the number of images to prevent memory issues
-                val maxImages = 3 // Limit to 3 images for better performance
-                val limitedImages = images.take(maxImages)
-
-                android.util.Log.d("ARCoreOnlyView", "Processing ${limitedImages.size} images (limited from ${images.size} for performance)")
-
-                limitedImages.forEach { image ->
-                    try {
-                        // Process each image on background thread
-                        withContext(Dispatchers.IO) {
-                            android.util.Log.d("ARCoreOnlyView", "Processing image for ARCore: ${image.name}")
-
-                            // For now, we'll use the existing test images in ARCore
-                            // In production, you would:
-                            // 1. Download image bytes from backend URL
-                            // 2. Optimize image size and quality
-                            // 3. Add to ARCore database: arService.addReferenceImage(image.name, imageBytes)
-
-                            android.util.Log.d("ARCoreOnlyView", "Image ${image.name} ready for recognition")
-                        }
-                    } catch (e: Exception) {
-                        android.util.Log.e("ARCoreOnlyView", "Failed to process image ${image.name}", e)
-                    }
-                }
-
-                android.util.Log.d("ARCoreOnlyView", "Completed processing ${limitedImages.size} images")
-            }
+            android.util.Log.d("ARCoreOnlyView", "Calling loadImagesFromBackend on AR service...")
+            // Use the existing method from ARImageRecognitionService
+            arService.loadImagesFromBackend()
+            android.util.Log.d("ARCoreOnlyView", "Images loaded into ARCore")
         } catch (e: Exception) {
             android.util.Log.e("ARCoreOnlyView", "Failed to load images into ARCore", e)
         }

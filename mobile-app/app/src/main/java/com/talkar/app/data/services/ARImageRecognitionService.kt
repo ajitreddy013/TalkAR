@@ -144,7 +144,7 @@ class ARImageRecognitionService(private val context: Context) {
     /**
      * Load images from backend and add to ARCore database
      */
-    private fun loadImagesFromBackend() {
+    fun loadImagesFromBackend() {
         try {
             Log.d(tag, "Starting to load images from backend on background thread...")
             

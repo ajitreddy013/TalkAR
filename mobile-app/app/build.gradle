@@ -22,7 +22,7 @@ android {
 
     // Allow overriding API host/protocol via project properties (e.g., -PAPI_HOST=... or in gradle.properties)
     def apiProtocolDebug = project.hasProperty('API_PROTOCOL') ? project.API_PROTOCOL : 'https'
-    def apiHostDebug = project.hasProperty('API_HOST') ? project.API_HOST : 'de65955214bb1e.lhr.life'
+    def apiHostDebug = project.hasProperty('API_HOST') ? project.API_HOST : '10.0.2.2'
     // Ports should be integers for buildConfigField "int"
     def apiPortDebug = project.hasProperty('API_PORT') ? project.API_PORT.toInteger() : 443
     def apiVersion = project.hasProperty('API_VERSION') ? project.API_VERSION : 'v1'

@@ -48,8 +48,8 @@ fun VideoOverlayView(
                     holder.addCallback(object : android.view.SurfaceHolder.Callback {
                         override fun surfaceCreated(holder: android.view.SurfaceHolder) {
                             // Link shared MediaPlayer to this surface
-                            val mp = arService.mediaPlayer ?: android.media.MediaPlayer().also { 
-                                arService.mediaPlayer = it 
+                            val mp = arService.getMediaPlayer() ?: android.media.MediaPlayer().also { 
+                                arService.setMediaPlayer(it) 
                             }
                             
                             try {
@@ -75,7 +75,7 @@ fun VideoOverlayView(
                         override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {}
                         override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
                             // Reset display but don't release singleton
-                            arService.mediaPlayer?.setDisplay(null)
+                            arService.getMediaPlayer()?.setDisplay(null)
                         }
                     })
                 }
@@ -86,7 +86,7 @@ fun VideoOverlayView(
 
         DisposableEffect(Unit) {
             onDispose {
-                arService.mediaPlayer?.apply {
+                arService.getMediaPlayer()?.apply {
                     try {
                         setOnPreparedListener(null)
                         setOnCompletionListener(null)

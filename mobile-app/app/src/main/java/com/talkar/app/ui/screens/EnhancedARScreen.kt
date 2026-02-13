@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
-import com.talkar.app.ui.components.EnhancedCameraView
+import com.talkar.app.ui.components.ARView
 import com.talkar.app.ui.components.AdContentOverlay
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
 import com.talkar.app.data.services.EnhancedARService
@@ -101,8 +101,8 @@ fun EnhancedARScreen(
         }
     ) { paddingValues ->
         Box(modifier = modifier.fillMaxSize()) {
-            // Enhanced Camera View with AR Overlay and real-time feedback
-            EnhancedCameraView(
+            // AR View - uses ARCore with TextureView for camera preview
+            ARView(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
@@ -114,9 +114,48 @@ fun EnhancedARScreen(
                 },
                 onError = { errorMessage ->
                     viewModel.setArError(errorMessage)
-                },
-                isImageDetected = recognizedImage != null
+                }
             )
+            
+            // Visual feedback when image is detected
+            if (recognizedImage != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        modifier = Modifier.padding(32.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF4CAF50).copy(alpha = 0.9f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "✓ Image Detected!",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = recognizedImage?.name ?: "Unknown",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "👆 TAP anywhere to interact",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
             
             // Ad Content Overlay with all new features
             AdContentOverlay(

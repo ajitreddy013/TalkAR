@@ -10,6 +10,7 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -117,7 +118,7 @@ class SpeechRecognitionManager(private val context: Context) {
             speechRecognizer?.destroy()
             speechRecognizer = null
             
-            scope.cancel() // Use scope.cancel() instead of kotlinx.coroutines.cancel(scope)
+            scope.cancel(null) // Cancel the coroutine scope
             Log.d(TAG, "SpeechRecognitionManager destroyed and cleaned up")
         } catch (e: Exception) {
             Log.e(TAG, "Error destroying recognizer", e)
@@ -129,7 +130,6 @@ class SpeechRecognitionManager(private val context: Context) {
         silenceJob = scope.launch {
             delay(SILENCE_THRESHOLD_MS)
             // If we reach here, silence threshold passed
-            if (!isActive) return@launch // Use isActive from CoroutineScope
             
             Log.d(TAG, "Silence detected for ${SILENCE_THRESHOLD_MS}ms")
             
@@ -149,7 +149,6 @@ class SpeechRecognitionManager(private val context: Context) {
         noSpeechTimeoutJob?.cancel()
         noSpeechTimeoutJob = scope.launch {
             delay(NO_SPEECH_TIMEOUT_MS)
-            if (!isActive) return@launch // Use isActive from CoroutineScope
             
             Log.d(TAG, "No speech detected for ${NO_SPEECH_TIMEOUT_MS}ms (Timeout)")
             

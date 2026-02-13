@@ -2,6 +2,9 @@ package com.talkar.app.ui.components
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
+import android.os.Handler
+import android.os.Looper
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -212,8 +215,10 @@ fun SimplifiedCameraPreview(
                                                         // Update UI states on main thread
                                                         launch(kotlinx.coroutines.Dispatchers.Main) {
                                                             isFaceDetected = faceResult.hasFace
-                                                            // Match logic updates
-                                                            if (matchResult != null) {
+                                                            // Match logic - only confirm if hash match is strong (>= 0.55)
+                                                            val strongMatch = matchResult != null && matchResult.confidence >= 0.55
+                                                            
+                                                            if (strongMatch && matchResult != null) {
                                                                 val currentTime = System.currentTimeMillis()
                                                                 val isSameObject = matchResult.imageId == lastDetectedId
                                                                 val withinCooldown = (currentTime - lastDetectedTimestamp) < COOLDOWN_WINDOW_MS
@@ -223,17 +228,23 @@ fun SimplifiedCameraPreview(
                                                                      if (com.talkar.app.BuildConfig.DEBUG) {
                                                                         Log.v("SimplifiedCamera", "Skipping re-detection (Cooldown)")
                                                                      }
-                                                                } else {
-                                                                    // Valid Match
-                                                                    lastDetectedId = matchResult.imageId
-                                                                    lastDetectedTimestamp = currentTime
-                                                                    isHybridMatched = true
-                                                                    isImageMatched = true
-                                                                    
-                                                                    if (!currentSessionMatched) {
-                                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                        currentSessionMatched = true
-                                                                    }
+                                                                  } else {
+                                                                      // Valid Match
+                                                                      lastDetectedId = matchResult.imageId
+                                                                      lastDetectedTimestamp = currentTime
+                                                                      isHybridMatched = true
+                                                                      isImageMatched = true
+                                                                       Log.i("SimplifiedCamera", "Setting isImageMatched = true for ${matchResult.imageName} (hash=${matchResult.confidence})")
+                                                                     
+                                                                     // Show toast on main thread
+                                                                     Handler(Looper.getMainLooper()).post {
+                                                                         Toast.makeText(context, "✓ ${matchResult.imageName} detected! TAP to interact", Toast.LENGTH_LONG).show()
+                                                                     }
+                                                                     
+                                                                     if (!currentSessionMatched) {
+                                                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                         currentSessionMatched = true
+                                                                     }
                                                                     
                                                                     val recognition = ImageRecognition(
                                                                         id = matchResult.imageId,
@@ -353,6 +364,42 @@ fun SimplifiedCameraPreview(
             // Google Lens Style Corners
             ScanningOverlay(isMatched = isHybridMatched)
             
+            // Prominent "Image Detected" overlay - show based on lastDetectedTimestamp
+            val currentTime = System.currentTimeMillis()
+            val timeSinceDetection = currentTime - lastDetectedTimestamp
+            val shouldShowOverlay = timeSinceDetection < 10000 && (isImageMatched || isHybridMatched || lastDetectedId != null)
+            
+            if (shouldShowOverlay) {
+                Log.i("SimplifiedCamera", "Showing overlay, timeSinceDetection: $timeSinceDetection")
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF4CAF50))
+                            .padding(40.dp)
+                    ) {
+                        Text(
+                            text = "✓ Image Detected!",
+                            color = Color.White,
+                            fontSize = 28.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "TAP to interact",
+                            color = Color.White,
+                            fontSize = 20.sp
+                        )
+                    }
+                }
+            }
+            
             // Backend Status Overlay
             Box(
                 modifier = Modifier
@@ -448,9 +495,9 @@ fun SimplifiedCameraPreview(
             
             DisposableEffect(Unit) {
                 onDispose {
-                    detectionJobRef.value?.cancel()
+                    detectionJobRef.get()?.cancel()
                     faceDetector.stop()
-                    imageMatcher.clearTemplates()
+                    kotlinx.coroutines.GlobalScope.launch { imageMatcher.clearTemplates() }
                     cameraExecutor.shutdown()
                 }
             }
