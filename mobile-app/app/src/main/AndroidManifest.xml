@@ -42,8 +42,11 @@
             </intent-filter>
         </activity>
         
-        <!-- ARCore metadata -->
-        <meta-data android:name="com.google.ar.core" android:value="required" />
+        <!-- ARCore metadata - Override Sceneview's optional value -->
+        <meta-data 
+            android:name="com.google.ar.core" 
+            android:value="required"
+            tools:replace="android:value" />
     </application>
 </manifest>
 
