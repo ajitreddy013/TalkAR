@@ -15,6 +15,7 @@ import com.google.ar.core.AugmentedImage
 import com.google.ar.core.Config
 import com.google.ar.core.Frame
 import com.google.ar.core.TrackingState
+import com.talkar.app.ar.ARGestureDetector
 import com.talkar.app.ar.ARSessionConfig
 import com.talkar.app.ar.AugmentedImageDatabaseManager
 import io.github.sceneview.ar.ARSceneView

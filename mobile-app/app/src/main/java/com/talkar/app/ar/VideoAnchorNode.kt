@@ -5,11 +5,6 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.util.Log
 import com.google.ar.core.Anchor
-import io.github.sceneview.ar.node.AnchorNode
-import io.github.sceneview.material.setExternalTexture
-import io.github.sceneview.node.ModelNode
-import io.github.sceneview.math.Position
-import io.github.sceneview.math.Scale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +23,9 @@ import kotlinx.coroutines.launch
  * - Lifecycle management (play/pause/stop)
  * - Completion callbacks
  * 
+ * TODO: Complete integration with Sceneview 3D rendering
+ * Currently handles MediaPlayer logic, 3D rendering to be added.
+ * 
  * @param context Android context for media player
  * @param anchor ARCore anchor from detected image
  * @param imageWidth Physical width of the image in meters (e.g., 0.8m)
@@ -35,17 +33,16 @@ import kotlinx.coroutines.launch
  */
 class VideoAnchorNode(
     private val context: Context,
-    anchor: Anchor,
+    private val anchor: Anchor,
     private val imageWidth: Float,
     private val imageHeight: Float
-) : AnchorNode(anchor) {
+) {
     
     companion object {
         private const val TAG = "VideoAnchorNode"
     }
     
     private var mediaPlayer: MediaPlayer? = null
-    private var videoNode: ModelNode? = null
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     
     // Callbacks
@@ -118,6 +115,14 @@ class VideoAnchorNode(
     /**
      * Creates a 3D plane to display the video.
      * The plane matches the physical dimensions of the detected image.
+     * 
+     * TODO: Implement 3D plane rendering with Sceneview
+     * This requires:
+     * 1. Creating a mesh geometry for the plane
+     * 2. Creating a SurfaceTexture from MediaPlayer
+     * 3. Creating a material with external texture
+     * 4. Applying material to plane geometry
+     * 5. Positioning plane at anchor location
      */
     private fun createVideoPlane(videoAspectRatio: Float) {
         try {
@@ -126,30 +131,11 @@ class VideoAnchorNode(
             val planeHeight = imageHeight
             
             Log.d(TAG, "Creating video plane: ${planeWidth}m x ${planeHeight}m")
+            Log.d(TAG, "Video aspect ratio: $videoAspectRatio")
             
-            // TODO: Create actual 3D plane with Sceneview
-            // This requires creating a mesh and material with video texture
-            // For now, we'll use a placeholder approach
-            
-            // Create a model node for the video plane
-            videoNode = ModelNode().apply {
-                // Set position (centered on anchor)
-                position = Position(0f, 0f, 0f)
-                
-                // Set scale to match physical dimensions
-                scale = Scale(planeWidth, planeHeight, 1f)
-                
-                // TODO: Apply video texture to material
-                // This requires:
-                // 1. Creating a SurfaceTexture from MediaPlayer
-                // 2. Creating a material with external texture
-                // 3. Applying material to plane geometry
-            }
-            
-            // Add video node as child
-            addChildNode(videoNode!!)
-            
-            Log.d(TAG, "Video plane created successfully")
+            // TODO: Implement 3D rendering with Sceneview
+            // For now, just log that we would create the plane
+            Log.d(TAG, "Video plane creation pending 3D rendering implementation")
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create video plane", e)
@@ -252,14 +238,12 @@ class VideoAnchorNode(
      */
     fun cleanup() {
         releaseMediaPlayer()
-        videoNode?.let { removeChildNode(it) }
-        videoNode = null
         scope.cancel()
         Log.d(TAG, "VideoAnchorNode cleaned up")
     }
     
-    override fun onDestroy() {
-        cleanup()
-        super.onDestroy()
-    }
+    /**
+     * Gets the ARCore anchor for this node.
+     */
+    fun getAnchor(): Anchor = anchor
 }
