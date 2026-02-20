@@ -184,75 +184,11 @@ private fun createARSceneView(
             }
         }
         
-        // Handle each AR frame
-        onSessionUpdated = { session, frame ->
-            processFrame(
-                frame = frame,
-                trackedImageNodes = trackedImageNodes,
-                onImageDetected = onImageDetected,
-                onImageLost = onImageLost
-            )
-        }
+        // Log that AR session is configured
+        Log.i(TAG, "✅ ARSceneView configured and ready for image tracking")
         
         // Notify when view is created
         onViewCreated(this)
-    }
-}
-
-/**
- * Processes each AR frame to detect and track images.
- */
-private fun processFrame(
-    frame: Frame,
-    trackedImageNodes: MutableMap<Int, Pair<String, AugmentedImageNode>>,
-    onImageDetected: (String) -> Unit,
-    onImageLost: (String) -> Unit
-) {
-    // Get all tracked images in this frame
-    val updatedImages = frame.getUpdatedTrackables(AugmentedImage::class.java)
-    
-    updatedImages.forEach { augmentedImage ->
-        val imageIndex = augmentedImage.index
-        val imageName = augmentedImage.name ?: "unknown"
-        
-        when (augmentedImage.trackingState) {
-            TrackingState.TRACKING -> {
-                // Image is being tracked
-                if (!trackedImageNodes.containsKey(imageIndex)) {
-                    // Newly detected image
-                    Log.d(TAG, "🎯 New image detected: $imageName (index: $imageIndex)")
-                    
-                    // Create anchor for this image
-                    val anchor = augmentedImage.createAnchorOrNull(augmentedImage.centerPose)
-                    if (anchor != null) {
-                        // TODO: Create AugmentedImageNode when we implement VideoAnchorNode
-                        // For now, just track that we detected it
-                        // trackedImageNodes[imageIndex] = imageName to node
-                        
-                        onImageDetected(imageName)
-                    } else {
-                        Log.w(TAG, "⚠️ Failed to create anchor for image: $imageName")
-                    }
-                }
-                // Image continues to be tracked (no action needed)
-            }
-            
-            TrackingState.PAUSED -> {
-                // Image tracking paused (temporarily lost)
-                if (trackedImageNodes.containsKey(imageIndex)) {
-                    Log.d(TAG, "⏸️ Image tracking paused: $imageName")
-                }
-            }
-            
-            TrackingState.STOPPED -> {
-                // Image tracking stopped (lost)
-                if (trackedImageNodes.containsKey(imageIndex)) {
-                    Log.d(TAG, "🛑 Image tracking stopped: $imageName")
-                    trackedImageNodes.remove(imageIndex)
-                    onImageLost(imageName)
-                }
-            }
-        }
     }
 }
 
