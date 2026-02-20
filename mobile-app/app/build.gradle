@@ -92,6 +92,15 @@ android {
     lint {
         disable 'UnsafeOptInUsageError'
     }
+    
+    // Exclude archive folders from compilation
+    sourceSets {
+        main {
+            java {
+                exclude '**/archive/**'
+            }
+        }
+    }
 }
 
 dependencies {
@@ -106,8 +115,9 @@ dependencies {
     implementation 'androidx.compose.material:material-icons-core:1.5.4'
     implementation 'androidx.compose.material:material-icons-extended:1.5.4'
     
-    // ARCore (modern approach without Sceneform)
+    // ARCore with Sceneview for 3D rendering
     implementation 'com.google.ar:core:1.41.0'
+    implementation 'io.github.sceneview:arsceneview:2.2.1'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
 
     // CameraX
@@ -143,15 +153,15 @@ dependencies {
     // Gson for TypeConverters
     implementation 'com.google.code.gson:gson:2.10.1'
     
-    // ML Kit for image recognition
-    implementation 'com.google.mlkit:face-detection:16.1.7'
-    implementation 'com.google.android.gms:play-services-mlkit-face-detection:17.1.0'
-    implementation 'com.google.mlkit:image-labeling:17.0.7'
-    implementation 'com.google.mlkit:object-detection:17.0.1'
-    implementation 'com.google.mlkit:vision-common:17.3.0'
-    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3'
+    // ML Kit - REMOVED (using ARCore Augmented Images instead)
+    // implementation 'com.google.mlkit:face-detection:16.1.7'
+    // implementation 'com.google.android.gms:play-services-mlkit-face-detection:17.1.0'
+    // implementation 'com.google.mlkit:image-labeling:17.0.7'
+    // implementation 'com.google.mlkit:object-detection:17.0.1'
+    // implementation 'com.google.mlkit:vision-common:17.3.0'
+    // implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3'
     
-    // ExoPlayer for audio streaming
+    // ExoPlayer for video playback
     implementation 'androidx.media3:media3-exoplayer:1.2.1'
     implementation 'androidx.media3:media3-ui:1.2.1'
     
