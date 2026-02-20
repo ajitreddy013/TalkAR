@@ -1,10 +1,13 @@
 # TalkAR Project Status & Overview
 
-> **Last Updated**: February 11, 2026  
-> **Project Phase**: Pre-Release Testing & Play Store Preparation  
+> **Last Updated**: February 14, 2026  
+> **Project Phase**: Pre-Release Testing & Play Store Preparation (Cleanup in progress)
 > **Overall Completion**: ~85%
 
 ---
+
+> **Note**: Historical weekly reports and summaries have been moved to `docs/archive/` to keep the root directory clean.
+
 
 ## 📱 What is TalkAR?
 

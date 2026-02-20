@@ -7,16 +7,28 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.talkar.app.ui.screens.ARScreen
-import com.talkar.app.ui.screens.Week2ARScreen
+// import com.talkar.app.ui.screens.ARScreen // Disabled for new AR implementation
+// import com.talkar.app.ui.screens.Week2ARScreen // Disabled for new AR implementation
+import com.talkar.app.ui.screens.TalkARScreen
 import com.talkar.app.ui.theme.TalkARTheme
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
@@ -28,18 +40,23 @@ import com.talkar.app.data.services.ConfigSyncService
 class MainActivity : ComponentActivity() {
     
     private var hasCameraPermission by mutableStateOf(false)
+    private var hasAudioPermission by mutableStateOf(false)
     private lateinit var configSyncService: ConfigSyncService
     
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        hasCameraPermission = isGranted
-        android.util.Log.d("MainActivity", "Permission result: $isGranted")
-        if (!isGranted) {
-            // Permission denied, show error message
+    private val requestPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasCameraPermission = permissions[Manifest.permission.CAMERA] ?: false
+        hasAudioPermission = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+        
+        android.util.Log.d("MainActivity", "Camera permission: $hasCameraPermission")
+        android.util.Log.d("MainActivity", "Audio permission: $hasAudioPermission")
+        
+        if (!hasCameraPermission) {
             android.util.Log.e("MainActivity", "Camera permission denied")
-        } else {
-            android.util.Log.d("MainActivity", "Camera permission granted!")
+        }
+        if (!hasAudioPermission) {
+            android.util.Log.e("MainActivity", "Audio permission denied")
         }
     }
     
@@ -88,38 +105,81 @@ class MainActivity : ComponentActivity() {
                     // Check permissions in background to avoid blocking UI
                     LaunchedEffect(Unit) {
                         withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            val permissionStatus = ContextCompat.checkSelfPermission(
+                            val cameraGranted = ContextCompat.checkSelfPermission(
                                 this@MainActivity,
                                 Manifest.permission.CAMERA
                             ) == PackageManager.PERMISSION_GRANTED
                             
+                            val audioGranted = ContextCompat.checkSelfPermission(
+                                this@MainActivity,
+                                Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+                            
                             withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                hasCameraPermission = permissionStatus
-                                android.util.Log.d("MainActivity", "Camera permission status: $hasCameraPermission")
+                                hasCameraPermission = cameraGranted
+                                hasAudioPermission = audioGranted
                                 
-                                if (!hasCameraPermission) {
-                                    android.util.Log.d("MainActivity", "Requesting camera permission...")
-                                    requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                android.util.Log.d("MainActivity", "Camera permission: $hasCameraPermission")
+                                android.util.Log.d("MainActivity", "Audio permission: $hasAudioPermission")
+                                
+                                if (!hasCameraPermission || !hasAudioPermission) {
+                                    android.util.Log.d("MainActivity", "Requesting permissions...")
+                                    requestPermissionsLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.CAMERA,
+                                            Manifest.permission.RECORD_AUDIO
+                                        )
+                                    )
                                 } else {
-                                    android.util.Log.d("MainActivity", "Camera permission already granted")
+                                    android.util.Log.d("MainActivity", "All permissions granted")
                                 }
                             }
                         }
                     }
                     
-                    // Week 2 AR Screen with Avatar Overlay
-                    Week2ARScreen(
-                        viewModel = enhancedViewModel,
-                        hasCameraPermission = hasCameraPermission,
-                        onPermissionCheck = {
-                            // Re-check permission when requested
-                            hasCameraPermission = ContextCompat.checkSelfPermission(
-                                this@MainActivity,
-                                Manifest.permission.CAMERA
-                            ) == PackageManager.PERMISSION_GRANTED
-                            android.util.Log.d("MainActivity", "Re-checked permission: $hasCameraPermission")
+                    // TalkAR Screen - ARCore Augmented Images
+                    if (hasCameraPermission && hasAudioPermission) {
+                        TalkARScreen()
+                    } else {
+                        // Show permission request UI
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Card(
+                                modifier = Modifier.padding(32.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = "📷🎤 Permissions Required",
+                                        style = MaterialTheme.typography.headlineSmall
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "TalkAR needs camera and microphone access for AR features and voice interaction",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(
+                                        onClick = {
+                                            requestPermissionsLauncher.launch(
+                                                arrayOf(
+                                                    Manifest.permission.CAMERA,
+                                                    Manifest.permission.RECORD_AUDIO
+                                                )
+                                            )
+                                        }
+                                    ) {
+                                        Text("Grant Permissions")
+                                    }
+                                }
+                            }
                         }
-                    )
+                    }
                 }
             }
         }

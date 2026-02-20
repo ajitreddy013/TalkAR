@@ -45,6 +45,9 @@ class ConversationalARService(
     private val scope = CoroutineScope(kotlinx.coroutines.SupervisorJob() + Dispatchers.Main)
     private var apiService = ApiClient.create()
     private var mediaPlayer: android.media.MediaPlayer? = null 
+    
+    fun getMediaPlayer(): android.media.MediaPlayer? = mediaPlayer
+    fun setMediaPlayer(mp: android.media.MediaPlayer?) { mediaPlayer = mp }
 
     private var finishJob: kotlinx.coroutines.Job? = null
 
@@ -211,7 +214,7 @@ class ConversationalARService(
                 if (response.isSuccessful && response.body()?.success == true) {
                     val introBody = response.body()
                     // Check multiple potential field names for robustness
-                    val url = introBody?.video_url ?: introBody?.introVideoUrl
+                    val url = introBody?.video_url
                     
                     if (!url.isNullOrEmpty()) {
                         Log.d(TAG, "Fetched intro video URL: $url (Attempt ${attempt + 1})")
@@ -385,7 +388,7 @@ class ConversationalARService(
                             // Clear context image after successful use
                             _contextImageFile = null
                             val lipSyncBody = lipSyncResponse.body()
-                            return@withContext lipSyncBody?.videoUrl ?: lipSyncBody?.video_url
+                            return@withContext lipSyncBody?.videoUrl
                         }
                     }
                 }
@@ -423,7 +426,7 @@ class ConversationalARService(
                         
                         if (lipSyncResponse.isSuccessful && lipSyncResponse.body()?.success == true) {
                             val lipSyncBody = lipSyncResponse.body()
-                            return@withContext lipSyncBody?.videoUrl ?: lipSyncBody?.video_url
+                            return@withContext lipSyncBody?.videoUrl
                         }
                     }
                 }
@@ -458,8 +461,6 @@ class ConversationalARService(
         finishJob = scope.launch {
             Log.d(TAG, "Video completed, re-enabling detection in 3 seconds...")
             delay(3000) 
-            
-            if (!kotlinx.coroutines.isActive) return@launch
 
             _isDetectionPaused.value = false
             Log.d(TAG, "Detection re-enabled")

@@ -942,9 +942,8 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
     } catch (error: any) {
       lastAIPipelineErrors.lipsync = error.message;
       console.error("Lip-sync generation error:", error);
-      // Fallback to mock implementation if real API fails
-      console.log("Falling back to mock lip-sync generation");
-      return this.generateMockLipSync(request);
+      // DO NOT fallback to mock - throw error instead
+      throw new Error(`Lip-sync generation failed: ${error.message}`);
     }
   }
 
