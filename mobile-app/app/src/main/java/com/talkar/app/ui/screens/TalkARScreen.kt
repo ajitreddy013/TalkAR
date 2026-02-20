@@ -58,6 +58,18 @@ fun TalkARScreen(
                 onImageLongPressed = { imageName ->
                     viewModel.onImageLongPressed(imageName)
                 },
+                videoUriToPlay = uiState.currentVideoUri,
+                onVideoCompleted = {
+                    when (uiState.interactionState) {
+                        InteractionState.PLAYING_INITIAL_VIDEO -> {
+                            viewModel.onInitialVideoCompleted()
+                        }
+                        InteractionState.PLAYING_RESPONSE_VIDEO -> {
+                            viewModel.onResponseVideoCompleted()
+                        }
+                        else -> {}
+                    }
+                },
                 onError = { error ->
                     viewModel.onError(error)
                 }
