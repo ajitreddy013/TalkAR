@@ -7,16 +7,28 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.talkar.app.ui.screens.ARScreen
-import com.talkar.app.ui.screens.Week2ARScreen
+// import com.talkar.app.ui.screens.ARScreen // Disabled for new AR implementation
+// import com.talkar.app.ui.screens.Week2ARScreen // Disabled for new AR implementation
+import com.talkar.app.ui.screens.TalkARScreen
 import com.talkar.app.ui.theme.TalkARTheme
 import com.talkar.app.ui.viewmodels.SimpleARViewModel
 import com.talkar.app.ui.viewmodels.EnhancedARViewModel
@@ -107,18 +119,44 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     
-                    // Week2 AR Screen - hash-based matching
-                    Week2ARScreen(
-                        viewModel = enhancedViewModel,
-                        hasCameraPermission = hasCameraPermission,
-                        onPermissionCheck = {
-                            hasCameraPermission = ContextCompat.checkSelfPermission(
-                                this@MainActivity,
-                                Manifest.permission.CAMERA
-                            ) == PackageManager.PERMISSION_GRANTED
-                            android.util.Log.d("MainActivity", "Re-checked permission: $hasCameraPermission")
+                    // TalkAR Screen - ARCore Augmented Images
+                    if (hasCameraPermission) {
+                        TalkARScreen()
+                    } else {
+                        // Show permission request UI
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Card(
+                                modifier = Modifier.padding(32.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = "📷 Camera Permission Required",
+                                        style = MaterialTheme.typography.headlineSmall
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "TalkAR needs camera access for AR features",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(
+                                        onClick = {
+                                            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                        }
+                                    ) {
+                                        Text("Grant Permission")
+                                    }
+                                }
+                            }
                         }
-                    )
+                    }
                 }
             }
         }
