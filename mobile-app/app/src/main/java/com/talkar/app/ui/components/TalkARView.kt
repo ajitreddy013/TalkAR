@@ -28,11 +28,13 @@ import io.github.sceneview.ar.node.AugmentedImageNode
  * - Displays AR camera feed
  * - Detects reference images (posters)
  * - Tracks images in 3D space
+ * - Handles gesture interactions (long-press to play video)
  * - Provides callbacks for image detection/loss
  * 
  * @param modifier Compose modifier
  * @param onImageDetected Callback when an image is detected (imageName)
  * @param onImageLost Callback when an image is lost (imageName)
+ * @param onImageLongPressed Callback when user long-presses on detected image (imageName)
  * @param onError Callback for errors
  */
 @Composable
@@ -40,6 +42,7 @@ fun TalkARView(
     modifier: Modifier = Modifier,
     onImageDetected: (imageName: String) -> Unit = {},
     onImageLost: (imageName: String) -> Unit = {},
+    onImageLongPressed: (imageName: String) -> Unit = {},
     onError: (error: String) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -49,9 +52,23 @@ fun TalkARView(
     val dbManager = remember { AugmentedImageDatabaseManager(context) }
     val sessionConfig = remember { ARSessionConfig() }
     
-    // Track detected images
-    var trackedImages by remember { mutableStateOf<Map<String, AugmentedImageNode>>(emptyMap()) }
+    // Track detected images and their names
+    var trackedImageNames by remember { mutableStateOf<Set<String>>(emptySet()) }
     var arSceneView by remember { mutableStateOf<ARSceneView?>(null) }
+    
+    // Gesture detector for long-press interactions
+    val gestureDetector = remember {
+        ARGestureDetector(
+            context = context,
+            onLongPress = { x, y ->
+                // When user long-presses, trigger video for the first tracked image
+                trackedImageNames.firstOrNull()?.let { imageName ->
+                    Log.d(TAG, "Long press on tracked image: $imageName")
+                    onImageLongPressed(imageName)
+                }
+            }
+        )
+    }
     
     // Lifecycle management
     DisposableEffect(lifecycleOwner) {
@@ -88,12 +105,15 @@ fun TalkARView(
                     context = ctx,
                     dbManager = dbManager,
                     sessionConfig = sessionConfig,
+                    gestureDetector = gestureDetector,
                     onImageDetected = { imageName ->
                         Log.i(TAG, "✅ Image detected: $imageName")
+                        trackedImageNames = trackedImageNames + imageName
                         onImageDetected(imageName)
                     },
                     onImageLost = { imageName ->
                         Log.i(TAG, "❌ Image lost: $imageName")
+                        trackedImageNames = trackedImageNames - imageName
                         onImageLost(imageName)
                     },
                     onError = onError,
@@ -114,6 +134,7 @@ private fun createARSceneView(
     context: Context,
     dbManager: AugmentedImageDatabaseManager,
     sessionConfig: ARSessionConfig,
+    gestureDetector: ARGestureDetector,
     onImageDetected: (String) -> Unit,
     onImageLost: (String) -> Unit,
     onError: (String) -> Unit,
@@ -123,6 +144,12 @@ private fun createARSceneView(
     return ARSceneView(context).apply {
         // Store currently tracked images
         val trackedImageNodes = mutableMapOf<Int, Pair<String, AugmentedImageNode>>()
+        
+        // Set up gesture handling
+        setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
+            true
+        }
         
         // Configure AR session
         configureSession { session, config ->
