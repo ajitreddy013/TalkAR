@@ -40,18 +40,23 @@ import com.talkar.app.data.services.ConfigSyncService
 class MainActivity : ComponentActivity() {
     
     private var hasCameraPermission by mutableStateOf(false)
+    private var hasAudioPermission by mutableStateOf(false)
     private lateinit var configSyncService: ConfigSyncService
     
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        hasCameraPermission = isGranted
-        android.util.Log.d("MainActivity", "Permission result: $isGranted")
-        if (!isGranted) {
-            // Permission denied, show error message
+    private val requestPermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasCameraPermission = permissions[Manifest.permission.CAMERA] ?: false
+        hasAudioPermission = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+        
+        android.util.Log.d("MainActivity", "Camera permission: $hasCameraPermission")
+        android.util.Log.d("MainActivity", "Audio permission: $hasAudioPermission")
+        
+        if (!hasCameraPermission) {
             android.util.Log.e("MainActivity", "Camera permission denied")
-        } else {
-            android.util.Log.d("MainActivity", "Camera permission granted!")
+        }
+        if (!hasAudioPermission) {
+            android.util.Log.e("MainActivity", "Audio permission denied")
         }
     }
     
@@ -100,27 +105,40 @@ class MainActivity : ComponentActivity() {
                     // Check permissions in background to avoid blocking UI
                     LaunchedEffect(Unit) {
                         withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            val permissionStatus = ContextCompat.checkSelfPermission(
+                            val cameraGranted = ContextCompat.checkSelfPermission(
                                 this@MainActivity,
                                 Manifest.permission.CAMERA
                             ) == PackageManager.PERMISSION_GRANTED
                             
+                            val audioGranted = ContextCompat.checkSelfPermission(
+                                this@MainActivity,
+                                Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+                            
                             withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                hasCameraPermission = permissionStatus
-                                android.util.Log.d("MainActivity", "Camera permission status: $hasCameraPermission")
+                                hasCameraPermission = cameraGranted
+                                hasAudioPermission = audioGranted
                                 
-                                if (!hasCameraPermission) {
-                                    android.util.Log.d("MainActivity", "Requesting camera permission...")
-                                    requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                android.util.Log.d("MainActivity", "Camera permission: $hasCameraPermission")
+                                android.util.Log.d("MainActivity", "Audio permission: $hasAudioPermission")
+                                
+                                if (!hasCameraPermission || !hasAudioPermission) {
+                                    android.util.Log.d("MainActivity", "Requesting permissions...")
+                                    requestPermissionsLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.CAMERA,
+                                            Manifest.permission.RECORD_AUDIO
+                                        )
+                                    )
                                 } else {
-                                    android.util.Log.d("MainActivity", "Camera permission already granted")
+                                    android.util.Log.d("MainActivity", "All permissions granted")
                                 }
                             }
                         }
                     }
                     
                     // TalkAR Screen - ARCore Augmented Images
-                    if (hasCameraPermission) {
+                    if (hasCameraPermission && hasAudioPermission) {
                         TalkARScreen()
                     } else {
                         // Show permission request UI
@@ -136,22 +154,27 @@ class MainActivity : ComponentActivity() {
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
                                     Text(
-                                        text = "📷 Camera Permission Required",
+                                        text = "📷🎤 Permissions Required",
                                         style = MaterialTheme.typography.headlineSmall
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text(
-                                        text = "TalkAR needs camera access for AR features",
+                                        text = "TalkAR needs camera and microphone access for AR features and voice interaction",
                                         style = MaterialTheme.typography.bodyMedium,
                                         textAlign = TextAlign.Center
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Button(
                                         onClick = {
-                                            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                            requestPermissionsLauncher.launch(
+                                                arrayOf(
+                                                    Manifest.permission.CAMERA,
+                                                    Manifest.permission.RECORD_AUDIO
+                                                )
+                                            )
                                         }
                                     ) {
-                                        Text("Grant Permission")
+                                        Text("Grant Permissions")
                                     }
                                 }
                             }
