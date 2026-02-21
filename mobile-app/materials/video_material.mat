@@ -1,0 +1,29 @@
+material {
+    name : VideoMaterial,
+    shadingModel : unlit,
+    
+    parameters : [
+        {
+            type : samplerExternal,
+            name : videoTexture
+        }
+    ],
+    
+    requires : [
+        uv0
+    ],
+    
+    vertex {
+        void materialVertex(inout MaterialVertexInputs material) {
+            // Pass through vertex data
+        }
+    },
+    
+    fragment {
+        void material(inout MaterialInputs material) {
+            prepareMaterial(material);
+            vec2 uv = getUV0();
+            material.baseColor = texture(materialParams_videoTexture, uv);
+        }
+    }
+}

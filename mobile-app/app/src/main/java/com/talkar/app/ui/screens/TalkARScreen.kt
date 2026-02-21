@@ -116,6 +116,22 @@ fun TalkARScreen(
                         }
                     }
                     
+                    InteractionState.LOADING_VIDEO -> {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                            )
+                        ) {
+                            Text(
+                                text = "⏳ Loading video...",
+                                modifier = Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
+                    
                     InteractionState.PLAYING_INITIAL_VIDEO -> {
                         Spacer(modifier = Modifier.height(8.dp))
                         Card(

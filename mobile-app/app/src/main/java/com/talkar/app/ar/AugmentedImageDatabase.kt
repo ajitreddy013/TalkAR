@@ -23,9 +23,7 @@ class AugmentedImageDatabaseManager(private val context: Context) {
         
         // Reference image paths in assets
         private const val SUNRICH_IMAGE_PATH = "images/sunrich.jpg"
-        // Add more images here as needed
-        // private const val CHANEL_IMAGE_PATH = "images/chanel.png"
-        // private const val LEBRON_IMAGE_PATH = "images/lebronboy.png"
+        private const val TONY_IMAGE_PATH = "images/tony.png"
     }
     
     /**
@@ -51,6 +49,19 @@ class AugmentedImageDatabaseManager(private val context: Context) {
             if (sunrichIndex >= 0) {
                 imageCount++
                 Log.i(TAG, "✅ Added Sunrich image at index $sunrichIndex (width: ${IMAGE_PHYSICAL_WIDTH_METERS}m)")
+            }
+            
+            // Load Tony image
+            val tonyIndex = addImageToDatabase(
+                database = database,
+                imageName = "tony",
+                assetPath = TONY_IMAGE_PATH,
+                widthInMeters = IMAGE_PHYSICAL_WIDTH_METERS
+            )
+            
+            if (tonyIndex >= 0) {
+                imageCount++
+                Log.i(TAG, "✅ Added Tony image at index $tonyIndex (width: ${IMAGE_PHYSICAL_WIDTH_METERS}m)")
             }
             
             // TODO: Add more reference images here
@@ -125,8 +136,8 @@ class AugmentedImageDatabaseManager(private val context: Context) {
         val missingImages = mutableListOf<String>()
         
         val imagesToCheck = listOf(
-            SUNRICH_IMAGE_PATH
-            // Add more paths here as you add images
+            SUNRICH_IMAGE_PATH,
+            TONY_IMAGE_PATH
         )
         
         imagesToCheck.forEach { path ->

@@ -5,7 +5,10 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.talkar.app.R
 import com.talkar.app.ar.SpeechRecognitionService
+import com.talkar.app.data.api.TalkARApiService
+import com.talkar.app.data.api.ApiException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +33,9 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
     
     // Speech recognition service
     private val speechService = SpeechRecognitionService(context)
+    
+    // API service for backend communication
+    private val apiService = TalkARApiService()
     
     // UI State
     private val _uiState = MutableStateFlow(TalkARUiState())
@@ -69,19 +75,63 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
     
     /**
      * Called when user long-presses on a detected image.
-     * Starts the initial video playback.
+     * Fetches the initial video from backend and starts playback.
      */
     fun onImageLongPressed(imageName: String) {
         Log.i(TAG, "Image long-pressed: $imageName")
         
-        // TODO: Get video URI from backend based on imageName
-        // For now, use a placeholder
-        val videoUri = getInitialVideoUri(imageName)
-        
         _uiState.value = _uiState.value.copy(
-            currentVideoUri = videoUri,
-            interactionState = InteractionState.PLAYING_INITIAL_VIDEO
+            interactionState = InteractionState.LOADING_VIDEO
         )
+        
+        // Fetch video from backend
+        viewModelScope.launch {
+            try {
+                val videoResponse = apiService.getInitialVideo(
+                    imageName = imageName,
+                    language = "en",
+                    emotion = "excited"
+                )
+                
+                if (videoResponse.videoUrl.isNotEmpty()) {
+                    // Use backend video URL
+                    val videoUri = Uri.parse(videoResponse.videoUrl)
+                    
+                    _uiState.value = _uiState.value.copy(
+                        currentVideoUri = videoUri,
+                        currentScript = videoResponse.script,
+                        interactionState = InteractionState.PLAYING_INITIAL_VIDEO
+                    )
+                    
+                    Log.i(TAG, "Loaded video from backend: ${videoResponse.videoUrl}")
+                } else {
+                    // Fallback to local video if backend doesn't return URL
+                    Log.w(TAG, "Backend returned empty video URL, using local fallback")
+                    val localUri = getLocalVideoUri(imageName)
+                    
+                    _uiState.value = _uiState.value.copy(
+                        currentVideoUri = localUri,
+                        interactionState = InteractionState.PLAYING_INITIAL_VIDEO
+                    )
+                }
+                
+            } catch (e: ApiException) {
+                Log.e(TAG, "API error loading video: ${e.message}", e)
+                
+                // Fallback to local video on error
+                val localUri = getLocalVideoUri(imageName)
+                
+                _uiState.value = _uiState.value.copy(
+                    currentVideoUri = localUri,
+                    errorMessage = "Using offline video (network error)",
+                    interactionState = InteractionState.PLAYING_INITIAL_VIDEO
+                )
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading video: ${e.message}", e)
+                onError("Failed to load video: ${e.message}")
+            }
+        }
     }
     
     /**
@@ -103,7 +153,7 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
     
     /**
      * Called when speech recognition produces a result.
-     * Selects and plays the response video.
+     * Sends query to backend and plays the response video.
      */
     private fun onSpeechRecognized(text: String) {
         Log.i(TAG, "Speech recognized: \"$text\"")
@@ -113,14 +163,52 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
             interactionState = InteractionState.PROCESSING_SPEECH
         )
         
-        // TODO: Send text to backend to get response video
-        // For now, use a placeholder
-        val responseVideoUri = getResponseVideoUri(text)
-        
-        _uiState.value = _uiState.value.copy(
-            currentVideoUri = responseVideoUri,
-            interactionState = InteractionState.PLAYING_RESPONSE_VIDEO
-        )
+        // Send query to backend
+        viewModelScope.launch {
+            try {
+                val response = apiService.sendVoiceQuery(text)
+                
+                if (response.success && response.audioUrl.isNotEmpty()) {
+                    // Use backend audio/video URL
+                    val responseUri = Uri.parse(response.audioUrl)
+                    
+                    _uiState.value = _uiState.value.copy(
+                        currentVideoUri = responseUri,
+                        responseText = response.response,
+                        interactionState = InteractionState.PLAYING_RESPONSE_VIDEO
+                    )
+                    
+                    Log.i(TAG, "Playing response from backend: ${response.audioUrl}")
+                } else {
+                    // Fallback to local video if backend doesn't return URL
+                    Log.w(TAG, "Backend returned empty response, using local fallback")
+                    val localUri = getLocalVideoUri(_uiState.value.detectedImage ?: "sunrich")
+                    
+                    _uiState.value = _uiState.value.copy(
+                        currentVideoUri = localUri,
+                        responseText = response.response,
+                        interactionState = InteractionState.PLAYING_RESPONSE_VIDEO
+                    )
+                }
+                
+            } catch (e: ApiException) {
+                Log.e(TAG, "API error processing speech: ${e.message}", e)
+                
+                // Fallback to local video on error
+                val localUri = getLocalVideoUri(_uiState.value.detectedImage ?: "sunrich")
+                
+                _uiState.value = _uiState.value.copy(
+                    currentVideoUri = localUri,
+                    responseText = "Thank you for your response!",
+                    errorMessage = "Using offline response (network error)",
+                    interactionState = InteractionState.PLAYING_RESPONSE_VIDEO
+                )
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing speech: ${e.message}", e)
+                onError("Failed to process speech: ${e.message}")
+            }
+        }
     }
     
     /**
@@ -189,21 +277,18 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
     }
     
     /**
-     * Gets the initial video URI for a detected image.
-     * TODO: Replace with actual backend API call.
+     * Gets the local video URI as fallback.
+     * Used when backend is unavailable or returns empty URL.
      */
-    private fun getInitialVideoUri(imageName: String): Uri {
-        // Placeholder - in production, fetch from backend
-        return Uri.parse("android.resource://${context.packageName}/raw/placeholder_video")
-    }
-    
-    /**
-     * Gets the response video URI based on recognized speech.
-     * TODO: Replace with actual backend API call.
-     */
-    private fun getResponseVideoUri(speech: String): Uri {
-        // Placeholder - in production, send speech to backend and get response video
-        return Uri.parse("android.resource://${context.packageName}/raw/response_video")
+    private fun getLocalVideoUri(imageName: String): Uri {
+        // Map image names to video resources
+        val videoResId = when (imageName.lowercase()) {
+            "sunrich" -> R.raw.sunrich_video
+            "tony" -> R.raw.sunrich_video // Using same video for now
+            else -> R.raw.sunrich_video // Default fallback
+        }
+        
+        return Uri.parse("android.resource://${context.packageName}/$videoResId")
     }
     
     override fun onCleared() {
@@ -219,6 +304,8 @@ data class TalkARUiState(
     val detectedImage: String? = null,
     val currentVideoUri: Uri? = null,
     val recognizedSpeech: String? = null,
+    val currentScript: String? = null,
+    val responseText: String? = null,
     val errorMessage: String? = null,
     val interactionState: InteractionState = InteractionState.IDLE
 )
@@ -229,9 +316,10 @@ data class TalkARUiState(
 enum class InteractionState {
     IDLE,                       // No image detected
     IMAGE_DETECTED,             // Image detected, waiting for user interaction
+    LOADING_VIDEO,              // Loading video from backend
     PLAYING_INITIAL_VIDEO,      // Playing the first video
     LISTENING_FOR_SPEECH,       // Listening for user speech
-    PROCESSING_SPEECH,          // Processing recognized speech
+    PROCESSING_SPEECH,          // Processing recognized speech with backend
     PLAYING_RESPONSE_VIDEO,     // Playing response video
     ERROR                       // Error state
 }

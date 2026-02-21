@@ -61,43 +61,49 @@ class VideoAnchorNode(
      * @param autoPlay Whether to start playing immediately
      */
     fun loadVideo(videoUri: Uri, autoPlay: Boolean = true) {
-        scope.launch {
+        scope.launch(Dispatchers.IO) { // Load on background thread
             try {
                 Log.d(TAG, "Loading video: $videoUri")
                 
                 // Release any existing media player
                 releaseMediaPlayer()
                 
-                // Create new media player
-                mediaPlayer = MediaPlayer().apply {
+                // Create new media player on background thread
+                val player = MediaPlayer().apply {
                     setDataSource(context, videoUri)
                     
-                    // Set up callbacks
-                    setOnPreparedListener { player ->
-                        Log.d(TAG, "Video prepared, duration: ${player.duration}ms")
-                        
-                        // Create video plane with correct aspect ratio
-                        val videoWidth = player.videoWidth
-                        val videoHeight = player.videoHeight
-                        val aspectRatio = videoWidth.toFloat() / videoHeight.toFloat()
-                        
-                        createVideoPlane(aspectRatio)
-                        
-                        if (autoPlay) {
-                            player.start()
-                            Log.d(TAG, "Video playback started")
+                    // Set up callbacks on main thread
+                    setOnPreparedListener { preparedPlayer ->
+                        scope.launch(Dispatchers.Main) {
+                            Log.d(TAG, "Video prepared, duration: ${preparedPlayer.duration}ms")
+                            
+                            // Create video plane with correct aspect ratio
+                            val videoWidth = preparedPlayer.videoWidth
+                            val videoHeight = preparedPlayer.videoHeight
+                            val aspectRatio = videoWidth.toFloat() / videoHeight.toFloat()
+                            
+                            createVideoPlane(aspectRatio)
+                            
+                            if (autoPlay) {
+                                preparedPlayer.start()
+                                Log.d(TAG, "Video playback started")
+                            }
                         }
                     }
                     
                     setOnCompletionListener {
-                        Log.d(TAG, "Video playback completed")
-                        onVideoCompleted?.invoke()
+                        scope.launch(Dispatchers.Main) {
+                            Log.d(TAG, "Video playback completed")
+                            onVideoCompleted?.invoke()
+                        }
                     }
                     
                     setOnErrorListener { _, what, extra ->
-                        val error = "MediaPlayer error: what=$what, extra=$extra"
-                        Log.e(TAG, error)
-                        onVideoError?.invoke(error)
+                        scope.launch(Dispatchers.Main) {
+                            val error = "MediaPlayer error: what=$what, extra=$extra"
+                            Log.e(TAG, error)
+                            onVideoError?.invoke(error)
+                        }
                         true
                     }
                     
@@ -105,10 +111,17 @@ class VideoAnchorNode(
                     prepareAsync()
                 }
                 
+                // Store on main thread
+                scope.launch(Dispatchers.Main) {
+                    mediaPlayer = player
+                }
+                
             } catch (e: Exception) {
-                val error = "Failed to load video: ${e.message}"
-                Log.e(TAG, error, e)
-                onVideoError?.invoke(error)
+                scope.launch(Dispatchers.Main) {
+                    val error = "Failed to load video: ${e.message}"
+                    Log.e(TAG, error, e)
+                    onVideoError?.invoke(error)
+                }
             }
         }
     }
