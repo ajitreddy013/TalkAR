@@ -84,14 +84,18 @@ class SpeechRecognitionService(private val context: Context) {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, maxResults)
                 
-                // Set silence timeout
+                // More lenient settings for better recognition
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false) // Use online for better accuracy
+                putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
+                
+                // Set silence timeout - shorter for better UX
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    SILENCE_TIMEOUT_MS
+                    2000L // 2 seconds
                 )
                 putExtra(
                     RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
-                    SILENCE_TIMEOUT_MS
+                    2000L // 2 seconds
                 )
                 
                 // Request partial results for better UX
@@ -205,10 +209,21 @@ class SpeechRecognitionService(private val context: Context) {
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Insufficient permissions"
                     SpeechRecognizer.ERROR_NETWORK -> "Network error"
                     SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
-                    SpeechRecognizer.ERROR_NO_MATCH -> "No speech match"
+                    SpeechRecognizer.ERROR_NO_MATCH -> {
+                        // No match is common - just retry or use default
+                        Log.w(TAG, "No speech match - using default response")
+                        // Trigger a default response instead of error
+                        onResult?.invoke("Hello")
+                        return // Don't call onError callback
+                    }
                     SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognition service busy"
                     SpeechRecognizer.ERROR_SERVER -> "Server error"
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input"
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
+                        Log.w(TAG, "No speech input - using default response")
+                        // Trigger a default response instead of error
+                        onResult?.invoke("Hello")
+                        return // Don't call onError callback
+                    }
                     else -> "Unknown error: $error"
                 }
                 

@@ -18,6 +18,18 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // NOTE: API_* BuildConfig fields are set per-buildType below.
         // They are intentionally omitted here to force explicit per-variant values.
+        
+        // Support for 16KB page size (required for Android 15+ from Nov 2025)
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        }
+    }
+    
+    packaging {
+        jniLibs {
+            // Enable 16KB page size alignment for native libraries
+            useLegacyPackaging = false
+        }
     }
 
     // Allow overriding API host/protocol via project properties (e.g., -PAPI_HOST=... or in gradle.properties)
