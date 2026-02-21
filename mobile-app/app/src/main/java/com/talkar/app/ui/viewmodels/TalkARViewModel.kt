@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.talkar.app.R
 import com.talkar.app.ar.SpeechRecognitionService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -190,11 +191,17 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
     
     /**
      * Gets the initial video URI for a detected image.
-     * TODO: Replace with actual backend API call.
+     * Maps image names to their corresponding video resources.
      */
     private fun getInitialVideoUri(imageName: String): Uri {
-        // Placeholder - in production, fetch from backend
-        return Uri.parse("android.resource://${context.packageName}/raw/placeholder_video")
+        // Map image names to video resources
+        val videoResId = when (imageName.lowercase()) {
+            "sunrich" -> R.raw.sunrich_video
+            "tony" -> R.raw.sunrich_video // Using same video for now, add tony_video later
+            else -> R.raw.sunrich_video // Default fallback
+        }
+        
+        return Uri.parse("android.resource://${context.packageName}/$videoResId")
     }
     
     /**
@@ -203,7 +210,8 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
      */
     private fun getResponseVideoUri(speech: String): Uri {
         // Placeholder - in production, send speech to backend and get response video
-        return Uri.parse("android.resource://${context.packageName}/raw/response_video")
+        // For now, use the same video as a demo
+        return Uri.parse("android.resource://${context.packageName}/${R.raw.sunrich_video}")
     }
     
     override fun onCleared() {
