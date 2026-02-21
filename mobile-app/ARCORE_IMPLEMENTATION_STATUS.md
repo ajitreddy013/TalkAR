@@ -87,11 +87,10 @@
   - Dialogue selection logic
 
 ### 3. Test Videos
-- **Current State**: No video files in resources
-- **Needed**:
-  - Add sample video files to `res/raw/`
-  - Or configure backend video URLs
-  - Test video playback end-to-end
+- **Current State**: Sunrich video added to resources
+- **Location**: `mobile-app/app/src/main/res/raw/sunrich_video.mp4`
+- **Integration**: ViewModel configured to use actual video resource
+- **Status**: Ready for testing (MediaPlayer will load video, 3D rendering pending)
 
 ### 4. Complete Interaction Flow
 - **Current State**: All components ready, not tested end-to-end
@@ -135,10 +134,13 @@ mobile-app/app/src/main/assets/images/
 
 ## 🎯 Next Steps
 
-1. **Add Test Video**: Place a sample MP4 in `res/raw/` for testing
-2. **Test Video Playback**: Trigger long-press and verify MediaPlayer works
+1. **Connect Device**: Connect your Samsung device via USB or WiFi debugging
+2. **Test Video Playback**: 
+   - Point camera at sunrich or tony image
+   - Long-press on detected image
+   - Video should load (audio will play, 3D rendering pending)
 3. **Implement 3D Rendering**: Complete the video plane rendering in VideoAnchorNode
-4. **Backend Integration**: Connect to actual video URLs from backend
+4. **Backend Integration**: Connect to actual video URLs from backend API
 5. **End-to-End Testing**: Test complete flow from detection to response
 
 ## 🐛 Known Issues
