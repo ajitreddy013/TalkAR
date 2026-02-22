@@ -78,15 +78,20 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
      * Fetches the initial video from backend and starts playback.
      */
     fun onImageLongPressed(imageName: String) {
-        Log.i(TAG, "Image long-pressed: $imageName")
+        Log.i(TAG, "========================================")
+        Log.i(TAG, "👆 IMAGE LONG-PRESSED!")
+        Log.i(TAG, "   Image: $imageName")
+        Log.i(TAG, "========================================")
         
         _uiState.value = _uiState.value.copy(
             interactionState = InteractionState.LOADING_VIDEO
         )
+        Log.d(TAG, "State changed to: LOADING_VIDEO")
         
         // Fetch video from backend
         viewModelScope.launch {
             try {
+                Log.d(TAG, "Fetching video for: $imageName")
                 val videoResponse = apiService.getInitialVideo(
                     imageName = imageName,
                     language = "en",
@@ -97,41 +102,62 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
                     // Use backend video URL
                     val videoUri = Uri.parse(videoResponse.videoUrl)
                     
+                    Log.i(TAG, "========================================")
+                    Log.i(TAG, "✅ Backend video loaded!")
+                    Log.i(TAG, "   URL: ${videoResponse.videoUrl}")
+                    Log.i(TAG, "   URI: $videoUri")
+                    Log.i(TAG, "   Script: ${videoResponse.script}")
+                    Log.i(TAG, "========================================")
+                    
                     _uiState.value = _uiState.value.copy(
                         currentVideoUri = videoUri,
                         currentScript = videoResponse.script,
-                        interactionState = InteractionState.PLAYING_INITIAL_VIDEO
+                        interactionState = InteractionState.PLAYING_INITIAL_VIDEO,
+                        errorMessage = null
                     )
                     
-                    Log.i(TAG, "Loaded video from backend: ${videoResponse.videoUrl}")
+                    Log.i(TAG, "✅ State updated with backend video URI")
+                    Log.i(TAG, "   currentVideoUri: ${_uiState.value.currentVideoUri}")
+                    Log.i(TAG, "   interactionState: ${_uiState.value.interactionState}")
                 } else {
                     // Fallback to local video if backend doesn't return URL
                     Log.w(TAG, "Backend returned empty video URL, using local fallback")
-                    val localUri = getLocalVideoUri(imageName)
-                    
-                    _uiState.value = _uiState.value.copy(
-                        currentVideoUri = localUri,
-                        interactionState = InteractionState.PLAYING_INITIAL_VIDEO
-                    )
+                    useLocalVideo(imageName, "Backend returned empty URL")
                 }
                 
             } catch (e: ApiException) {
-                Log.e(TAG, "API error loading video: ${e.message}", e)
-                
-                // Fallback to local video on error
-                val localUri = getLocalVideoUri(imageName)
-                
-                _uiState.value = _uiState.value.copy(
-                    currentVideoUri = localUri,
-                    errorMessage = "Using offline video (network error)",
-                    interactionState = InteractionState.PLAYING_INITIAL_VIDEO
-                )
+                Log.w(TAG, "API error (${e.statusCode}): ${e.message}")
+                useLocalVideo(imageName, "Network unavailable - using offline video")
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Error loading video: ${e.message}", e)
-                onError("Failed to load video: ${e.message}")
+                Log.w(TAG, "Network error: ${e.message}")
+                useLocalVideo(imageName, "Network unavailable - using offline video")
             }
         }
+    }
+    
+    /**
+     * Uses local video as fallback.
+     */
+    private fun useLocalVideo(imageName: String, reason: String) {
+        val localUri = getLocalVideoUri(imageName)
+        
+        Log.i(TAG, "========================================")
+        Log.i(TAG, "📦 Using local video fallback")
+        Log.i(TAG, "   Reason: $reason")
+        Log.i(TAG, "   Image: $imageName")
+        Log.i(TAG, "   Local URI: $localUri")
+        Log.i(TAG, "========================================")
+        
+        _uiState.value = _uiState.value.copy(
+            currentVideoUri = localUri,
+            interactionState = InteractionState.PLAYING_INITIAL_VIDEO,
+            errorMessage = null // Don't show error for offline mode
+        )
+        
+        Log.i(TAG, "✅ State updated with local video URI")
+        Log.i(TAG, "   currentVideoUri: ${_uiState.value.currentVideoUri}")
+        Log.i(TAG, "   interactionState: ${_uiState.value.interactionState}")
     }
     
     /**
@@ -166,6 +192,7 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
         // Send query to backend
         viewModelScope.launch {
             try {
+                Log.d(TAG, "Sending voice query: $text")
                 val response = apiService.sendVoiceQuery(text)
                 
                 if (response.success && response.audioUrl.isNotEmpty()) {
@@ -175,40 +202,42 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
                     _uiState.value = _uiState.value.copy(
                         currentVideoUri = responseUri,
                         responseText = response.response,
-                        interactionState = InteractionState.PLAYING_RESPONSE_VIDEO
+                        interactionState = InteractionState.PLAYING_RESPONSE_VIDEO,
+                        errorMessage = null
                     )
                     
-                    Log.i(TAG, "Playing response from backend: ${response.audioUrl}")
+                    Log.i(TAG, "✅ Playing response from backend: ${response.audioUrl}")
                 } else {
                     // Fallback to local video if backend doesn't return URL
                     Log.w(TAG, "Backend returned empty response, using local fallback")
-                    val localUri = getLocalVideoUri(_uiState.value.detectedImage ?: "sunrich")
-                    
-                    _uiState.value = _uiState.value.copy(
-                        currentVideoUri = localUri,
-                        responseText = response.response,
-                        interactionState = InteractionState.PLAYING_RESPONSE_VIDEO
-                    )
+                    useLocalResponseVideo(response.response)
                 }
                 
             } catch (e: ApiException) {
-                Log.e(TAG, "API error processing speech: ${e.message}", e)
-                
-                // Fallback to local video on error
-                val localUri = getLocalVideoUri(_uiState.value.detectedImage ?: "sunrich")
-                
-                _uiState.value = _uiState.value.copy(
-                    currentVideoUri = localUri,
-                    responseText = "Thank you for your response!",
-                    errorMessage = "Using offline response (network error)",
-                    interactionState = InteractionState.PLAYING_RESPONSE_VIDEO
-                )
+                Log.w(TAG, "API error (${e.statusCode}): ${e.message}")
+                useLocalResponseVideo("Thank you for your response!")
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Error processing speech: ${e.message}", e)
-                onError("Failed to process speech: ${e.message}")
+                Log.w(TAG, "Network error: ${e.message}")
+                useLocalResponseVideo("Thank you for your response!")
             }
         }
+    }
+    
+    /**
+     * Uses local video for response as fallback.
+     */
+    private fun useLocalResponseVideo(responseText: String) {
+        val localUri = getLocalVideoUri(_uiState.value.detectedImage ?: "sunrich")
+        
+        _uiState.value = _uiState.value.copy(
+            currentVideoUri = localUri,
+            responseText = responseText,
+            interactionState = InteractionState.PLAYING_RESPONSE_VIDEO,
+            errorMessage = null // Don't show error for offline mode
+        )
+        
+        Log.i(TAG, "✅ Using local response video (offline mode)")
     }
     
     /**

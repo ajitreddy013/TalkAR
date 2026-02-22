@@ -53,6 +53,8 @@ echo "🔧 Compiling material..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "${SCRIPT_DIR}"
 
+echo "   Working directory: ${SCRIPT_DIR}"
+
 # Create output directory
 mkdir -p app/src/main/assets/materials
 
@@ -71,6 +73,7 @@ echo "   Source: ${MAT_SOURCE}"
 echo "   Output: ${MAT_OUTPUT}"
 echo ""
 
+# Use quotes to handle spaces in paths
 "${MATC}" \
   -a opengl \
   -p mobile \
