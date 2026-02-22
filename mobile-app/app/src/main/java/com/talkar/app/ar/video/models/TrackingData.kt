@@ -1,8 +1,5 @@
 package com.talkar.app.ar.video.models
 
-import com.google.ar.sceneform.math.Quaternion
-import com.google.ar.sceneform.math.Vector3
-
 /**
  * Tracking data from ARCore for a detected image anchor.
  *
@@ -29,5 +26,32 @@ data class Vector2(
 ) {
     companion object {
         fun zero() = Vector2(0f, 0f)
+    }
+}
+
+/**
+ * 3D vector for position.
+ */
+data class Vector3(
+    val x: Float,
+    val y: Float,
+    val z: Float
+) {
+    companion object {
+        fun zero() = Vector3(0f, 0f, 0f)
+    }
+}
+
+/**
+ * Quaternion for rotation.
+ */
+data class Quaternion(
+    val x: Float,
+    val y: Float,
+    val z: Float,
+    val w: Float
+) {
+    companion object {
+        fun identity() = Quaternion(0f, 0f, 0f, 1f)
     }
 }

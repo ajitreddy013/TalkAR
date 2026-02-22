@@ -6,9 +6,9 @@ import android.net.Uri
  * Sealed class hierarchy for video overlay errors.
  */
 sealed class VideoError(
-    val message: String,
+    message: String,
     val code: Int
-) {
+) : Exception(message) {
     /**
      * Decoder initialization failed.
      */
