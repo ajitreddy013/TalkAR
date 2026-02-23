@@ -6,9 +6,9 @@ package com.talkar.app.ar.video.errors
  * Each error includes a descriptive message and a unique error code for logging and debugging.
  */
 sealed class TalkingPhotoError(
-    val message: String,
+    message: String,
     val code: Int
-) {
+) : Exception(message) {
     /**
      * Poster was not detected within the timeout period (10 seconds).
      */

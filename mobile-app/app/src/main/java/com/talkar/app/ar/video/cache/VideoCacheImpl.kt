@@ -205,7 +205,7 @@ class VideoCacheImpl(
         }
     }
     
-    override suspend fun clear() = withContext(Dispatchers.IO) {
+    override suspend fun clear(): Unit = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Clearing all cached videos")
             
