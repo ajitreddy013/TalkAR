@@ -103,8 +103,12 @@ android {
     
     // Configure JUnit 5 for Kotest
     testOptions {
-        unitTests.all {
-            useJUnitPlatform()
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+            all {
+                useJUnitPlatform()
+            }
         }
     }
     

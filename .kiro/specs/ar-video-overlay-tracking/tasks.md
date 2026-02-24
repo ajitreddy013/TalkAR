@@ -95,7 +95,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Implement shouldPause() and shouldResume() methods
     - _Requirements: 8.1, 8.3_
   
-  - [ ]* 5.6 Write property test for coordinate validation
+  - [x] 5.6 Write property test for coordinate validation
     - **Property 5: Normalized Coordinate Completeness and Range**
     - **Validates: Requirements 3.3, 4.1, 4.3, 4.5**
     - Test that all coordinate values are in 0-1 range
@@ -114,7 +114,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Return failure after max retries
     - _Requirements: 11.5, 14.3_
   
-  - [ ]* 6.3 Write property test for retry logic
+  - [x] 6.3 Write property test for retry logic
     - **Property 22: API Retry with Exponential Backoff**
     - **Validates: Requirements 11.5, 14.3**
     - Test that failed API calls retry 3 times with exponential delays
@@ -125,7 +125,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Handle timeout after 60 seconds
     - _Requirements: 11.2_
   
-  - [ ]* 6.5 Write property test for status polling
+  - [x]* 6.5 Write property test for status polling
     - **Property 21: Status Polling Until Complete**
     - **Validates: Requirements 11.2**
     - Test that polling continues until status changes to complete/failed
@@ -165,12 +165,12 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Delete corrupted files automatically
     - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5_
   
-  - [ ]* 7.4 Write property test for cache round-trip
+  - [x]* 7.4 Write property test for cache round-trip
     - **Property 31: Video Cache Round-Trip**
     - **Validates: Requirements 16.1**
     - Test that download-cache-retrieve produces identical data
   
-  - [ ]* 7.5 Write property test for checksum validation
+  - [x]* 7.5 Write property test for checksum validation
     - **Property 32: Checksum Validation and Recovery**
     - **Validates: Requirements 16.2, 16.3, 16.4, 16.5**
     - Test that checksums are validated and corrupted files trigger re-download
@@ -180,7 +180,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Delete expired videos automatically
     - _Requirements: 5.2, 5.4_
   
-  - [ ]* 7.7 Write property test for expiration
+  - [x]* 7.7 Write property test for expiration
     - **Property 8: Cache Expiration**
     - **Validates: Requirements 5.2, 5.4**
     - Test that videos >24 hours old are not returned and marked for deletion
@@ -191,7 +191,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Continue until under 500MB
     - _Requirements: 15.1, 15.2_
   
-  - [ ]* 7.9 Write property tests for cache limits
+  - [x]* 7.9 Write property tests for cache limits
     - **Property 27: Cache Size Limit**
     - **Validates: Requirements 15.1**
     - **Property 28: LRU Eviction Order**
@@ -205,12 +205,12 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Only call backend if cache miss
     - _Requirements: 5.3, 5.5_
   
-  - [ ]* 8.2 Write property test for offline retrieval
+  - [x]* 8.2 Write property test for offline retrieval
     - **Property 9: Offline Cache Retrieval**
     - **Validates: Requirements 5.3, 5.5**
     - Test that cached videos are retrieved without network requests
   
-  - [ ]* 8.3 Write property test for cache hit
+  - [x]* 8.3 Write property test for cache hit
     - **Property 7: Video Caching on Download**
     - **Validates: Requirements 5.1**
     - Test that downloaded videos appear in cache immediately
@@ -228,7 +228,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
 ### Phase 3: AR Tracking & Rendering (Tasks 10-14)
 
 - [ ] 10. Implement ARTrackingManager component
-  - [ ] 10.1 Create ARTrackingManager interface and implementation
+  - [x] 10.1 Create ARTrackingManager interface and implementation
     - Implement initialize() with AugmentedImageDatabase setup
     - Implement processFrame() to detect and track posters
     - Implement getCurrentAnchor() for anchor retrieval

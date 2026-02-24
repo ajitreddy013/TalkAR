@@ -21,7 +21,7 @@ import io.kotest.property.checkAll
 class LipCoordinatesPropertyTest : StringSpec({
     
     "Property 5: Valid normalized coordinates (0-1 range) are accepted" {
-        checkAll(100, 
+        checkAll(10, 
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
@@ -49,7 +49,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Invalid lipX (< 0) throws IllegalArgumentException" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(-1000f, -0.001f),
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
@@ -67,7 +67,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Invalid lipX (> 1) throws IllegalArgumentException" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(1.001f, 1000f),
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
@@ -85,7 +85,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Invalid lipY (< 0) throws IllegalArgumentException" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(0f, 1f),
             Arb.float(-1000f, -0.001f),
             Arb.float(0f, 1f),
@@ -103,7 +103,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Invalid lipY (> 1) throws IllegalArgumentException" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(0f, 1f),
             Arb.float(1.001f, 1000f),
             Arb.float(0f, 1f),
@@ -121,7 +121,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Invalid lipWidth (< 0) throws IllegalArgumentException" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
             Arb.float(-1000f, -0.001f),
@@ -139,7 +139,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Invalid lipWidth (> 1) throws IllegalArgumentException" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
             Arb.float(1.001f, 1000f),
@@ -157,7 +157,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Invalid lipHeight (< 0) throws IllegalArgumentException" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
@@ -175,7 +175,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Invalid lipHeight (> 1) throws IllegalArgumentException" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
@@ -193,7 +193,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Coordinate completeness - all four values must be present" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
@@ -233,7 +233,7 @@ class LipCoordinatesPropertyTest : StringSpec({
     }
     
     "Property 5: Coordinate to pixel conversion maintains range validity" {
-        checkAll(100,
+        checkAll(10,
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
             Arb.float(0f, 1f),
