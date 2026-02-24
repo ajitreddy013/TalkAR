@@ -125,7 +125,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Handle timeout after 60 seconds
     - _Requirements: 11.2_
   
-  - [x]* 6.5 Write property test for status polling
+  - [x] 6.5 Write property test for status polling
     - **Property 21: Status Polling Until Complete**
     - **Validates: Requirements 11.2**
     - Test that polling continues until status changes to complete/failed
@@ -165,7 +165,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Delete corrupted files automatically
     - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5_
   
-  - [x]* 7.4 Write property test for cache round-trip
+  - [x] 7.4 Write property test for cache round-trip
     - **Property 31: Video Cache Round-Trip**
     - **Validates: Requirements 16.1**
     - Test that download-cache-retrieve produces identical data
@@ -227,7 +227,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
 
 ### Phase 3: AR Tracking & Rendering (Tasks 10-14)
 
-- [ ] 10. Implement ARTrackingManager component
+- [x] 10. Implement ARTrackingManager component
   - [x] 10.1 Create ARTrackingManager interface and implementation
     - Implement initialize() with AugmentedImageDatabase setup
     - Implement processFrame() to detect and track posters
@@ -236,51 +236,51 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Implement release() for resource cleanup
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 6.1, 6.2, 6.3, 6.4_
   
-  - [ ] 10.2 Implement single poster mode
+  - [x] 10.2 Implement single poster mode
     - Track only one poster at a time
     - Ignore other posters when one is already tracked
     - Clear tracking when refreshScan() is called
     - _Requirements: 6.1, 6.4, 6.5_
   
-  - [ ]* 10.3 Write property test for single poster mode
+  - [x] 10.3 Write property test for single poster mode
     - **Property 10: Single Poster Tracking**
     - **Validates: Requirements 6.1, 6.5**
     - Test that at most one poster is tracked when multiple are visible
   
-  - [ ]* 10.4 Write property test for poster replacement
+  - [x]* 10.4 Write property test for poster replacement
     - **Property 11: Poster Replacement**
     - **Validates: Requirements 6.4**
     - Test that new poster replaces previous when scanned
   
-  - [ ] 10.5 Implement human face detection filter
+  - [x] 10.5 Implement human face detection filter
     - Check poster metadata for human face indicator
     - Only detect posters marked as containing human faces
     - Reject products and mascots
     - _Requirements: 1.2, 14.5_
   
-  - [ ]* 10.6 Write property test for face detection filter
+  - [x]* 10.6 Write property test for face detection filter
     - **Property 1: Human Face Detection Filter**
     - **Validates: Requirements 1.2**
     - Test that only posters with human faces are detected
   
-  - [ ] 10.7 Implement 60fps tracking updates
+  - [x] 10.7 Implement 60fps tracking updates
     - Provide tracking updates at camera frame rate
     - Use ARCore's frame callback mechanism
     - _Requirements: 1.4, 7.1_
   
-  - [ ] 10.8 Implement out-of-frame detection
+  - [x] 10.8 Implement out-of-frame detection
     - Detect when poster leaves camera view
     - Trigger onPosterLost() callback
     - Resume tracking when poster returns
     - _Requirements: 8.1, 8.2, 8.3_
   
-  - [ ]* 10.9 Write property test for anchor creation
+  - [x]* 10.9 Write property test for anchor creation
     - **Property 2: Anchor Creation on Detection**
     - **Validates: Requirements 1.3**
     - Test that detected posters create anchors with valid position/orientation
 
-- [ ] 11. Implement RenderCoordinator component
-  - [ ] 11.1 Create RenderCoordinator interface and implementation
+- [x] 11. Implement RenderCoordinator component
+  - [x] 11.1 Create RenderCoordinator interface and implementation
     - Implement calculateTransform() with ARCore matrix math
     - Use Camera.getProjectionMatrix() and Camera.getViewMatrix()
     - Convert 3D anchor pose to 2D screen coordinates
@@ -288,39 +288,39 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Implement frustum culling for off-screen overlays
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
   
-  - [ ] 11.2 Implement normalized coordinate conversion
+  - [x] 11.2 Implement normalized coordinate conversion
     - Convert LipCoordinates (0-1 range) to pixel coordinates
     - Use poster dimensions from ARCore
     - Handle different poster sizes and orientations
     - _Requirements: 4.4, 7.2_
   
-  - [ ]* 11.3 Write property test for coordinate conversion
+  - [x]* 11.3 Write property test for coordinate conversion
     - **Property 6: Coordinate Scaling Consistency**
     - **Validates: Requirements 4.4**
     - **Property 12: Coordinate to Pixel Conversion**
     - **Validates: Requirements 7.2**
     - Test that normalized-to-pixel-to-normalized produces original values
   
-  - [ ] 11.4 Implement frame callback synchronization
+  - [x] 11.4 Implement frame callback synchronization
     - Register frame callbacks with Choreographer
     - Provide 60fps updates
     - Calculate frame delta times
     - _Requirements: 7.1, 7.4_
   
-  - [ ] 11.5 Implement transform caching
+  - [x] 11.5 Implement transform caching
     - Cache projection and view matrices per frame
     - Reuse calculations for efficiency
     - Implement dirty flags to avoid unnecessary recalculations
     - _Requirements: 7.4_
   
-  - [ ]* 11.6 Write property test for transform calculation
+  - [x]* 11.6 Write property test for transform calculation
     - **Property 13: Transform Application**
     - **Validates: Requirements 7.3**
     - Test that transforms correctly position and orient lip region
 
 
-- [ ] 12. Implement LipRegionRenderer component
-  - [ ] 12.1 Create LipRegionRenderer interface and implementation
+- [x] 12. Implement LipRegionRenderer component
+  - [x] 12.1 Create LipRegionRenderer interface and implementation
     - Implement setLipCoordinates() to set normalized coordinates
     - Implement setPosterDimensions() for coordinate conversion
     - Implement setTransform() to apply AR tracking matrix
@@ -329,33 +329,33 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Implement setVisible() and release()
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 10.1, 10.2, 10.4_
   
-  - [ ] 12.2 Implement alpha blending shader
+  - [x] 12.2 Implement alpha blending shader
     - Create OpenGL vertex and fragment shaders
     - Implement Gaussian blur for edge feathering (5-10px)
     - Blend lip video with static poster background
     - Use smoothstep for smooth alpha transition
     - _Requirements: 9.1, 9.2, 9.3_
   
-  - [ ]* 12.3 Write property test for alpha blending
+  - [x]* 12.3 Write property test for alpha blending
     - **Property 16: Alpha Blending Application**
     - **Validates: Requirements 9.1**
     - **Property 17: Feather Radius Range**
     - **Validates: Requirements 9.2**
     - Test that edge pixels have alpha 0-1 and feather radius is 5-10px
   
-  - [ ] 12.4 Implement TextureView integration
+  - [x] 12.4 Implement TextureView integration
     - Use TextureView from Phase 1
     - Configure for lip region rendering
     - Apply transformations via Matrix operations
     - _Requirements: 10.1, 10.2_
   
-  - [ ] 12.5 Implement lip region only rendering
+  - [x] 12.5 Implement lip region only rendering
     - Render only lip region, not full face
     - Keep poster static and visible
     - Layer lip region on top of poster
     - _Requirements: 10.1, 10.2, 10.3, 10.4_
   
-  - [ ]* 12.6 Write property tests for lip region rendering
+  - [x]* 12.6 Write property tests for lip region rendering
     - **Property 18: Lip Region Only Rendering**
     - **Validates: Requirements 10.1**
     - **Property 19: Poster Visibility During Playback**
@@ -364,52 +364,52 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - **Validates: Requirements 10.4**
     - Test that only lip region is rendered and poster stays visible
   
-  - [ ] 12.7 Optimize for 60fps rendering
+  - [x] 12.7 Optimize for 60fps rendering
     - Use hardware acceleration
     - Minimize shader complexity
     - Cache shader programs
     - Profile rendering performance
     - _Requirements: 9.4, 15.4_
 
-- [ ] 13. Implement video format validation
-  - [ ] 13.1 Validate MP4 format with H.264 codec
+- [x] 13. Implement video format validation
+  - [x] 13.1 Validate MP4 format with H.264 codec
     - Check video container format
     - Verify codec is H.264
     - _Requirements: 13.1_
   
-  - [ ]* 13.2 Write property test for format validation
+  - [x]* 13.2 Write property test for format validation
     - **Property 24: Video Format Validation**
     - **Validates: Requirements 13.1**
     - Test that downloaded videos are MP4 with H.264
   
-  - [ ] 13.3 Validate minimum frame rate
+  - [x] 13.3 Validate minimum frame rate
     - Check video frame rate is ≥25fps
     - Log warning if frame rate is low
     - _Requirements: 13.2_
   
-  - [ ]* 13.4 Write property test for frame rate
+  - [x] 13.4 Write property test for frame rate
     - **Property 25: Minimum Frame Rate**
     - **Validates: Requirements 13.2**
     - Test that videos have ≥25fps
   
-  - [ ] 13.5 Validate audio-video synchronization
+  - [x] 13.5 Validate audio-video synchronization
     - Check frame timestamps align with audio within 50ms
     - Monitor sync drift during playback
     - _Requirements: 13.4_
   
-  - [ ]* 13.6 Write property test for A/V sync
+  - [x]* 13.6 Write property test for A/V sync
     - **Property 26: Audio-Video Synchronization**
     - **Validates: Requirements 13.4**
     - Test that frame and audio timestamps align within 50ms
 
-- [ ] 14. Checkpoint - Verify tracking and rendering
-  - [ ] 14.1 Test ARTrackingManager with mock ARCore data
-  - [ ] 14.2 Verify single poster mode works correctly
-  - [ ] 14.3 Test human face detection filter
-  - [ ] 14.4 Verify RenderCoordinator transform calculations
-  - [ ] 14.5 Test LipRegionRenderer alpha blending
-  - [ ] 14.6 Confirm 60fps rendering performance
-  - [ ] 14.7 Test out-of-frame detection and recovery
+- [x] 14. Checkpoint - Verify tracking and rendering
+  - [x] 14.1 Test ARTrackingManager with mock ARCore data
+  - [x] 14.2 Verify single poster mode works correctly
+  - [x] 14.3 Test human face detection filter
+  - [x] 14.4 Verify RenderCoordinator transform calculations
+  - [x] 14.5 Test LipRegionRenderer alpha blending
+  - [x] 14.6 Confirm 60fps rendering performance
+  - [x] 14.7 Test out-of-frame detection and recovery
   - Ask the user if questions arise or if ready to proceed to Phase 4
 
 
@@ -437,7 +437,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Handle errors from any component
     - _Requirements: 2.1, 2.2, 11.1, 11.2, 11.3_
   
-  - [ ]* 15.4 Write property test for backend request trigger
+  - [ ] 15.4 Write property test for backend request trigger
     - **Property 3: Backend Request on Detection**
     - **Validates: Requirements 2.1**
     - Test that poster detection triggers backend API request
