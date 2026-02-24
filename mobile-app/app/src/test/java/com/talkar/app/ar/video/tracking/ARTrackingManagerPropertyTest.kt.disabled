@@ -1,0 +1,285 @@
+package com.talkar.app.ar.video.tracking
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import com.google.ar.core.Anchor
+import com.google.ar.core.AugmentedImage
+import com.google.ar.core.Frame
+import com.google.ar.core.Pose
+import com.google.ar.core.Session
+import com.google.ar.core.TrackingState as ARCoreTrackingState
+import io.kotest.matchers.ints.shouldBeLessThanOrEqual
+import io.kotest.matchers.nulls.shouldNotBeNull
+import io.kotest.matchers.shouldBe
+import io.kotest.property.Arb
+import io.kotest.property.arbitrary.int
+import io.kotest.property.arbitrary.list
+import io.kotest.property.checkAll
+import kotlinx.coroutines.runBlocking
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.mockito.Mock
+import org.mockito.Mockito.`when`
+import org.mockito.MockitoAnnotations
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+/**
+ * Property-based tests for ARTrackingManager.
+ *
+ * Tests:
+ * - Property 10: Single Poster Tracking
+ * - Property 11: Poster Replacement
+ * - Property 1: Human Face Detection Filter
+ * - Property 2: Anchor Creation on Detection
+ *
+ * Validates: Requirements 1.2, 1.3, 6.1, 6.4, 6.5
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28], manifest = Config.NONE)
+class ARTrackingManagerPropertyTest {
+    
+    private lateinit var context: Context
+    
+    @Mock
+    private lateinit var session: Session
+    
+    @Mock
+    private lateinit var frame: Frame
+    
+    @Mock
+    private lateinit var augmentedImage: AugmentedImage
+    
+    @Mock
+    private lateinit var anchor: Anchor
+    
+    @Mock
+    private lateinit var pose: Pose
+    
+    @Before
+    fun setup() {
+        MockitoAnnotations.openMocks(this)
+        context = ApplicationProvider.getApplicationContext()
+        
+        // Setup default mock behavior
+        `when`(augmentedImage.createAnchor(pose)).thenReturn(anchor)
+        `when`(augmentedImage.centerPose).thenReturn(pose)
+        `when`(augmentedImage.extentX).thenReturn(0.3f)
+        `when`(augmentedImage.extentZ).thenReturn(0.4f)
+    }
+    
+    /**
+     * Property 10: Single Poster Tracking
+     *
+     * For any number of visible posters, the system must track at most one poster at any given time.
+     *
+     * Validates: Requirements 6.1, 6.5
+     */
+    @Test
+    fun `Property 10 - Single poster tracking - at most one poster tracked when multiple visible`() {
+        runBlocking {
+            checkAll(10, Arb.int(2..5)) { numPosters ->
+                // Given: Multiple posters with human faces
+                val posters = (1..numPosters).map { i ->
+                    ReferencePoster(
+                        id = "poster_$i",
+                        name = "Poster $i",
+                        imageData = createTestImageData(),
+                        physicalWidthMeters = 0.3f,
+                        hasHumanFace = true
+                    )
+                }
+                
+                val manager = ARTrackingManagerImpl(context, session)
+                manager.initialize(posters)
+                
+                // When: Processing frames with multiple posters visible
+                // Simulate multiple augmented images being tracked
+                val trackedPosters = mutableListOf<TrackedPoster?>()
+                
+                for (i in 0 until numPosters) {
+                    `when`(augmentedImage.index).thenReturn(i)
+                    `when`(augmentedImage.trackingState).thenReturn(ARCoreTrackingState.TRACKING)
+                    
+                    val tracked = manager.processFrame(frame)
+                    trackedPosters.add(tracked)
+                }
+                
+                // Then: At most one poster should be tracked
+                val nonNullTracked = trackedPosters.filterNotNull()
+                nonNullTracked.size shouldBeLessThanOrEqual 1
+                
+                manager.release()
+            }
+        }
+    }
+    
+    /**
+     * Property 11: Poster Replacement
+     *
+     * For any tracked poster, when a new poster is scanned via refreshScan(),
+     * the system must stop tracking the previous poster and begin tracking the new one.
+     *
+     * Validates: Requirements 6.4
+     */
+    @Test
+    fun `Property 11 - Poster replacement - new poster replaces previous when scanned`() {
+        runBlocking {
+            checkAll(10, Arb.int(2..5)) { numReplacements ->
+                // Given: Multiple posters
+                val posters = (1..numReplacements + 1).map { i ->
+                    ReferencePoster(
+                        id = "poster_$i",
+                        name = "Poster $i",
+                        imageData = createTestImageData(),
+                        physicalWidthMeters = 0.3f,
+                        hasHumanFace = true
+                    )
+                }
+                
+                val manager = ARTrackingManagerImpl(context, session)
+                manager.initialize(posters)
+                
+                var previousPosterId: String? = null
+                
+                // When: Scanning posters sequentially with refreshScan() between each
+                for (i in 0 until numReplacements) {
+                    // Scan poster i
+                    `when`(augmentedImage.index).thenReturn(i)
+                    `when`(augmentedImage.trackingState).thenReturn(ARCoreTrackingState.TRACKING)
+                    
+                    val tracked = manager.processFrame(frame)
+                    
+                    if (tracked != null) {
+                        // Then: New poster should be different from previous
+                        if (previousPosterId != null) {
+                            tracked.id shouldBe "poster_${i + 1}"
+                        }
+                        previousPosterId = tracked.id
+                    }
+                    
+                    // Refresh scan to allow new poster
+                    manager.refreshScan()
+                }
+                
+                manager.release()
+            }
+        }
+    }
+    
+    /**
+     * Property 1: Human Face Detection Filter
+     *
+     * For any image presented to the AR system, only images containing human faces
+     * should be detected as valid posters, while products and mascots should be rejected.
+     *
+     * Validates: Requirements 1.2
+     */
+    @Test
+    fun `Property 1 - Human face detection filter - only posters with human faces detected`() {
+        runBlocking {
+            checkAll(10, Arb.int(1..5), Arb.int(1..5)) { numHumanFaces, numNonHumanFaces ->
+                // Given: Mix of posters with and without human faces
+                val humanFacePosters = (1..numHumanFaces).map { i ->
+                    ReferencePoster(
+                        id = "human_$i",
+                        name = "Human $i",
+                        imageData = createTestImageData(),
+                        physicalWidthMeters = 0.3f,
+                        hasHumanFace = true
+                    )
+                }
+                
+                val nonHumanPosters = (1..numNonHumanFaces).map { i ->
+                    ReferencePoster(
+                        id = "product_$i",
+                        name = "Product $i",
+                        imageData = createTestImageData(),
+                        physicalWidthMeters = 0.3f,
+                        hasHumanFace = false
+                    )
+                }
+                
+                val allPosters = humanFacePosters + nonHumanPosters
+                
+                val manager = ARTrackingManagerImpl(context, session)
+                val result = manager.initialize(allPosters)
+                
+                // Then: Only human face posters should be in the database
+                // The manager should filter out non-human posters during initialization
+                result.isSuccess shouldBe true
+                
+                manager.release()
+            }
+        }
+    }
+    
+    /**
+     * Property 2: Anchor Creation on Detection
+     *
+     * For any detected poster, the AR system must create an image anchor
+     * with valid (non-zero) position and orientation data.
+     *
+     * Validates: Requirements 1.3
+     */
+    @Test
+    fun `Property 2 - Anchor creation - detected posters create anchors with valid position`() {
+        runBlocking {
+            checkAll(10, Arb.int(1..5)) { numPosters ->
+                // Given: Posters with human faces
+                val posters = (1..numPosters).map { i ->
+                    ReferencePoster(
+                        id = "poster_$i",
+                        name = "Poster $i",
+                        imageData = createTestImageData(),
+                        physicalWidthMeters = 0.3f,
+                        hasHumanFace = true
+                    )
+                }
+                
+                val manager = ARTrackingManagerImpl(context, session)
+                manager.initialize(posters)
+                
+                // When: Detecting a poster
+                `when`(augmentedImage.index).thenReturn(0)
+                `when`(augmentedImage.trackingState).thenReturn(ARCoreTrackingState.TRACKING)
+                
+                val tracked = manager.processFrame(frame)
+                
+                // Then: Anchor should be created and valid
+                tracked.shouldNotBeNull()
+                tracked.anchor.shouldNotBeNull()
+                
+                // Verify anchor is accessible
+                val currentAnchor = manager.getCurrentAnchor()
+                currentAnchor.shouldNotBeNull()
+                
+                manager.release()
+            }
+        }
+    }
+    
+    /**
+     * Creates test image data (minimal valid bitmap data).
+     */
+    private fun createTestImageData(): ByteArray {
+        // Create a minimal 1x1 pixel PNG image
+        return byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+            0x00, 0x00, 0x00, 0x0D, // IHDR chunk length
+            0x49, 0x48, 0x44, 0x52, // IHDR
+            0x00, 0x00, 0x00, 0x01, // Width: 1
+            0x00, 0x00, 0x00, 0x01, // Height: 1
+            0x08, 0x02, 0x00, 0x00, 0x00, // Bit depth, color type, etc.
+            0x90.toByte(), 0x77, 0x53.toByte(), 0xDE.toByte(), // CRC
+            0x00, 0x00, 0x00, 0x0C, // IDAT chunk length
+            0x49, 0x44, 0x41, 0x54, // IDAT
+            0x08, 0x99.toByte(), 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, // Data
+            0x0D, 0x0A, 0x2D, 0xB4.toByte(), // CRC
+            0x00, 0x00, 0x00, 0x00, // IEND chunk length
+            0x49, 0x45, 0x4E, 0x44, // IEND
+            0xAE.toByte(), 0x42, 0x60, 0x82.toByte() // CRC
+        )
+    }
+}

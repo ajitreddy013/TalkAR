@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * - Verifies retry count and timing across randomized inputs
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [28], manifest = Config.NONE)
 class BackendVideoFetcherRetryPropertyTest : StringSpec({
     
     /**

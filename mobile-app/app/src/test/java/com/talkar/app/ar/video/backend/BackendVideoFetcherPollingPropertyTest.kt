@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * - This is expected behavior for property-based testing of time-dependent functionality
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [28], manifest = Config.NONE)
 class BackendVideoFetcherPollingPropertyTest : StringSpec({
     
     /**

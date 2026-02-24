@@ -24,7 +24,7 @@ import java.security.MessageDigest
  * Tests universal properties that should hold for all valid inputs.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [28], manifest = Config.NONE)
 class VideoCachePropertyTest {
     
     private lateinit var context: Context
