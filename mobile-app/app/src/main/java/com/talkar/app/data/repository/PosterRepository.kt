@@ -141,14 +141,28 @@ class PosterRepository(
     
     /**
      * Load a test poster from assets for development/testing.
+     * If asset file doesn't exist, creates a programmatic test image.
      */
     suspend fun loadTestPoster(): Result<ReferencePoster> = withContext(Dispatchers.IO) {
         try {
             // Try to load a test image from assets
             val assetManager = context.assets
-            val inputStream = assetManager.open("test_poster.jpg")
-            val bitmap = BitmapFactory.decodeStream(inputStream)
-            inputStream.close()
+            val inputStream = try {
+                assetManager.open("test_poster.jpg")
+            } catch (e: java.io.FileNotFoundException) {
+                Log.w(TAG, "test_poster.jpg not found in assets, creating programmatic test image")
+                null
+            }
+            
+            val bitmap = if (inputStream != null) {
+                // Load from assets
+                val bmp = BitmapFactory.decodeStream(inputStream)
+                inputStream.close()
+                bmp
+            } else {
+                // Create a simple test image programmatically
+                createTestBitmap()
+            }
             
             val outputStream = ByteArrayOutputStream()
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
@@ -163,13 +177,64 @@ class PosterRepository(
                 hasHumanFace = true
             )
             
-            Log.d(TAG, "✅ Loaded test poster from assets")
+            Log.d(TAG, "✅ Loaded test poster (${bitmap.width}x${bitmap.height})")
             Result.success(poster)
             
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load test poster from assets", e)
+            Log.e(TAG, "Failed to load test poster", e)
             Result.failure(e)
         }
+    }
+    
+    /**
+     * Creates a simple test bitmap programmatically.
+     * Used when test_poster.jpg is not available in assets.
+     */
+    private fun createTestBitmap(): Bitmap {
+        // Create a 512x512 bitmap with a simple pattern
+        val bitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        
+        // Draw gradient background
+        val paint = android.graphics.Paint()
+        val gradient = android.graphics.LinearGradient(
+            0f, 0f, 512f, 512f,
+            android.graphics.Color.rgb(100, 150, 200),
+            android.graphics.Color.rgb(200, 100, 150),
+            android.graphics.Shader.TileMode.CLAMP
+        )
+        paint.shader = gradient
+        canvas.drawRect(0f, 0f, 512f, 512f, paint)
+        
+        // Draw text
+        paint.shader = null
+        paint.color = android.graphics.Color.WHITE
+        paint.textSize = 48f
+        paint.textAlign = android.graphics.Paint.Align.CENTER
+        paint.style = android.graphics.Paint.Style.FILL
+        
+        canvas.drawText("TEST POSTER", 256f, 200f, paint)
+        canvas.drawText("Point camera here", 256f, 280f, paint)
+        
+        // Draw a simple face-like pattern
+        paint.style = android.graphics.Paint.Style.STROKE
+        paint.strokeWidth = 4f
+        
+        // Face circle
+        canvas.drawCircle(256f, 380f, 80f, paint)
+        
+        // Eyes
+        canvas.drawCircle(230f, 360f, 10f, paint)
+        canvas.drawCircle(282f, 360f, 10f, paint)
+        
+        // Smile
+        val path = android.graphics.Path()
+        path.moveTo(220f, 390f)
+        path.quadTo(256f, 420f, 292f, 390f)
+        canvas.drawPath(path, paint)
+        
+        Log.d(TAG, "Created programmatic test bitmap (512x512)")
+        return bitmap
     }
     
     /**

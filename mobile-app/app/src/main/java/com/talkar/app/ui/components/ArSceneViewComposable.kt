@@ -101,8 +101,19 @@ fun ArSceneViewComposable(
             try {
                 Log.d("ArSceneView", "Initializing ARCore session...")
                 
-                // Create ARCore session
-                val arSession = Session(context)
+                // Create ARCore session with error handling for vendor-specific issues
+                val arSession = try {
+                    Session(context)
+                } catch (e: IllegalArgumentException) {
+                    // Handle vendor-specific camera tag errors (e.g., OPPO tags on non-OPPO devices)
+                    if (e.message?.contains("Could not find tag") == true) {
+                        Log.w("ArSceneView", "⚠️ Vendor-specific camera tag not found (this is normal on non-vendor devices)")
+                        Log.w("ArSceneView", "Continuing with standard ARCore features...")
+                        Session(context) // Try again, ARCore should continue despite the warning
+                    } else {
+                        throw e
+                    }
+                }
                 
                 // Configure session for augmented images
                 val config = Config(arSession).apply {
@@ -243,10 +254,13 @@ fun ArSceneViewComposable(
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            createARCameraView(
+            val view = createARCameraView(
                 context = ctx,
                 onError = onError
             )
+            // Store view reference for later renderer setup
+            view.tag = "pending_renderer_setup"
+            view
         },
         update = { view ->
             // Update view when session and tracking manager are ready
@@ -254,6 +268,8 @@ fun ArSceneViewComposable(
             if (session != null && arTrackingManager != null && !isInitializing && !frameProcessingStarted) {
                 Log.d("ArSceneView", "AR session ready, starting frame processing")
                 frameProcessingStarted = true
+                
+                // Set up renderer now that session is ready
                 startFrameProcessing(view, session!!, arTrackingManager!!, scope, lifecycleOwner, onError)
             }
         }
@@ -300,6 +316,7 @@ private fun createImageDatabase(
 
 /**
  * Creates the AR camera view with ARCore rendering.
+ * The renderer is set immediately but will wait for session to be ready.
  */
 private fun createARCameraView(
     context: Context,
@@ -322,6 +339,26 @@ private fun createARCameraView(
         preserveEGLContextOnPause = true
         setEGLContextClientVersion(2) // OpenGL ES 2.0
         setEGLConfigChooser(8, 8, 8, 8, 16, 0) // RGBA_8888, 16-bit depth
+        
+        // Set a placeholder renderer immediately to prevent null GLThread
+        // The actual rendering will wait for session to be ready
+        setRenderer(object : android.opengl.GLSurfaceView.Renderer {
+            override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
+                android.opengl.GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                Log.d("ArSceneView", "Placeholder renderer: Surface created")
+            }
+            
+            override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
+                android.opengl.GLES20.glViewport(0, 0, width, height)
+                Log.d("ArSceneView", "Placeholder renderer: Surface changed ${width}x${height}")
+            }
+            
+            override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
+                android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
+                // Just clear to black until real renderer is set
+            }
+        })
+        renderMode = android.opengl.GLSurfaceView.RENDERMODE_CONTINUOUSLY
     }
     
     layout.addView(glSurfaceView)
@@ -329,6 +366,7 @@ private fun createARCameraView(
     // Store GL surface view in layout tag for later access
     layout.tag = glSurfaceView
     
+    Log.d("ArSceneView", "✅ GLSurfaceView created with placeholder renderer")
     return layout
 }
 
