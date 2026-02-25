@@ -41,6 +41,7 @@ fun ArSceneViewComposable(
     var arTrackingManager by remember { mutableStateOf<ARTrackingManager?>(null) }
     var session by remember { mutableStateOf<Session?>(null) }
     var isInitializing by remember { mutableStateOf(false) }
+    var frameProcessingStarted by remember { mutableStateOf(false) }
     
     // Initialize ARCore session and tracking manager on background thread
     LaunchedEffect(Unit) {
@@ -187,10 +188,17 @@ fun ArSceneViewComposable(
         factory = { ctx ->
             createARCameraView(
                 context = ctx,
-                session = session,
-                trackingManager = arTrackingManager,
                 onError = onError
             )
+        },
+        update = { view ->
+            // Update view when session and tracking manager are ready
+            // Only start once to avoid multiple coroutines
+            if (session != null && arTrackingManager != null && !isInitializing && !frameProcessingStarted) {
+                Log.d("ArSceneView", "AR session ready, starting frame processing")
+                frameProcessingStarted = true
+                startFrameProcessing(view, session, arTrackingManager, onError)
+            }
         }
     )
 }
@@ -235,8 +243,6 @@ private fun createImageDatabase(
  */
 private fun createARCameraView(
     context: Context,
-    session: Session?,
-    trackingManager: ARTrackingManager?,
     onError: (String) -> Unit
 ): android.view.View {
     val layout = FrameLayout(context).apply {
@@ -257,28 +263,53 @@ private fun createARCameraView(
     
     layout.addView(surfaceView)
     
+    // Store surface view in layout tag for later access
+    layout.tag = surfaceView
+    
+    return layout
+}
+
+/**
+ * Start processing ARCore frames for tracking.
+ * Called from AndroidView update block when session is ready.
+ */
+private fun startFrameProcessing(
+    view: android.view.View,
+    session: Session?,
+    trackingManager: ARTrackingManager?,
+    onError: (String) -> Unit
+) {
+    if (session == null || trackingManager == null) {
+        Log.w("ArSceneView", "Cannot start frame processing - session or tracking manager is null")
+        return
+    }
+    
+    // Get the surface view from layout
+    val layout = view as? FrameLayout ?: return
+    val surfaceView = layout.tag as? android.view.SurfaceView ?: return
+    
+    Log.d("ArSceneView", "Starting frame processing with session and tracking manager")
+    
     // Set up surface callback to configure ARCore session
     surfaceView.holder.addCallback(object : android.view.SurfaceHolder.Callback {
         override fun surfaceCreated(holder: android.view.SurfaceHolder) {
             Log.d("ArSceneView", "Surface created")
             
             // Configure ARCore to render to this surface
-            session?.let { arSession ->
-                try {
-                    // Set the surface for ARCore to render camera feed
-                    arSession.setCameraTextureName(0)
-                    Log.d("ArSceneView", "✅ ARCore camera surface configured")
-                } catch (e: Exception) {
-                    Log.e("ArSceneView", "Failed to configure camera surface", e)
-                    onError("Failed to configure camera: ${e.message}")
-                }
+            try {
+                // Set the surface for ARCore to render camera feed
+                session.setCameraTextureName(0)
+                Log.d("ArSceneView", "✅ ARCore camera surface configured")
+            } catch (e: Exception) {
+                Log.e("ArSceneView", "Failed to configure camera surface", e)
+                onError("Failed to configure camera: ${e.message}")
             }
         }
         
         override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {
             Log.d("ArSceneView", "Surface changed: ${width}x${height}")
-            session?.setDisplayGeometry(
-                context.resources.configuration.orientation,
+            session.setDisplayGeometry(
+                surfaceView.context.resources.configuration.orientation,
                 width,
                 height
             )
@@ -290,26 +321,8 @@ private fun createARCameraView(
     })
     
     // Start frame processing loop
-    startFrameProcessing(session, trackingManager, onError)
-    
-    return layout
-}
-
-/**
- * Start processing ARCore frames for tracking.
- */
-private fun startFrameProcessing(
-    session: Session?,
-    trackingManager: ARTrackingManager?,
-    onError: (String) -> Unit
-) {
-    if (session == null || trackingManager == null) {
-        Log.w("ArSceneView", "Cannot start frame processing - session or tracking manager is null")
-        return
-    }
-    
-    // Use a coroutine to process frames at 60fps
-    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+    CoroutineScope(Dispatchers.Default).launch {
+        Log.d("ArSceneView", "Frame processing loop started")
         while (true) {
             try {
                 // Update ARCore frame
@@ -319,7 +332,7 @@ private fun startFrameProcessing(
                 trackingManager.processFrame(frame)
                 
                 // Sleep to maintain ~60fps
-                kotlinx.coroutines.delay(16)
+                delay(16)
                 
             } catch (e: com.google.ar.core.exceptions.CameraNotAvailableException) {
                 Log.e("ArSceneView", "Camera not available", e)
