@@ -600,7 +600,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
 ### Phase 5: Testing & Optimization (Tasks 20-23)
 
 - [ ] 20. Write comprehensive property-based tests
-  - [ ] 20.1 Set up Kotest Property Testing framework
+  - [x] 20.1 Set up Kotest Property Testing framework
     - Add Kotest dependencies to build.gradle
     - Configure test runners
     - Create custom generators (Arb.lipCoordinates(), Arb.posterDimensions(), etc.)
