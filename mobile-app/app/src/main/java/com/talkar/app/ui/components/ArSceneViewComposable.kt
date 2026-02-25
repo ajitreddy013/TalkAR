@@ -254,23 +254,44 @@ fun ArSceneViewComposable(
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            val view = createARCameraView(
+            val layout = createARCameraView(
                 context = ctx,
                 onError = onError
             )
-            // Store view reference for later renderer setup
-            view.tag = "pending_renderer_setup"
-            view
+            
+            // Get GLSurfaceView and set renderer immediately
+            val glSurfaceView = layout.tag as? android.opengl.GLSurfaceView
+            if (glSurfaceView != null) {
+                // Set a minimal renderer immediately to prevent GLThread null issues
+                glSurfaceView.setRenderer(object : android.opengl.GLSurfaceView.Renderer {
+                    override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
+                        android.opengl.GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                        Log.d("ArSceneView", "Initial renderer: Surface created")
+                    }
+                    
+                    override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
+                        android.opengl.GLES20.glViewport(0, 0, width, height)
+                        Log.d("ArSceneView", "Initial renderer: Surface changed")
+                    }
+                    
+                    override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
+                        android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
+                    }
+                })
+                glSurfaceView.renderMode = android.opengl.GLSurfaceView.RENDERMODE_CONTINUOUSLY
+            }
+            
+            layout
         },
         update = { view ->
             // Update view when session and tracking manager are ready
             // Only start once to avoid multiple coroutines
             if (session != null && arTrackingManager != null && !isInitializing && !frameProcessingStarted) {
-                Log.d("ArSceneView", "AR session ready, starting frame processing")
+                Log.d("ArSceneView", "AR session ready, setting up camera renderer")
                 frameProcessingStarted = true
                 
-                // Set up renderer now that session is ready
-                startFrameProcessing(view, session!!, arTrackingManager!!, scope, lifecycleOwner, onError)
+                // Set up the real camera renderer now that session is ready
+                setupCameraRenderer(view, session!!, arTrackingManager!!, scope, lifecycleOwner, onError)
             }
         }
     )
@@ -316,7 +337,7 @@ private fun createImageDatabase(
 
 /**
  * Creates the AR camera view with ARCore rendering.
- * The renderer is set immediately but will wait for session to be ready.
+ * Uses a shared renderer that will be configured when session is ready.
  */
 private fun createARCameraView(
     context: Context,
@@ -340,25 +361,8 @@ private fun createARCameraView(
         setEGLContextClientVersion(2) // OpenGL ES 2.0
         setEGLConfigChooser(8, 8, 8, 8, 16, 0) // RGBA_8888, 16-bit depth
         
-        // Set a placeholder renderer immediately to prevent null GLThread
-        // The actual rendering will wait for session to be ready
-        setRenderer(object : android.opengl.GLSurfaceView.Renderer {
-            override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
-                android.opengl.GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                Log.d("ArSceneView", "Placeholder renderer: Surface created")
-            }
-            
-            override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
-                android.opengl.GLES20.glViewport(0, 0, width, height)
-                Log.d("ArSceneView", "Placeholder renderer: Surface changed ${width}x${height}")
-            }
-            
-            override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
-                android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
-                // Just clear to black until real renderer is set
-            }
-        })
-        renderMode = android.opengl.GLSurfaceView.RENDERMODE_CONTINUOUSLY
+        // Note: Renderer will be set in startFrameProcessing when session is ready
+        // We don't set a placeholder here to avoid the double-set issue
     }
     
     layout.addView(glSurfaceView)
@@ -366,15 +370,16 @@ private fun createARCameraView(
     // Store GL surface view in layout tag for later access
     layout.tag = glSurfaceView
     
-    Log.d("ArSceneView", "✅ GLSurfaceView created with placeholder renderer")
+    Log.d("ArSceneView", "✅ GLSurfaceView created, waiting for session to set renderer")
     return layout
 }
 
 /**
- * Start processing ARCore frames for tracking.
+ * Set up camera renderer for ARCore frames.
  * Called from AndroidView update block when session is ready.
+ * Note: Renderer is already set in factory block, this just replaces it with the camera renderer.
  */
-private fun startFrameProcessing(
+private fun setupCameraRenderer(
     view: android.view.View,
     session: Session,
     trackingManager: ARTrackingManager,
@@ -386,7 +391,7 @@ private fun startFrameProcessing(
     val layout = view as? FrameLayout ?: return
     val glSurfaceView = layout.tag as? android.opengl.GLSurfaceView ?: return
     
-    Log.d("ArSceneView", "Starting frame processing with session and tracking manager")
+    Log.d("ArSceneView", "Setting up camera renderer with ARCore session")
     
     // Create a renderer for ARCore camera feed with background rendering
     val renderer = object : android.opengl.GLSurfaceView.Renderer {
@@ -614,10 +619,17 @@ private fun startFrameProcessing(
         }
     }
     
-    // Set the renderer and start rendering
-    glSurfaceView.setRenderer(renderer)
-    glSurfaceView.renderMode = android.opengl.GLSurfaceView.RENDERMODE_CONTINUOUSLY
-    
-    Log.d("ArSceneView", "✅ GL renderer attached, camera feed should be visible")
+    // Replace the initial renderer with the camera renderer
+    // Pause, set new renderer, then resume
+    try {
+        glSurfaceView.onPause()
+        Thread.sleep(100) // Give it time to pause
+        glSurfaceView.setRenderer(renderer)
+        glSurfaceView.renderMode = android.opengl.GLSurfaceView.RENDERMODE_CONTINUOUSLY
+        glSurfaceView.onResume()
+        Log.d("ArSceneView", "✅ Camera renderer set, camera feed should now be visible")
+    } catch (e: Exception) {
+        Log.e("ArSceneView", "Error setting camera renderer", e)
+    }
 }
 
