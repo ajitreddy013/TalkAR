@@ -11,7 +11,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28])
+@Config(sdk = [28], manifest = Config.NONE)
 class WhisperServiceTest {
     
     private lateinit var context: Context

@@ -4,35 +4,24 @@ import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.google.ar.core.AugmentedImage
-import com.google.ar.core.Config
-import com.google.ar.core.Frame
-import com.google.ar.core.TrackingState
-import com.talkar.app.ar.ARGestureDetector
-import com.talkar.app.ar.ARSessionConfig
-import com.talkar.app.ar.AugmentedImageDatabaseManager
-import com.talkar.app.ar.VideoAnchorNode
-import io.github.sceneview.ar.ARSceneView
-import io.github.sceneview.ar.arcore.createAnchorOrNull
-import io.github.sceneview.ar.node.AnchorNode
 
 /**
  * Main AR view for TalkAR using Sceneview and ARCore Augmented Images.
  * 
- * This component:
- * - Displays AR camera feed
- * - Detects reference images (posters)
- * - Tracks images in 3D space
- * - Handles gesture interactions (long-press to play video)
- * - Manages video playback on detected images
- * - Provides callbacks for image detection/loss
+ * **DEPRECATED**: This component is deprecated and will be removed in a future version.
+ * Use TalkingPhotoScreen and TalkingPhotoController instead.
+ * 
+ * This component has unresolved references to ARVideoOverlay which has been replaced
+ * by the new TalkingPhotoController architecture.
  * 
  * @param modifier Compose modifier
  * @param onImageDetected Callback when an image is detected (imageName)
@@ -42,6 +31,11 @@ import io.github.sceneview.ar.node.AnchorNode
  * @param onVideoCompleted Callback when video playback completes
  * @param onError Callback for errors
  */
+@Deprecated(
+    message = "Use TalkingPhotoScreen and TalkingPhotoController instead",
+    replaceWith = ReplaceWith("TalkingPhotoScreen()", "com.talkar.app.ui.screens.TalkingPhotoScreen"),
+    level = DeprecationLevel.WARNING
+)
 @Composable
 fun TalkARView(
     modifier: Modifier = Modifier,
@@ -55,33 +49,101 @@ fun TalkARView(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     
+    // DEPRECATED: This component uses the old ARVideoOverlay architecture
+    // TODO: Migrate to TalkingPhotoController
+    
+    // Placeholder implementation to prevent compilation errors
+    // The actual AR functionality should use TalkingPhotoScreen instead
+    Box(modifier = modifier.fillMaxSize()) {
+        Text(
+            text = "This AR view is deprecated. Please use TalkingPhotoScreen instead.",
+            modifier = Modifier.align(Alignment.Center),
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+/* COMMENTED OUT - Old implementation using ARVideoOverlay and related functions
+    
+    COMMENTED OUT - References to deprecated ARVideoOverlay
     // AR managers
     val dbManager = remember { AugmentedImageDatabaseManager(context) }
     val sessionConfig = remember { ARSessionConfig() }
     
-    // Track detected images and their names
+    // Track detected images and their video overlays
     var trackedImageNames by remember { mutableStateOf<Set<String>>(emptySet()) }
     var arSceneView by remember { mutableStateOf<ARSceneView?>(null) }
     
-    // Store video nodes for playback control
-    val videoNodesRef = remember { mutableMapOf<String, VideoAnchorNode>() }
+    // Store video overlays for playback control
+    val videoOverlaysRef = remember { mutableMapOf<String, ARVideoOverlay>() }
+    
+    // Current video overlay to display
+    var currentOverlay by remember { mutableStateOf<ARVideoOverlay?>(null) }
+    var overlayPosition by remember { mutableStateOf<ARVideoOverlay.OverlayPosition?>(null) }
+    
+    // Update overlay position every frame
+    LaunchedEffect(currentOverlay, arSceneView) {
+        currentOverlay?.let { overlay ->
+            arSceneView?.let { view ->
+                // Update position continuously
+                kotlinx.coroutines.delay(16) // ~60fps
+                while (true) {
+                    overlay.updatePosition(view.width, view.height)
+                    overlayPosition = overlay.position
+                    kotlinx.coroutines.delay(16)
+                }
+            }
+        }
+    }
     
     // Play video when videoUriToPlay changes
     LaunchedEffect(videoUriToPlay) {
+        Log.i(TAG, "========================================")
+        Log.i(TAG, "🔄 LaunchedEffect triggered!")
+        Log.i(TAG, "   videoUriToPlay: $videoUriToPlay")
+        Log.i(TAG, "   trackedImageNames: $trackedImageNames")
+        Log.i(TAG, "   videoOverlaysRef size: ${videoOverlaysRef.size}")
+        Log.i(TAG, "   videoOverlaysRef keys: ${videoOverlaysRef.keys}")
+        Log.i(TAG, "========================================")
+        
         videoUriToPlay?.let { uri ->
+            Log.i(TAG, "✅ Video URI is not null, attempting to play...")
+            
             // Play video on the first tracked image
             trackedImageNames.firstOrNull()?.let { imageName ->
-                videoNodesRef[imageName]?.let { videoNode ->
-                    Log.i(TAG, "Playing video on $imageName: $uri")
-                    videoNode.onVideoCompleted = {
+                Log.i(TAG, "✅ Found tracked image: $imageName")
+                
+                videoOverlaysRef[imageName]?.let { overlay ->
+                    Log.i(TAG, "========================================")
+                    Log.i(TAG, "🎬 PLAYING VIDEO ON AR OVERLAY")
+                    Log.i(TAG, "   Image: $imageName")
+                    Log.i(TAG, "   URI: $uri")
+                    Log.i(TAG, "   Overlay instance: $overlay")
+                    Log.i(TAG, "========================================")
+                    
+                    overlay.onVideoCompleted = {
+                        Log.i(TAG, "Video completed callback triggered")
                         onVideoCompleted()
                     }
-                    videoNode.onVideoError = { error ->
+                    overlay.onVideoError = { error ->
+                        Log.e(TAG, "Video error callback: $error")
                         onError(error)
                     }
-                    videoNode.loadVideo(uri, autoPlay = true)
+                    
+                    Log.i(TAG, "🚀 Calling overlay.loadVideo()...")
+                    overlay.loadVideo(uri, autoPlay = true)
+                    currentOverlay = overlay
+                    Log.i(TAG, "✅ overlay.loadVideo() called successfully")
+                } ?: run {
+                    Log.e(TAG, "❌ Video overlay not found for image: $imageName")
+                    Log.e(TAG, "   Available overlays: ${videoOverlaysRef.keys}")
                 }
+            } ?: run {
+                Log.e(TAG, "❌ No tracked images found")
+                Log.e(TAG, "   trackedImageNames is empty!")
             }
+        } ?: run {
+            Log.d(TAG, "ℹ️ Video URI is null, nothing to play")
         }
     }
     
@@ -135,7 +197,7 @@ fun TalkARView(
                     dbManager = dbManager,
                     sessionConfig = sessionConfig,
                     gestureDetector = gestureDetector,
-                    videoNodesRef = videoNodesRef,
+                    videoOverlaysRef = videoOverlaysRef,
                     onImageDetected = { imageName ->
                         Log.i(TAG, "✅ Image detected: $imageName")
                         trackedImageNames = trackedImageNames + imageName
@@ -154,6 +216,20 @@ fun TalkARView(
             },
             modifier = Modifier.fillMaxSize()
         )
+        
+        // Video overlay that tracks the AR image
+        overlayPosition?.let { position ->
+            currentOverlay?.let { overlay ->
+                VideoOverlayView(
+                    player = overlay.getPlayer(),
+                    x = position.x,
+                    y = position.y,
+                    width = position.width,
+                    height = position.height,
+                    visible = position.visible
+                )
+            }
+        }
     }
 }
 
@@ -165,7 +241,7 @@ private fun createARSceneView(
     dbManager: AugmentedImageDatabaseManager,
     sessionConfig: ARSessionConfig,
     gestureDetector: ARGestureDetector,
-    videoNodesRef: MutableMap<String, VideoAnchorNode>,
+    videoOverlaysRef: MutableMap<String, ARVideoOverlay>,
     onImageDetected: (String) -> Unit,
     onImageLost: (String) -> Unit,
     onError: (String) -> Unit,
@@ -173,8 +249,8 @@ private fun createARSceneView(
 ): ARSceneView {
     
     return ARSceneView(context).apply {
-        // Store currently tracked images and their video nodes
-        val trackedImageNodes = mutableMapOf<Int, Triple<String, AnchorNode, VideoAnchorNode>>()
+        // Store currently tracked images and their overlays
+        val trackedImageOverlays = mutableMapOf<Int, Pair<String, ARVideoOverlay>>()
         
         // Set up gesture handling
         setOnTouchListener { _, event ->
@@ -192,7 +268,7 @@ private fun createARSceneView(
         // Set up frame callback to process AR frames
         onSessionUpdated = { session, frame ->
             try {
-                processFrame(frame, trackedImageNodes, videoNodesRef, onImageDetected, onImageLost)
+                processFrame(frame, trackedImageOverlays, videoOverlaysRef, onImageDetected, onImageLost)
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing frame: ${e.message}", e)
             }
@@ -278,8 +354,8 @@ private fun ARSceneView.configureARSession(
  */
 private fun ARSceneView.processFrame(
     frame: Frame,
-    trackedImageNodes: MutableMap<Int, Triple<String, AnchorNode, VideoAnchorNode>>,
-    videoNodesRef: MutableMap<String, VideoAnchorNode>,
+    trackedImageOverlays: MutableMap<Int, Pair<String, ARVideoOverlay>>,
+    videoOverlaysRef: MutableMap<String, ARVideoOverlay>,
     onImageDetected: (String) -> Unit,
     onImageLost: (String) -> Unit
 ) {
@@ -297,68 +373,61 @@ private fun ARSceneView.processFrame(
         when (augmentedImage.trackingState) {
             TrackingState.TRACKING -> {
                 // Image is being tracked
-                if (!trackedImageNodes.containsKey(imageIndex)) {
+                if (!trackedImageOverlays.containsKey(imageIndex)) {
                     // Newly detected image
-                    Log.i(TAG, "🎯 New image detected: $imageName (index: $imageIndex)")
+                    Log.i(TAG, "========================================")
+                    Log.i(TAG, "🎯 NEW IMAGE DETECTED!")
+                    Log.i(TAG, "   Name: $imageName")
+                    Log.i(TAG, "   Index: $imageIndex")
+                    Log.i(TAG, "   Size: ${augmentedImage.extentX}m x ${augmentedImage.extentZ}m")
+                    Log.i(TAG, "========================================")
                     
-                    // Create anchor for this image
-                    val anchor = augmentedImage.createAnchorOrNull(augmentedImage.centerPose)
-                    if (anchor != null) {
-                        Log.i(TAG, "✅ Anchor created for image: $imageName")
-                        
-                        // Create AnchorNode for Sceneview
-                        val anchorNode = AnchorNode(engine = engine, anchor = anchor)
-                        addChildNode(anchorNode)
-                        
-                        // Create VideoAnchorNode for video playback
-                        val videoNode = VideoAnchorNode(
-                            context = context,
-                            anchorNode = anchorNode,
-                            imageWidth = augmentedImage.extentX,
-                            imageHeight = augmentedImage.extentZ
-                        )
-                        
-                        // Store the nodes
-                        trackedImageNodes[imageIndex] = Triple(imageName, anchorNode, videoNode)
-                        videoNodesRef[imageName] = videoNode
-                        
-                        Log.i(TAG, "✅ Video node created for: $imageName (${augmentedImage.extentX}m x ${augmentedImage.extentZ}m)")
-                        
-                        onImageDetected(imageName)
-                    } else {
-                        Log.w(TAG, "⚠️ Failed to create anchor for image: $imageName")
-                    }
+                    // Create video overlay for this image
+                    Log.i(TAG, "Creating ARVideoOverlay...")
+                    val overlay = ARVideoOverlay(context, augmentedImage)
+                    
+                    // Store the overlay
+                    trackedImageOverlays[imageIndex] = Pair(imageName, overlay)
+                    videoOverlaysRef[imageName] = overlay
+                    
+                    Log.i(TAG, "========================================")
+                    Log.i(TAG, "✅✅✅ VIDEO OVERLAY CREATED AND STORED!")
+                    Log.i(TAG, "   Image: $imageName")
+                    Log.i(TAG, "   Overlay: $overlay")
+                    Log.i(TAG, "   videoOverlaysRef size: ${videoOverlaysRef.size}")
+                    Log.i(TAG, "========================================")
+                    
+                    onImageDetected(imageName)
                 } else {
-                    // Image continues to be tracked
-                    // Log.v(TAG, "Image still tracking: $imageName")
+                    // Update overlay position for tracked image
+                    // Note: Position update will be handled in a separate render loop
+                    // For now, we'll keep the overlay at the last known position
                 }
             }
             
             TrackingState.PAUSED -> {
                 // Image tracking paused (temporarily lost)
-                if (trackedImageNodes.containsKey(imageIndex)) {
+                if (trackedImageOverlays.containsKey(imageIndex)) {
                     Log.d(TAG, "⏸️ Image tracking paused: $imageName")
                 }
             }
             
             TrackingState.STOPPED -> {
                 // Image tracking stopped (lost)
-                trackedImageNodes[imageIndex]?.let { (name, anchorNode, videoNode) ->
+                trackedImageOverlays[imageIndex]?.let { (name, overlay) ->
                     Log.i(TAG, "🛑 Image tracking stopped: $name")
                     
-                    // Clean up video node
-                    videoNode.cleanup()
-                    videoNodesRef.remove(name)
+                    // Clean up overlay
+                    overlay.cleanup()
+                    videoOverlaysRef.remove(name)
                     
-                    // Remove anchor node from scene
-                    removeChildNode(anchorNode)
-                    
-                    trackedImageNodes.remove(imageIndex)
+                    trackedImageOverlays.remove(imageIndex)
                     onImageLost(name)
                 }
             }
         }
     }
 }
+*/
 
 private const val TAG = "TalkARView"

@@ -3,214 +3,185 @@ package com.talkar.app.ar
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import android.view.ViewGroup
-import android.webkit.WebChromeClient
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.google.ar.core.AugmentedImage
-import com.google.ar.core.TrackingState
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 
 /**
- * AR Video Overlay that displays video on top of detected AR images.
+ * Manages video overlay for an AR tracked image.
  * 
- * This component:
- * - Tracks AR image position in screen space
- * - Positions video overlay to match the image
- * - Updates position as camera moves
- * - Handles video playback with ExoPlayer
- * 
- * @param augmentedImage The AR image to track
- * @param videoUri URI of the video to play
- * @param onVideoCompleted Callback when video completes
- * @param onVideoError Callback for errors
+ * This class handles:
+ * - Tracking the position of an augmented image
+ * - Loading and playing video content
+ * - Calculating screen position for overlay rendering
+ * - Lifecycle management and cleanup
  */
 class ARVideoOverlay(
     private val context: Context,
     private val augmentedImage: AugmentedImage
 ) {
-    companion object {
-        private const val TAG = "ARVideoOverlay"
-    }
+    /**
+     * Current screen position of the overlay.
+     */
+    var position: OverlayPosition? = null
+        private set
     
-    private var exoPlayer: ExoPlayer? = null
-    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-    
-    // Callbacks
+    /**
+     * Callback invoked when video playback completes.
+     */
     var onVideoCompleted: (() -> Unit)? = null
-    var onVideoError: ((error: String) -> Unit)? = null
     
-    // Screen position of the video overlay
-    data class OverlayPosition(
-        val x: Float,
-        val y: Float,
-        val width: Float,
-        val height: Float,
-        val visible: Boolean
-    )
+    /**
+     * Callback invoked when video playback encounters an error.
+     */
+    var onVideoError: ((String) -> Unit)? = null
     
-    private var _position = mutableStateOf(OverlayPosition(0f, 0f, 0f, 0f, false))
-    val position: OverlayPosition get() = _position.value
+    /**
+     * ExoPlayer instance for video playback.
+     */
+    private var player: ExoPlayer? = null
+    
+    /**
+     * URI of the currently loaded video.
+     */
+    private var videoUri: Uri? = null
+    
+    /**
+     * Whether video should auto-play when loaded.
+     */
+    private var autoPlay: Boolean = false
     
     init {
-        Log.d(TAG, "ARVideoOverlay created for image: ${augmentedImage.name}")
-    }
-    
-    /**
-     * Updates the overlay position based on AR image tracking.
-     * Call this every frame.
-     * 
-     * @param viewWidth Width of the AR view
-     * @param viewHeight Height of the AR view
-     */
-    fun updatePosition(viewWidth: Int, viewHeight: Int) {
-        if (augmentedImage.trackingState != TrackingState.TRACKING) {
-            _position.value = _position.value.copy(visible = false)
-            return
-        }
-        
-        // For now, center the video on screen with fixed size
-        // This is a simplified approach - video will be centered regardless of poster position
-        val imageWidth = augmentedImage.extentX
-        val imageHeight = augmentedImage.extentZ
-        
-        // Scale to screen size (make it reasonably large)
-        val scaleFactor = 400f // pixels per meter
-        val overlayWidth = imageWidth * scaleFactor
-        val overlayHeight = imageHeight * scaleFactor
-        
-        // Center on screen
-        val screenX = (viewWidth - overlayWidth) / 2f
-        val screenY = (viewHeight - overlayHeight) / 2f
-        
-        _position.value = OverlayPosition(
-            x = screenX,
-            y = screenY,
-            width = overlayWidth,
-            height = overlayHeight,
-            visible = true
-        )
-        
-        Log.v(TAG, "Position: x=$screenX, y=$screenY, w=$overlayWidth, h=$overlayHeight, visible=true")
-    }
-    
-    /**
-     * Loads and plays a video.
-     */
-    fun loadVideo(videoUri: Uri, autoPlay: Boolean = true) {
-        scope.launch {
-            try {
-                Log.i(TAG, "========================================")
-                Log.i(TAG, "📹 Loading video: $videoUri")
-                Log.i(TAG, "========================================")
-                
-                // Release existing player
-                exoPlayer?.release()
-                
-                // Create ExoPlayer
-                val player = ExoPlayer.Builder(context).build()
-                exoPlayer = player
-                
-                // Set up listener
-                player.addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        when (playbackState) {
-                            Player.STATE_READY -> {
-                                val videoSize = player.videoSize
-                                val hasVideo = videoSize.width > 0 && videoSize.height > 0
-                                Log.i(TAG, "✅ Video ready: ${player.duration}ms")
-                                Log.i(TAG, "   Video size: ${videoSize.width}x${videoSize.height}")
-                                Log.i(TAG, "   Has video track: $hasVideo")
-                                Log.i(TAG, "   Audio track count: ${player.currentTracks.groups.count { it.type == androidx.media3.common.C.TRACK_TYPE_AUDIO }}")
-                                Log.i(TAG, "   Video track count: ${player.currentTracks.groups.count { it.type == androidx.media3.common.C.TRACK_TYPE_VIDEO }}")
-                                
-                                if (!hasVideo) {
-                                    Log.w(TAG, "⚠️ WARNING: No video track detected! This is audio-only.")
-                                }
-                            }
-                            Player.STATE_ENDED -> {
-                                Log.i(TAG, "⏹️ Video completed")
-                                onVideoCompleted?.invoke()
-                            }
+        // Initialize ExoPlayer
+        player = ExoPlayer.Builder(context).build().apply {
+            // Set up player listener
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    when (playbackState) {
+                        Player.STATE_ENDED -> {
+                            Log.d(TAG, "Video playback completed")
+                            onVideoCompleted?.invoke()
+                        }
+                        Player.STATE_IDLE -> {
+                            Log.d(TAG, "Player idle")
+                        }
+                        Player.STATE_BUFFERING -> {
+                            Log.d(TAG, "Player buffering")
+                        }
+                        Player.STATE_READY -> {
+                            Log.d(TAG, "Player ready")
                         }
                     }
-                    
-                    override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
-                        Log.i(TAG, "📊 Tracks changed:")
-                        tracks.groups.forEach { group ->
-                            val trackType = when (group.type) {
-                                androidx.media3.common.C.TRACK_TYPE_VIDEO -> "VIDEO"
-                                androidx.media3.common.C.TRACK_TYPE_AUDIO -> "AUDIO"
-                                else -> "OTHER(${group.type})"
-                            }
-                            Log.i(TAG, "   - $trackType: ${group.length} track(s)")
-                        }
-                    }
-                    
-                    override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
-                        Log.i(TAG, "📐 Video size changed: ${videoSize.width}x${videoSize.height}")
-                    }
-                    
-                    override fun onRenderedFirstFrame() {
-                        Log.i(TAG, "🎬 First frame rendered!")
-                    }
-                    
-                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                        Log.e(TAG, "❌ Player error: ${error.message}")
-                        Log.e(TAG, "   Error code: ${error.errorCode}")
-                        onVideoError?.invoke(error.message ?: "Unknown error")
-                    }
-                })
-                
-                // Set media and prepare
-                player.setMediaItem(MediaItem.fromUri(videoUri))
-                player.prepare()
-                
-                // Enable video output
-                player.volume = 1.0f // Ensure audio is on
-                
-                if (autoPlay) {
-                    player.playWhenReady = true
-                    Log.i(TAG, "▶️ Playback started")
                 }
                 
-                Log.i(TAG, "🎉 Video loaded successfully!")
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Failed to load video: ${e.message}", e)
-                onVideoError?.invoke(e.message ?: "Unknown error")
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                    Log.e(TAG, "Player error: ${error.message}", error)
+                    onVideoError?.invoke(error.message ?: "Unknown playback error")
+                }
+            })
+        }
+    }
+    
+    /**
+     * Returns the ExoPlayer instance for rendering.
+     */
+    fun getPlayer(): ExoPlayer? = player
+    
+    /**
+     * Updates the screen position of the overlay based on the augmented image's current pose.
+     * 
+     * @param screenWidth Width of the screen in pixels
+     * @param screenHeight Height of the screen in pixels
+     */
+    fun updatePosition(screenWidth: Int, screenHeight: Int) {
+        try {
+            // Get the augmented image's pose
+            @Suppress("UNUSED_VARIABLE")
+            val pose = augmentedImage.centerPose
+            
+            // Get the image's physical dimensions
+            val extentX = augmentedImage.extentX
+            val extentZ = augmentedImage.extentZ
+            
+            // Calculate screen position (simplified - in production would use projection matrices)
+            // For now, we'll use a placeholder calculation
+            val centerX = screenWidth / 2f
+            val centerY = screenHeight / 2f
+            
+            // Calculate overlay dimensions based on image size
+            // Scale factor to convert meters to pixels (approximate)
+            val scaleFactor = 500f
+            val overlayWidth = extentX * scaleFactor
+            val overlayHeight = extentZ * scaleFactor
+            
+            position = OverlayPosition(
+                x = centerX - overlayWidth / 2,
+                y = centerY - overlayHeight / 2,
+                width = overlayWidth,
+                height = overlayHeight,
+                isVisible = augmentedImage.trackingState == com.google.ar.core.TrackingState.TRACKING
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating overlay position", e)
+            position = null
+        }
+    }
+    
+    /**
+     * Loads a video for playback on this overlay.
+     * 
+     * @param uri URI of the video to load
+     * @param autoPlay Whether to automatically start playback
+     */
+    fun loadVideo(uri: Uri, autoPlay: Boolean = false) {
+        Log.d(TAG, "Loading video: $uri (autoPlay: $autoPlay)")
+        this.videoUri = uri
+        this.autoPlay = autoPlay
+        
+        player?.let { exoPlayer ->
+            // Create media item and set it to the player
+            val mediaItem = MediaItem.fromUri(uri)
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.prepare()
+            
+            if (autoPlay) {
+                Log.d(TAG, "Auto-playing video")
+                exoPlayer.play()
             }
         }
     }
     
     /**
-     * Gets the ExoPlayer instance for rendering.
-     */
-    fun getPlayer(): ExoPlayer? = exoPlayer
-    
-    /**
-     * Cleans up resources.
+     * Cleans up resources used by this overlay.
      */
     fun cleanup() {
-        exoPlayer?.release()
-        exoPlayer = null
-        scope.cancel()
-        Log.d(TAG, "ARVideoOverlay cleaned up")
+        Log.d(TAG, "Cleaning up ARVideoOverlay")
+        player?.release()
+        player = null
+        videoUri = null
+        position = null
+        onVideoCompleted = null
+        onVideoError = null
+    }
+    
+    /**
+     * Represents the screen position and dimensions of the overlay.
+     */
+    data class OverlayPosition(
+        val x: Float,
+        val y: Float,
+        val width: Float,
+        val height: Float,
+        val isVisible: Boolean
+    ) {
+        /**
+         * Alias for isVisible to match the expected property name.
+         */
+        val visible: Boolean get() = isVisible
+    }
+    
+    companion object {
+        private const val TAG = "ARVideoOverlay"
     }
 }

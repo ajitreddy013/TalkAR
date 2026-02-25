@@ -37,7 +37,7 @@ class TalkARApiService {
             "$API_PROTOCOL://$API_HOST:$API_PORT/api/$API_VERSION"
         }
         
-        private const val TIMEOUT_MS = 30000 // 30 seconds
+        private const val TIMEOUT_MS = 10000 // 10 seconds (faster fallback)
     }
     
     /**
