@@ -155,4 +155,10 @@ interface TrackingListener {
      * @param posterId ID of the lost poster
      */
     fun onPosterLost(posterId: String)
+    
+    /**
+     * Called when poster detection times out after 10 seconds.
+     * Requirement: 14.1
+     */
+    fun onDetectionTimeout()
 }

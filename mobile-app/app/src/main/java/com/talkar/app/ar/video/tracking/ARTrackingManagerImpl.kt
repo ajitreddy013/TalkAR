@@ -9,6 +9,7 @@ import com.google.ar.core.AugmentedImageDatabase
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.google.ar.core.TrackingState as ARCoreTrackingState
+import com.talkar.app.ar.video.errors.TalkingPhotoError
 
 /**
  * Implementation of ARTrackingManager using ARCore.
@@ -29,7 +30,7 @@ class ARTrackingManagerImpl(
     
     companion object {
         private const val TAG = "ARTrackingManager"
-        private const val DETECTION_TIMEOUT_MS = 2000L // 2 seconds
+        private const val DETECTION_TIMEOUT_MS = 10000L // 10 seconds (Requirement 14.1)
     }
     
     private var imageDatabase: AugmentedImageDatabase? = null
@@ -38,6 +39,7 @@ class ARTrackingManagerImpl(
     private var listener: TrackingListener? = null
     private var posterMap: Map<Int, ReferencePoster> = emptyMap()
     private var detectionStartTime: Long = 0
+    private var hasReportedTimeout: Boolean = false
     
     override suspend fun initialize(posters: List<ReferencePoster>): Result<Unit> {
         return try {
@@ -90,12 +92,15 @@ class ARTrackingManagerImpl(
     }
     
     override fun processFrame(frame: Frame): TrackedPoster? {
-        // Check for detection timeout
+        // Check for detection timeout (Requirement 14.1)
         if (currentTrackedPoster == null) {
             val elapsed = System.currentTimeMillis() - detectionStartTime
-            if (elapsed > DETECTION_TIMEOUT_MS) {
-                // Reset timer for next attempt
-                detectionStartTime = System.currentTimeMillis()
+            if (elapsed > DETECTION_TIMEOUT_MS && !hasReportedTimeout) {
+                Log.w(TAG, "⚠️ Poster detection timeout after ${elapsed}ms")
+                listener?.onDetectionTimeout()
+                hasReportedTimeout = true
+                // Don't reset timer - let user take action
+                return null
             }
         }
         
@@ -120,29 +125,32 @@ class ARTrackingManagerImpl(
                     }
                     
                     // Create or update tracked poster
-                    val trackedPoster = TrackedPoster(
-                        id = poster.id,
-                        name = poster.name,
-                        anchor = augmentedImage.createAnchor(augmentedImage.centerPose),
-                        trackingState = TrackingState.TRACKING,
-                        extentX = augmentedImage.extentX,
-                        extentZ = augmentedImage.extentZ
-                    )
-                    
                     if (currentTrackedPoster == null) {
-                        // First detection
+                        // First detection - create new anchor
+                        val trackedPoster = TrackedPoster(
+                            id = poster.id,
+                            name = poster.name,
+                            anchor = augmentedImage.createAnchor(augmentedImage.centerPose),
+                            trackingState = TrackingState.TRACKING,
+                            extentX = augmentedImage.extentX,
+                            extentZ = augmentedImage.extentZ
+                        )
                         currentTrackedPoster = trackedPoster
                         currentAnchor = trackedPoster.anchor
                         listener?.onPosterDetected(trackedPoster)
                         Log.d(TAG, "✅ Poster detected: ${poster.id}")
                     } else {
-                        // Update existing tracking
+                        // Update existing tracking - reuse anchor, just update state
+                        val trackedPoster = currentTrackedPoster!!.copy(
+                            trackingState = TrackingState.TRACKING,
+                            extentX = augmentedImage.extentX,
+                            extentZ = augmentedImage.extentZ
+                        )
                         currentTrackedPoster = trackedPoster
-                        currentAnchor = trackedPoster.anchor
                         listener?.onPosterTracking(trackedPoster)
                     }
                     
-                    return trackedPoster
+                    return currentTrackedPoster
                 }
                 
                 ARCoreTrackingState.PAUSED -> {
@@ -183,8 +191,9 @@ class ARTrackingManagerImpl(
         currentAnchor?.detach()
         currentAnchor = null
         
-        // Reset detection timer
+        // Reset detection timer and timeout flag
         detectionStartTime = System.currentTimeMillis()
+        hasReportedTimeout = false
         
         if (previousPosterId != null) {
             listener?.onPosterLost(previousPosterId)

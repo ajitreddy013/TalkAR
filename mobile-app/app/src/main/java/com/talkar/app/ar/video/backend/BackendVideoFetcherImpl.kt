@@ -54,7 +54,7 @@ class BackendVideoFetcherImpl(
             } else {
                 val errorMsg = response.body()?.message ?: "Unknown error"
                 Log.e(TAG, "❌ Generation failed: $errorMsg")
-                throw TalkingPhotoError.GenerationFailed(errorMsg)
+                throw Exception(TalkingPhotoError.GenerationFailed(errorMsg).message)
             }
         }
     }
@@ -89,7 +89,7 @@ class BackendVideoFetcherImpl(
             } else {
                 val errorMsg = response.body()?.message ?: "Status check failed"
                 Log.e(TAG, "❌ Status check failed: $errorMsg")
-                Result.failure(TalkingPhotoError.BackendUnavailable(errorMsg))
+                Result.failure(Exception(TalkingPhotoError.BackendUnavailable(errorMsg).message))
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Status check error", e)
@@ -117,16 +117,16 @@ class BackendVideoFetcherImpl(
             val response = okHttpClient.newCall(request).execute()
             
             if (!response.isSuccessful) {
-                throw TalkingPhotoError.DownloadFailed(
+                throw Exception(TalkingPhotoError.DownloadFailed(
                     "Download failed with code: ${response.code}",
                     videoUrl
-                )
+                ).message)
             }
             
-            val body = response.body ?: throw TalkingPhotoError.DownloadFailed(
+            val body = response.body ?: throw Exception(TalkingPhotoError.DownloadFailed(
                 "Empty response body",
                 videoUrl
-            )
+            ).message)
             
             val totalBytes = body.contentLength()
             var downloadedBytes = 0L
@@ -161,15 +161,7 @@ class BackendVideoFetcherImpl(
             
         } catch (e: Exception) {
             Log.e(TAG, "❌ Download error", e)
-            
-            if (e is TalkingPhotoError.DownloadFailed) {
-                Result.failure(e)
-            } else {
-                Result.failure(TalkingPhotoError.DownloadFailed(
-                    e.message ?: "Download failed",
-                    videoUrl
-                ))
-            }
+            Result.failure(e)
         }
     }
     
@@ -205,7 +197,7 @@ class BackendVideoFetcherImpl(
                     val errorMsg = status.errorMessage ?: "Generation failed"
                     Log.e(TAG, "❌ Generation failed: $errorMsg")
                     return Result.failure(
-                        TalkingPhotoError.GenerationFailed(errorMsg, videoId)
+                        Exception(TalkingPhotoError.GenerationFailed(errorMsg, videoId).message)
                     )
                 }
                 "processing" -> {
@@ -214,7 +206,7 @@ class BackendVideoFetcherImpl(
                     if (elapsed > STATUS_POLL_TIMEOUT_MS) {
                         Log.e(TAG, "❌ Status polling timeout")
                         return Result.failure(
-                            TalkingPhotoError.GenerationFailed("Timeout", videoId)
+                            Exception(TalkingPhotoError.GenerationFailed("Timeout", videoId).message)
                         )
                     }
                     

@@ -7,6 +7,7 @@ import com.talkar.app.data.api.ApiService
 import com.talkar.app.data.api.LipSyncResponse
 import com.talkar.app.data.api.TalkingHeadRequest
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.extensions.robolectric.RobolectricTest
 import io.kotest.matchers.ints.shouldBeExactly
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.longs.shouldBeLessThan
@@ -17,9 +18,6 @@ import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import retrofit2.Response
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -36,8 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * - Total minimum time: 7 seconds (1s + 2s + 4s)
  * - Verifies retry count and timing across randomized inputs
  */
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], manifest = Config.NONE)
+@RobolectricTest
 class BackendVideoFetcherRetryPropertyTest : StringSpec({
     
     /**

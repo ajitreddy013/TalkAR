@@ -68,6 +68,17 @@ class LipRegionRendererImpl : LipRegionRenderer {
         Log.d(TAG, "Setting feather radius: ${this.featherRadius}px")
     }
     
+    /**
+     * Converts feather radius from pixels to normalized coordinates.
+     * This should be called when passing the radius to the shader.
+     */
+    private fun getFeatherRadiusNormalized(): Float {
+        if (posterWidth == 0 || posterHeight == 0) return 0f
+        // Use the smaller dimension to ensure consistent feathering
+        val minDimension = minOf(posterWidth, posterHeight)
+        return featherRadius / minDimension
+    }
+    
     override fun getSurface(): Surface? {
         if (surface == null) {
             // Create SurfaceTexture for video frames
@@ -175,14 +186,15 @@ object AlphaBlendingShader {
         
         uniform sampler2D uLipTexture;
         uniform sampler2D uPosterTexture;
-        uniform float uFeatherRadius;
+        uniform float uFeatherRadius; // in normalized coords (converted from pixels)
         uniform vec4 uLipRegion; // x, y, width, height in normalized coords
+        uniform vec2 uTextureDimensions; // width, height in pixels
         
         in vec2 vTexCoord;
         out vec4 fragColor;
         
         void main() {
-            // Calculate distance to edge of lip region
+            // Calculate distance to edge of lip region (in normalized coords)
             vec2 lipCenter = uLipRegion.xy + uLipRegion.zw * 0.5;
             float distToEdge = min(
                 min(vTexCoord.x - uLipRegion.x, uLipRegion.x + uLipRegion.z - vTexCoord.x),
@@ -190,6 +202,7 @@ object AlphaBlendingShader {
             );
             
             // Apply smoothstep for smooth alpha transition
+            // uFeatherRadius is already in normalized coords
             float alpha = smoothstep(0.0, uFeatherRadius, distToEdge);
             
             // Sample textures

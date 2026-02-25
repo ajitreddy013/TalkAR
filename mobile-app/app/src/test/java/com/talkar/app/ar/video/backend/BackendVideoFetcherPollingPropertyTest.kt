@@ -6,6 +6,7 @@ import com.talkar.app.data.api.ApiService
 import com.talkar.app.data.api.LipSyncResponse
 import com.talkar.app.data.api.TalkingHeadRequest
 import io.kotest.core.spec.style.StringSpec
+import io.kotest.extensions.robolectric.RobolectricTest
 import io.kotest.matchers.ints.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.longs.shouldBeGreaterThanOrEqual
 import io.kotest.matchers.longs.shouldBeLessThan
@@ -16,9 +17,6 @@ import io.kotest.property.arbitrary.string
 import io.kotest.property.checkAll
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.annotation.Config
 import retrofit2.Response
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -41,8 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * - The timeout test (commented out) takes ~60 seconds per iteration (10 minutes for 10 iterations)
  * - This is expected behavior for property-based testing of time-dependent functionality
  */
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [28], manifest = Config.NONE)
+@RobolectricTest
 class BackendVideoFetcherPollingPropertyTest : StringSpec({
     
     /**

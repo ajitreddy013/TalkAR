@@ -117,7 +117,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
   - [x] 6.3 Write property test for retry logic
     - **Property 22: API Retry with Exponential Backoff**
     - **Validates: Requirements 11.5, 14.3**
-    - Test that failed API calls retry 3 times with exponential delays
+    - Test that failed API calls 10.9retry 3 times with exponential delays
   
   - [x] 6.4 Implement status polling
     - Poll every 2 seconds until status is "complete" or "failed"
@@ -247,7 +247,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - **Validates: Requirements 6.1, 6.5**
     - Test that at most one poster is tracked when multiple are visible
   
-  - [x]* 10.4 Write property test for poster replacement
+  - [x] 10.4 Write property test for poster replacement
     - **Property 11: Poster Replacement**
     - **Validates: Requirements 6.4**
     - Test that new poster replaces previous when scanned
@@ -415,8 +415,8 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
 
 ### Phase 4: Orchestration & UI (Tasks 15-19)
 
-- [ ] 15. Implement TalkingPhotoController component
-  - [ ] 15.1 Create TalkingPhotoController interface and implementation
+- [x] 15. Implement TalkingPhotoController component
+  - [x] 15.1 Create TalkingPhotoController interface and implementation
     - Implement initialize() to set up for detected poster
     - Implement updateTracking() to process ARCore tracking data
     - Implement play(), pause(), stop() playback controls
@@ -425,31 +425,31 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - Implement setCallbacks() for lifecycle events
     - _Requirements: 1.1, 2.1, 2.2, 8.1, 8.3_
   
-  - [ ] 15.2 Implement state machine
+  - [x] 15.2 Implement state machine
     - Define state transitions: IDLE → FETCHING_VIDEO → GENERATING → DOWNLOADING → READY → PLAYING → PAUSED → ERROR
     - Handle state changes based on events
     - Validate state transitions
     - _Requirements: 14.4_
   
-  - [ ] 15.3 Orchestrate component interactions
+  - [x] 15.3 Orchestrate component interactions
     - Coordinate BackendVideoFetcher, VideoCache, VideoDecoder, LipRegionRenderer
     - Manage component lifecycle
     - Handle errors from any component
     - _Requirements: 2.1, 2.2, 11.1, 11.2, 11.3_
   
-  - [ ] 15.4 Write property test for backend request trigger
+  - [x] 15.4 Write property test for backend request trigger
     - **Property 3: Backend Request on Detection**
     - **Validates: Requirements 2.1**
     - Test that poster detection triggers backend API request
   
-  - [ ] 15.5 Implement tracking update handling
+  - [x] 15.5 Implement tracking update handling
     - Process tracking updates at 60fps
     - Calculate transforms via RenderCoordinator
     - Apply transforms to LipRegionRenderer
     - Record update timestamps for latency tracking
     - _Requirements: 7.1, 7.4_
   
-  - [ ] 15.6 Implement pause on tracking loss
+  - [x] 15.6 Implement pause on tracking loss
     - Pause video playback when poster goes out of frame
     - Save current playback position
     - Trigger onTrackingLost() callback
@@ -460,7 +460,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - **Validates: Requirements 8.1**
     - Test that playback pauses immediately when tracking is lost
   
-  - [ ] 15.8 Implement resume on tracking recovery
+  - [x] 15.8 Implement resume on tracking recovery
     - Resume playback when poster returns to frame
     - Resume from saved position, not from beginning
     - Trigger onTrackingResumed() callback
@@ -471,7 +471,7 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - **Validates: Requirements 8.3**
     - Test that playback resumes from paused position
   
-  - [ ] 15.10 Implement resource management
+  - [x] 15.10 Implement resource management
     - Release decoder resources when paused
     - Release camera resources when app goes to background
     - Clean up on controller release
@@ -484,51 +484,51 @@ The tasks are organized in dependency order across 5 phases, with checkpoints at
     - **Validates: Requirements 15.5**
     - Test that resources are released appropriately
 
-- [ ] 16. Implement UI components with Compose
-  - [ ] 16.1 Create TalkingPhotoScreen Composable
+- [x] 16. Implement UI components with Compose
+  - [x] 16.1 Create TalkingPhotoScreen Composable
     - Integrate ArSceneView for AR camera
     - Add LipRegionOverlay for video rendering
     - Add state-based UI overlays
     - Handle Compose lifecycle
     - _Requirements: 1.1, 8.2, 14.1, 14.2, 14.4_
   
-  - [ ] 16.2 Create progress indicators
+  - [x] 16.2 Create progress indicators
     - GeneratingIndicator with progress bar and percentage
     - DownloadingIndicator with progress bar
     - Show estimated time remaining
     - _Requirements: 14.4_
   
-  - [ ] 16.3 Create "Align poster properly" message
+  - [x] 16.3 Create "Align poster properly" message
     - Display when poster is out of frame
     - Use Card with warning icon
     - Auto-hide when tracking resumes
     - _Requirements: 8.2_
   
-  - [ ] 16.4 Create "Refresh Scan" button
+  - [x] 16.4 Create "Refresh Scan" button
     - Display when poster is being tracked
     - Call refreshScan() on click
     - Position at bottom center
     - _Requirements: 6.2, 6.3_
   
-  - [ ] 16.5 Create error message displays
+  - [x] 16.5 Create error message displays
     - Show user-friendly error messages
     - Map error codes to messages
     - Provide retry options where appropriate
     - _Requirements: 14.1, 14.2, 14.3, 14.5_
   
-  - [ ] 16.6 Create scanning instruction text
+  - [x] 16.6 Create scanning instruction text
     - Display "Point camera at a poster with a human face" when idle
     - Clear instructions for user
     - _Requirements: 1.1, 1.2_
 
 
 - [ ] 17. Implement error handling
-  - [ ] 17.1 Handle poster detection errors
+  - [x] 17.1 Handle poster detection errors
     - Timeout after 10 seconds: "No poster detected. Try better lighting."
     - No human face: "Please scan a poster with a human face"
     - _Requirements: 14.1, 14.5_
   
-  - [ ] 17.2 Handle backend communication errors
+  - [-] 17.2 Handle backend communication errors
     - Backend unavailable: "Service unavailable. Please try again later."
     - Network timeout: Retry with exponential backoff
     - API rate limiting: Display wait time

@@ -45,7 +45,7 @@ class VideoCacheImpl(
             if (actualChecksum != checksum) {
                 Log.e(TAG, "❌ Checksum mismatch: expected=$checksum, actual=$actualChecksum")
                 return@withContext Result.failure(
-                    TalkingPhotoError.CacheCorrupted(posterId)
+                    Exception(TalkingPhotoError.CacheCorrupted(posterId).message)
                 )
             }
             

@@ -4,36 +4,24 @@ import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.google.ar.core.AugmentedImage
-import com.google.ar.core.Config
-import com.google.ar.core.Frame
-import com.google.ar.core.TrackingState
-import com.talkar.app.ar.ARGestureDetector
-import com.talkar.app.ar.ARSessionConfig
-import com.talkar.app.ar.ARVideoOverlay
-import com.talkar.app.ar.AugmentedImageDatabaseManager
-import com.talkar.app.ui.components.VideoOverlayView
-import io.github.sceneview.ar.ARSceneView
-import io.github.sceneview.ar.arcore.createAnchorOrNull
-import io.github.sceneview.ar.node.AnchorNode
 
 /**
  * Main AR view for TalkAR using Sceneview and ARCore Augmented Images.
  * 
- * This component:
- * - Displays AR camera feed
- * - Detects reference images (posters)
- * - Tracks images in 3D space
- * - Handles gesture interactions (long-press to play video)
- * - Manages video playback on detected images
- * - Provides callbacks for image detection/loss
+ * **DEPRECATED**: This component is deprecated and will be removed in a future version.
+ * Use TalkingPhotoScreen and TalkingPhotoController instead.
+ * 
+ * This component has unresolved references to ARVideoOverlay which has been replaced
+ * by the new TalkingPhotoController architecture.
  * 
  * @param modifier Compose modifier
  * @param onImageDetected Callback when an image is detected (imageName)
@@ -43,6 +31,11 @@ import io.github.sceneview.ar.node.AnchorNode
  * @param onVideoCompleted Callback when video playback completes
  * @param onError Callback for errors
  */
+@Deprecated(
+    message = "Use TalkingPhotoScreen and TalkingPhotoController instead",
+    replaceWith = ReplaceWith("TalkingPhotoScreen()", "com.talkar.app.ui.screens.TalkingPhotoScreen"),
+    level = DeprecationLevel.WARNING
+)
 @Composable
 fun TalkARView(
     modifier: Modifier = Modifier,
@@ -56,6 +49,23 @@ fun TalkARView(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     
+    // DEPRECATED: This component uses the old ARVideoOverlay architecture
+    // TODO: Migrate to TalkingPhotoController
+    
+    // Placeholder implementation to prevent compilation errors
+    // The actual AR functionality should use TalkingPhotoScreen instead
+    Box(modifier = modifier.fillMaxSize()) {
+        Text(
+            text = "This AR view is deprecated. Please use TalkingPhotoScreen instead.",
+            modifier = Modifier.align(Alignment.Center),
+            style = MaterialTheme.typography.bodyLarge
+        )
+    }
+}
+
+/* COMMENTED OUT - Old implementation using ARVideoOverlay and related functions
+    
+    COMMENTED OUT - References to deprecated ARVideoOverlay
     // AR managers
     val dbManager = remember { AugmentedImageDatabaseManager(context) }
     val sessionConfig = remember { ARSessionConfig() }
@@ -418,5 +428,6 @@ private fun ARSceneView.processFrame(
         }
     }
 }
+*/
 
 private const val TAG = "TalkARView"
