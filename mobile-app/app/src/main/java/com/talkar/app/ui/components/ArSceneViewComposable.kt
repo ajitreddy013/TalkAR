@@ -1,7 +1,6 @@
 package com.talkar.app.ui.components
 
 import android.content.Context
-import android.opengl.GLSurfaceView
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -10,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.ar.core.*
-import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.talkar.app.ar.video.models.TrackingData
 import com.talkar.app.ar.video.tracking.ARTrackingManager
 import com.talkar.app.ar.video.tracking.ARTrackingManagerImpl
@@ -18,10 +16,10 @@ import com.talkar.app.ar.video.tracking.ReferencePoster
 import com.talkar.app.ar.video.tracking.TrackingListener
 import com.talkar.app.ar.video.tracking.TrackedPoster
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import javax.microedition.khronos.egl.EGLConfig
-import javax.microedition.khronos.opengles.GL10
+import kotlinx.coroutines.CoroutineScope
 
 /**
  * Composable wrapper for AR Camera View with poster detection.
@@ -139,8 +137,28 @@ fun ArSceneViewComposable(
                     }
                 } else {
                     Log.d("ArSceneView", "Initializing tracking with ${posters.size} posters")
-                    trackingManager.initialize(posters)
-                    Log.d("ArSceneView", "✅ ARCore initialized successfully with ${posters.size} posters")
+                    val initResult = trackingManager.initialize(posters)
+                    
+                    if (initResult.isSuccess) {
+                        // CRITICAL: Update ARCore session config with the image database
+                        // This was missing - causing augmented_image_database: <null> in logs
+                        try {
+                            val sessionConfig = arSession.config
+                            Log.d("ArSceneView", "Updating ARCore config with image database")
+                            sessionConfig.augmentedImageDatabase = createImageDatabase(arSession, posters)
+                            arSession.configure(sessionConfig)
+                            Log.d("ArSceneView", "✅ ARCore config updated with ${posters.size} poster images")
+                        } catch (e: Exception) {
+                            Log.e("ArSceneView", "Failed to update ARCore config", e)
+                        }
+                        
+                        Log.d("ArSceneView", "✅ ARCore initialized successfully with ${posters.size} posters")
+                    } else {
+                        Log.e("ArSceneView", "Failed to initialize tracking manager")
+                        withContext(Dispatchers.Main) {
+                            onError("Failed to initialize AR tracking")
+                        }
+                    }
                 }
                 
             } catch (e: Exception) {
@@ -178,7 +196,42 @@ fun ArSceneViewComposable(
 }
 
 /**
- * Creates the AR camera view with OpenGL rendering.
+ * Create ARCore augmented image database from posters.
+ */
+private fun createImageDatabase(
+    session: Session,
+    posters: List<ReferencePoster>
+): AugmentedImageDatabase {
+    val database = AugmentedImageDatabase(session)
+    
+    posters.forEach { poster ->
+        try {
+            val bitmap = android.graphics.BitmapFactory.decodeByteArray(
+                poster.imageData,
+                0,
+                poster.imageData.size
+            )
+            
+            if (bitmap != null) {
+                database.addImage(
+                    poster.name,
+                    bitmap,
+                    poster.physicalWidthMeters
+                )
+                Log.d("ArSceneView", "Added poster to database: ${poster.name}")
+            } else {
+                Log.w("ArSceneView", "Failed to decode bitmap for poster: ${poster.name}")
+            }
+        } catch (e: Exception) {
+            Log.e("ArSceneView", "Failed to add poster to database: ${poster.name}", e)
+        }
+    }
+    
+    return database
+}
+
+/**
+ * Creates the AR camera view with ARCore rendering.
  */
 private fun createARCameraView(
     context: Context,
@@ -191,87 +244,90 @@ private fun createARCameraView(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         )
+        setBackgroundColor(android.graphics.Color.BLACK)
     }
     
-    // Create GLSurfaceView for AR rendering
-    val glSurfaceView = GLSurfaceView(context).apply {
-        setEGLContextClientVersion(2)
-        setEGLConfigChooser(8, 8, 8, 8, 16, 0)
-        preserveEGLContextOnPause = true
+    // Create SurfaceView for AR camera preview
+    val surfaceView = android.view.SurfaceView(context).apply {
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        )
     }
     
-    // Create renderer
-    val renderer = TalkingPhotoARRenderer(
-        context = context,
-        session = session,
-        trackingManager = trackingManager,
-        onError = onError
-    )
+    layout.addView(surfaceView)
     
-    glSurfaceView.setRenderer(renderer)
-    glSurfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+    // Set up surface callback to configure ARCore session
+    surfaceView.holder.addCallback(object : android.view.SurfaceHolder.Callback {
+        override fun surfaceCreated(holder: android.view.SurfaceHolder) {
+            Log.d("ArSceneView", "Surface created")
+            
+            // Configure ARCore to render to this surface
+            session?.let { arSession ->
+                try {
+                    // Set the surface for ARCore to render camera feed
+                    arSession.setCameraTextureName(0)
+                    Log.d("ArSceneView", "✅ ARCore camera surface configured")
+                } catch (e: Exception) {
+                    Log.e("ArSceneView", "Failed to configure camera surface", e)
+                    onError("Failed to configure camera: ${e.message}")
+                }
+            }
+        }
+        
+        override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {
+            Log.d("ArSceneView", "Surface changed: ${width}x${height}")
+            session?.setDisplayGeometry(
+                context.resources.configuration.orientation,
+                width,
+                height
+            )
+        }
+        
+        override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
+            Log.d("ArSceneView", "Surface destroyed")
+        }
+    })
     
-    layout.addView(glSurfaceView)
+    // Start frame processing loop
+    startFrameProcessing(session, trackingManager, onError)
     
     return layout
 }
 
 /**
- * OpenGL renderer for AR camera feed and poster tracking.
+ * Start processing ARCore frames for tracking.
  */
-private class TalkingPhotoARRenderer(
-    private val context: Context,
-    private val session: Session?,
-    private val trackingManager: ARTrackingManager?,
-    private val onError: (String) -> Unit
-) : GLSurfaceView.Renderer {
-    
-    companion object {
-        private const val TAG = "TalkingPhotoARRenderer"
+private fun startFrameProcessing(
+    session: Session?,
+    trackingManager: ARTrackingManager?,
+    onError: (String) -> Unit
+) {
+    if (session == null || trackingManager == null) {
+        Log.w("ArSceneView", "Cannot start frame processing - session or tracking manager is null")
+        return
     }
     
-    override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-        Log.d(TAG, "Surface created")
-        android.opengl.GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-    }
-    
-    override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-        Log.d(TAG, "Surface changed: ${width}x${height}")
-        android.opengl.GLES20.glViewport(0, 0, width, height)
-        
-        // Update session display geometry
-        session?.setDisplayGeometry(
-            context.resources.configuration.orientation,
-            width,
-            height
-        )
-    }
-    
-    override fun onDrawFrame(gl: GL10?) {
-        // Clear screen
-        android.opengl.GLES20.glClear(
-            android.opengl.GLES20.GL_COLOR_BUFFER_BIT or 
-            android.opengl.GLES20.GL_DEPTH_BUFFER_BIT
-        )
-        
-        val currentSession = session ?: return
-        val currentTrackingManager = trackingManager ?: return
-        
-        try {
-            // Update ARCore frame
-            val frame = currentSession.update()
-            
-            // Process frame for poster detection/tracking
-            currentTrackingManager.processFrame(frame)
-            
-            // TODO: Render camera background texture
-            // TODO: Render AR overlays if needed
-            
-        } catch (e: CameraNotAvailableException) {
-            Log.e(TAG, "Camera not available", e)
-            onError("Camera not available")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in draw frame", e)
+    // Use a coroutine to process frames at 60fps
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+        while (true) {
+            try {
+                // Update ARCore frame
+                val frame = session.update()
+                
+                // Process frame for poster detection/tracking
+                trackingManager.processFrame(frame)
+                
+                // Sleep to maintain ~60fps
+                kotlinx.coroutines.delay(16)
+                
+            } catch (e: com.google.ar.core.exceptions.CameraNotAvailableException) {
+                Log.e("ArSceneView", "Camera not available", e)
+                onError("Camera not available")
+                break
+            } catch (e: Exception) {
+                Log.e("ArSceneView", "Error processing frame", e)
+            }
         }
     }
 }
