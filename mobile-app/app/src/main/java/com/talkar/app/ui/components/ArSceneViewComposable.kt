@@ -7,8 +7,13 @@ import android.widget.FrameLayout
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.google.ar.core.*
+import com.google.ar.core.exceptions.SessionPausedException
+import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.talkar.app.ar.video.models.TrackingData
 import com.talkar.app.ar.video.tracking.ARTrackingManager
 import com.talkar.app.ar.video.tracking.ARTrackingManagerImpl
@@ -37,11 +42,55 @@ fun ArSceneViewComposable(
     onError: (errorMessage: String) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     
     var arTrackingManager by remember { mutableStateOf<ARTrackingManager?>(null) }
     var session by remember { mutableStateOf<Session?>(null) }
     var isInitializing by remember { mutableStateOf(false) }
     var frameProcessingStarted by remember { mutableStateOf(false) }
+    
+    // Lifecycle management for AR session
+    DisposableEffect(lifecycleOwner, session) {
+        val observer = LifecycleEventObserver { _, event ->
+            val currentSession = session ?: return@LifecycleEventObserver
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    try {
+                        Log.d("ArSceneView", "Resuming AR session from lifecycle")
+                        currentSession.resume()
+                    } catch (e: Exception) {
+                        Log.e("ArSceneView", "Error resuming session", e)
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    try {
+                        Log.d("ArSceneView", "Pausing AR session from lifecycle")
+                        currentSession.pause()
+                    } catch (e: Exception) {
+                        Log.e("ArSceneView", "Error pausing session", e)
+                    }
+                }
+                else -> {}
+            }
+        }
+        
+        // Immediate resume if session is already available and lifecycle is resumed.
+        // This handles the case where the session is created while the app is already in foreground.
+        if (session != null && lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            try {
+                Log.d("ArSceneView", "Lifecycle already resumed, manually resuming session")
+                session?.resume()
+            } catch (e: Exception) {
+                Log.e("ArSceneView", "Error manually resuming session", e)
+            }
+        }
+        
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     
     // Initialize ARCore session and tracking manager on background thread
     LaunchedEffect(Unit) {
@@ -54,7 +103,6 @@ fun ArSceneViewComposable(
                 
                 // Create ARCore session
                 val arSession = Session(context)
-                session = arSession
                 
                 // Configure session for augmented images
                 val config = Config(arSession).apply {
@@ -62,6 +110,9 @@ fun ArSceneViewComposable(
                     updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
                 }
                 arSession.configure(config)
+                
+                // Set the session before loading posters so lifecycle observer can resume it
+                session = arSession
                 
                 // Create tracking manager
                 val trackingManager = ARTrackingManagerImpl(context, arSession)
@@ -146,15 +197,12 @@ fun ArSceneViewComposable(
                 if (posters.isEmpty()) {
                     Log.w("ArSceneView", "⚠️ No posters loaded - detection will not work")
                     Log.w("ArSceneView", "Camera will still be visible for testing")
-                    // Don't show error - just continue with empty database
-                    // Camera feed will still work, just no detection
                 } else {
                     Log.d("ArSceneView", "Initializing tracking with ${posters.size} posters")
                     val initResult = trackingManager.initialize(posters)
                     
                     if (initResult.isSuccess) {
-                        // CRITICAL: Update ARCore session config with the image database
-                        // This was missing - causing augmented_image_database: <null> in logs
+                        // Update ARCore session config with the image database
                         try {
                             val sessionConfig = arSession.config
                             Log.d("ArSceneView", "Updating ARCore config with image database")
@@ -206,7 +254,7 @@ fun ArSceneViewComposable(
             if (session != null && arTrackingManager != null && !isInitializing && !frameProcessingStarted) {
                 Log.d("ArSceneView", "AR session ready, starting frame processing")
                 frameProcessingStarted = true
-                startFrameProcessing(view, session, arTrackingManager, onError)
+                startFrameProcessing(view, session!!, arTrackingManager!!, scope, lifecycleOwner, onError)
             }
         }
     )
@@ -284,15 +332,12 @@ private fun createARCameraView(
  */
 private fun startFrameProcessing(
     view: android.view.View,
-    session: Session?,
-    trackingManager: ARTrackingManager?,
+    session: Session,
+    trackingManager: ARTrackingManager,
+    scope: CoroutineScope,
+    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
     onError: (String) -> Unit
 ) {
-    if (session == null || trackingManager == null) {
-        Log.w("ArSceneView", "Cannot start frame processing - session or tracking manager is null")
-        return
-    }
-    
     // Get the surface view from layout
     val layout = view as? FrameLayout ?: return
     val surfaceView = layout.tag as? android.view.SurfaceView ?: return
@@ -317,11 +362,15 @@ private fun startFrameProcessing(
         
         override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {
             Log.d("ArSceneView", "Surface changed: ${width}x${height}")
-            session.setDisplayGeometry(
-                surfaceView.context.resources.configuration.orientation,
-                width,
-                height
-            )
+            try {
+                session.setDisplayGeometry(
+                    surfaceView.context.resources.configuration.orientation,
+                    width,
+                    height
+                )
+            } catch (e: Exception) {
+                Log.e("ArSceneView", "Error setting display geometry", e)
+            }
         }
         
         override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
@@ -330,26 +379,101 @@ private fun startFrameProcessing(
     })
     
     // Start frame processing loop
-    CoroutineScope(Dispatchers.Default).launch {
+    scope.launch(Dispatchers.Default) {
         Log.d("ArSceneView", "Frame processing loop started")
+        var consecutiveErrors = 0
+        val maxConsecutiveErrors = 10
+        
         while (true) {
             try {
-                // Update ARCore frame
+                // Check lifecycle state first
+                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    // Wait longer when not resumed
+                    delay(500)
+                    continue
+                }
+                
+                // Check ARCore session state before calling update()
+                // This prevents SessionPausedException from being thrown
+                try {
+                    // Try to get camera config to verify session is ready
+                    // This will throw if session is not in RESUMED state
+                    session.cameraConfig
+                } catch (e: Exception) {
+                    // Session not ready yet, wait and retry
+                    delay(100)
+                    continue
+                }
+                
+                // Update ARCore frame - this can still throw if session state changes mid-call
                 val frame = session.update()
                 
                 // Process frame for poster detection/tracking
                 trackingManager.processFrame(frame)
                 
+                // Reset error counter on success
+                consecutiveErrors = 0
+                
                 // Sleep to maintain ~60fps
                 delay(16)
                 
-            } catch (e: com.google.ar.core.exceptions.CameraNotAvailableException) {
-                Log.e("ArSceneView", "Camera not available", e)
-                onError("Camera not available")
-                break
             } catch (e: Exception) {
-                Log.e("ArSceneView", "Error processing frame", e)
+                consecutiveErrors++
+                
+                // Robustly identify SessionPausedException even if wrapped or classloader mismatch
+                val isSessionPaused = e is SessionPausedException || 
+                                    e.javaClass.simpleName.contains("SessionPaused") || 
+                                    e.javaClass.name.contains("SessionPaused") ||
+                                    e.cause is SessionPausedException ||
+                                    e.message?.contains("SessionPaused") == true
+                
+                if (isSessionPaused) {
+                    // Session is paused, likely app is in background or transitioning.
+                    // Wait longer before retrying to avoid spamming logs.
+                    // Only log once per pause event to avoid flooding
+                    if (consecutiveErrors == 1) {
+                        Log.d("ArSceneView", "Session paused, waiting for resume...")
+                    }
+                    delay(500)
+                    continue
+                }
+                
+                if (e is CameraNotAvailableException) {
+                    Log.e("ArSceneView", "Camera not available", e)
+                    withContext(Dispatchers.Main) {
+                        onError("Camera not available")
+                    }
+                    break
+                }
+                
+                // Ignore session closed - that's handled by disposal
+                if (e.message?.contains("closed") == true || e.javaClass.name.contains("SessionClosed")) {
+                    Log.d("ArSceneView", "Session closed, stopping loop")
+                    break
+                }
+                
+                // Log error but don't spam - only log first few errors
+                if (consecutiveErrors <= 3) {
+                    Log.e("ArSceneView", "Error processing frame: ${e.javaClass.name} - ${e.message}")
+                }
+                
+                // If too many consecutive errors, break to prevent infinite error loop
+                if (consecutiveErrors >= maxConsecutiveErrors) {
+                    Log.e("ArSceneView", "Too many consecutive errors ($consecutiveErrors), stopping frame processing")
+                    withContext(Dispatchers.Main) {
+                        onError("AR processing failed after multiple errors")
+                    }
+                    break
+                }
+                
+                delay(100) // Don't tight loop on error
+            } catch (e: Throwable) {
+                // Catch any other throwables to prevent loop from dying silently
+                Log.e("ArSceneView", "Fatal error in frame processing loop", e)
+                break
             }
         }
+        
+        Log.d("ArSceneView", "Frame processing loop ended")
     }
 }
