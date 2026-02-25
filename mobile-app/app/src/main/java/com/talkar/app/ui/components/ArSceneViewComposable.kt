@@ -117,13 +117,25 @@ fun ArSceneViewComposable(
                     context = context
                 )
                 
-                val postersResult = posterRepository.loadPosters()
+                // Try to load posters with timeout
+                val postersResult = withContext(Dispatchers.IO) {
+                    try {
+                        kotlinx.coroutines.withTimeout(10000) { // 10 second timeout
+                            posterRepository.loadPosters()
+                        }
+                    } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                        Log.w("ArSceneView", "Poster loading timed out, trying test poster")
+                        posterRepository.loadTestPoster().map { listOf(it) }
+                    }
+                }
+                
                 val posters: List<ReferencePoster> = postersResult.getOrElse {
                     Log.e("ArSceneView", "Failed to load posters from backend", it)
                     // Try to load test poster as fallback
                     val testPosterResult = posterRepository.loadTestPoster()
                     val testPoster = testPosterResult.getOrNull()
                     if (testPoster != null) {
+                        Log.d("ArSceneView", "Using test poster as fallback")
                         listOf(testPoster)
                     } else {
                         Log.e("ArSceneView", "Failed to load test poster", it)
@@ -133,9 +145,9 @@ fun ArSceneViewComposable(
                 
                 if (posters.isEmpty()) {
                     Log.w("ArSceneView", "⚠️ No posters loaded - detection will not work")
-                    withContext(Dispatchers.Main) {
-                        onError("No posters available. Please add posters to the backend.")
-                    }
+                    Log.w("ArSceneView", "Camera will still be visible for testing")
+                    // Don't show error - just continue with empty database
+                    // Camera feed will still work, just no detection
                 } else {
                     Log.d("ArSceneView", "Initializing tracking with ${posters.size} posters")
                     val initResult = trackingManager.initialize(posters)
@@ -156,9 +168,6 @@ fun ArSceneViewComposable(
                         Log.d("ArSceneView", "✅ ARCore initialized successfully with ${posters.size} posters")
                     } else {
                         Log.e("ArSceneView", "Failed to initialize tracking manager")
-                        withContext(Dispatchers.Main) {
-                            onError("Failed to initialize AR tracking")
-                        }
                     }
                 }
                 
