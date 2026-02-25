@@ -42,9 +42,13 @@ fun ArSceneViewComposable(
     
     var arTrackingManager by remember { mutableStateOf<ARTrackingManager?>(null) }
     var session by remember { mutableStateOf<Session?>(null) }
+    var isInitializing by remember { mutableStateOf(false) }
     
-    // Initialize ARCore session and tracking manager
+    // Initialize ARCore session and tracking manager on background thread
     LaunchedEffect(Unit) {
+        if (isInitializing) return@LaunchedEffect
+        isInitializing = true
+        
         withContext(Dispatchers.IO) {
             try {
                 Log.d("ArSceneView", "Initializing ARCore session...")
@@ -106,18 +110,46 @@ fun ArSceneViewComposable(
                     }
                 })
                 
-                // TODO: Load reference posters from backend/database
-                // For now, initialize with empty list - will be populated when backend is ready
-                val posters = emptyList<ReferencePoster>()
-                trackingManager.initialize(posters)
+                // Load reference posters from backend
+                Log.d("ArSceneView", "Loading posters from backend...")
+                val posterRepository = com.talkar.app.data.repository.PosterRepository(
+                    apiClient = com.talkar.app.TalkARApplication.instance.apiClient,
+                    imageRepository = com.talkar.app.TalkARApplication.instance.imageRepository,
+                    context = context
+                )
                 
-                Log.d("ArSceneView", "✅ ARCore initialized successfully")
+                val postersResult = posterRepository.loadPosters()
+                val posters: List<ReferencePoster> = postersResult.getOrElse {
+                    Log.e("ArSceneView", "Failed to load posters from backend", it)
+                    // Try to load test poster as fallback
+                    val testPosterResult = posterRepository.loadTestPoster()
+                    val testPoster = testPosterResult.getOrNull()
+                    if (testPoster != null) {
+                        listOf(testPoster)
+                    } else {
+                        Log.e("ArSceneView", "Failed to load test poster", it)
+                        emptyList()
+                    }
+                }
+                
+                if (posters.isEmpty()) {
+                    Log.w("ArSceneView", "⚠️ No posters loaded - detection will not work")
+                    withContext(Dispatchers.Main) {
+                        onError("No posters available. Please add posters to the backend.")
+                    }
+                } else {
+                    Log.d("ArSceneView", "Initializing tracking with ${posters.size} posters")
+                    trackingManager.initialize(posters)
+                    Log.d("ArSceneView", "✅ ARCore initialized successfully with ${posters.size} posters")
+                }
                 
             } catch (e: Exception) {
                 Log.e("ArSceneView", "❌ Failed to initialize ARCore", e)
                 withContext(Dispatchers.Main) {
                     onError("Failed to initialize AR: ${e.message}")
                 }
+            } finally {
+                isInitializing = false
             }
         }
     }

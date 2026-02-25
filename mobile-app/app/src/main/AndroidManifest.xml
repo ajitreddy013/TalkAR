@@ -47,6 +47,12 @@
             android:name="com.google.ar.core" 
             android:value="required"
             tools:replace="android:value" />
+        
+        <!-- ARCore API Key for Cloud Anchors and other cloud features -->
+        <!-- Get your API key from: https://console.cloud.google.com/apis/credentials -->
+        <meta-data
+            android:name="com.google.ar.core.API_KEY"
+            android:value="AIzaSyDummy_Replace_With_Your_Actual_ARCore_API_Key" />
     </application>
 </manifest>
 
