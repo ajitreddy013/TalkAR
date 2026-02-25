@@ -28,6 +28,10 @@ class PosterRepository(
     companion object {
         private const val TAG = "PosterRepository"
         private const val DEFAULT_POSTER_WIDTH_METERS = 0.3f // 30cm default poster width
+        
+        // Development mode - set to true to use mock data instead of backend
+        // Useful for emulator testing when backend is not available
+        private const val USE_MOCK_DATA = true
     }
     
     /**
@@ -35,9 +39,17 @@ class PosterRepository(
      * 
      * Fetches images from backend, downloads the image data, and converts
      * to ReferencePoster format for AR tracking.
+     * 
+     * In development mode (USE_MOCK_DATA=true), returns mock posters instead.
      */
     suspend fun loadPosters(): Result<List<ReferencePoster>> = withContext(Dispatchers.IO) {
         try {
+            // Use mock data in development mode
+            if (USE_MOCK_DATA) {
+                Log.d(TAG, "🔧 Development mode: Using mock poster data")
+                return@withContext loadMockPosters()
+            }
+            
             Log.d(TAG, "Loading posters from backend...")
             
             val posters = mutableListOf<ReferencePoster>()
@@ -150,6 +162,79 @@ class PosterRepository(
             
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load test poster from assets", e)
+            Result.failure(e)
+        }
+    }
+    
+    /**
+     * Load mock posters for development/testing.
+     * Creates simple colored bitmaps as placeholders.
+     */
+    private suspend fun loadMockPosters(): Result<List<ReferencePoster>> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Creating mock poster data...")
+            
+            val posters = mutableListOf<ReferencePoster>()
+            
+            // Try to load test poster from assets first
+            val testPosterResult = loadTestPoster()
+            if (testPosterResult.isSuccess) {
+                testPosterResult.getOrNull()?.let { posters.add(it) }
+            }
+            
+            // If no test poster, create simple colored bitmaps as mock data
+            if (posters.isEmpty()) {
+                Log.d(TAG, "No test poster in assets, creating colored mock posters")
+                
+                val mockPosters = listOf(
+                    Triple("mock_poster_1", "Mock Poster 1", android.graphics.Color.RED),
+                    Triple("mock_poster_2", "Mock Poster 2", android.graphics.Color.BLUE),
+                    Triple("mock_poster_3", "Mock Poster 3", android.graphics.Color.GREEN)
+                )
+                
+                for ((id, name, color) in mockPosters) {
+                    try {
+                        // Create a simple colored bitmap (512x512)
+                        val bitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888)
+                        val canvas = android.graphics.Canvas(bitmap)
+                        canvas.drawColor(color)
+                        
+                        // Add text to identify the poster
+                        val paint = android.graphics.Paint().apply {
+                            this.color = android.graphics.Color.WHITE
+                            textSize = 48f
+                            textAlign = android.graphics.Paint.Align.CENTER
+                        }
+                        canvas.drawText(name, 256f, 256f, paint)
+                        
+                        // Convert to ByteArray
+                        val outputStream = ByteArrayOutputStream()
+                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+                        val imageData = outputStream.toByteArray()
+                        outputStream.close()
+                        
+                        val poster = ReferencePoster(
+                            id = id,
+                            name = name,
+                            imageData = imageData,
+                            physicalWidthMeters = DEFAULT_POSTER_WIDTH_METERS,
+                            hasHumanFace = true
+                        )
+                        
+                        posters.add(poster)
+                        Log.d(TAG, "✅ Created mock poster: $name")
+                        
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to create mock poster: $name", e)
+                    }
+                }
+            }
+            
+            Log.d(TAG, "✅ Successfully loaded ${posters.size} mock posters")
+            Result.success(posters)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed to load mock posters", e)
             Result.failure(e)
         }
     }
