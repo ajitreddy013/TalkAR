@@ -222,9 +222,118 @@ adb logcat | grep "ArSceneView"
 ✅ **Overlay Working**: Lips render on camera feed  
 ✅ **Complete Flow**: User sees talking photo  
 
+## Implementation Phases Overview
+
+### Phase 1: Fix Camera Preview (CRITICAL - 2-3 hours)
+**Goal**: Show live camera feed instead of black screen
+
+**Tasks**:
+1. Implement `drawCameraBackground()` method in `ArSceneViewComposable.kt`
+2. Create OpenGL vertex and fragment shaders for external OES texture
+3. Bind camera texture and draw full-screen quad in `onDrawFrame()`
+4. Test: User sees live camera feed
+
+**Key Code Changes**:
+```kotlin
+// ArSceneViewComposable.kt - onDrawFrame()
+if (camera.trackingState == TrackingState.TRACKING) {
+    drawCameraBackground(frame, cameraTextureId)  // ← Add this
+    trackingManager.processFrame(frame)
+}
+```
+
+---
+
+### Phase 2: Enable Backend Integration (HIGH - 1 hour)
+**Goal**: Connect to backend and load real girl photo
+
+**Tasks**:
+1. Change `USE_MOCK_DATA = false` in `PosterRepository.kt`
+2. Verify backend URL in `ApiConfig.kt`
+3. Add backend health check
+4. Test: Girl photo downloads from backend
+
+**Key Code Changes**:
+```kotlin
+// PosterRepository.kt line 23
+private const val USE_MOCK_DATA = false  // ← Change from true
+```
+
+---
+
+### Phase 3: Fix Poster Detection (HIGH - 1-2 hours)
+**Goal**: ARCore detects girl photo when camera points at it
+
+**Tasks**:
+1. Add detailed logging to poster loading
+2. Verify girl photo in ARCore image database
+3. Test poster detection with real photo
+4. Debug if detection fails
+
+**Key Code Changes**:
+```kotlin
+// PosterRepository.kt - loadPosters()
+Log.d(TAG, "📥 Found ${images.size} images from backend")
+for (image in images) {
+    Log.d(TAG, "  - Image: ${image.name} (${image.id})")
+    // Download and add to ARCore...
+}
+```
+
+---
+
+### Phase 4: Fix Video Generation (HIGH - 2-3 hours)
+**Goal**: Backend generates lip-sync video successfully
+
+**Tasks**:
+1. Add detailed logging to `BackendVideoFetcherImpl.kt`
+2. Test video generation API endpoint
+3. Improve error handling and user messages
+4. Test status polling and download
+
+**Key Code Changes**:
+```kotlin
+// BackendVideoFetcherImpl.kt - generateLipSync()
+Log.d(TAG, "🎬 Generating lip-sync video")
+Log.d(TAG, "  Poster ID: ${request.posterId}")
+Log.d(TAG, "  Text: ${request.text}")
+// ... detailed logging for debugging
+```
+
+---
+
+### Phase 5: Implement Lip Region Overlay (MEDIUM - 3-4 hours)
+**Goal**: Render lip region on top of camera feed
+
+**Tasks**:
+1. Verify/implement `LipRegionOverlay.kt` component
+2. Implement transform matrix calculation in `TalkingPhotoViewModel.kt`
+3. Test lip coordinates rendering
+4. Adjust alpha blending for natural look
+
+**Key Code Changes**:
+```kotlin
+// TalkingPhotoViewModel.kt - onTrackingUpdate()
+if (trackingData.isTracking) {
+    val transform = calculateTransformMatrix(
+        position = trackingData.position,
+        rotation = trackingData.rotation,
+        scale = trackingData.scale
+    )
+    _transform.value = transform
+}
+```
+
+---
+
 ## Next Steps
 
-See `COMPLETE_USER_FLOW_IMPLEMENTATION_PLAN.md` for detailed implementation guide.
+📖 **See `COMPLETE_USER_FLOW_IMPLEMENTATION_PLAN.md` for**:
+- Detailed step-by-step instructions for each phase
+- Complete code examples with context
+- Testing checklist for each phase
+- Troubleshooting guide
+- Expected log output
 
 **Start with**: Phase 1 (Camera Rendering) and Phase 2 (Backend Integration)  
 **Estimated time**: 3-4 hours to get basic flow working  
