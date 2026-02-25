@@ -324,8 +324,8 @@ class ImageMatcherService(private val context: Context) {
      * dHash is much more robust to lighting changes as it compares adjacent pixel intensities.
      */
     private fun generateDifferenceHash(bitmap: Bitmap): BooleanArray {
-        val hashWidth = 16 
-        val hashHeight = 16
+        val hashWidth = 32 
+        val hashHeight = 32
         // We need (width + 1) pixels to get 'width' differences
         val resized = Bitmap.createScaledBitmap(bitmap, hashWidth + 1, hashHeight, true)
         val pixels = IntArray((hashWidth + 1) * hashHeight)

@@ -343,11 +343,23 @@ docs/_build/
 # ===========================================
 *.bak
 *.backup
+*.backup-*
 *.old
 *.orig
+
+# Aider AI assistant files
 .aider*
-interaction_flow_check.txt
-interaction_flow_check.txt
+
+# Temporary interaction files
 interaction_flow_check.txt
 interaction_log.txt
+
+# Project-specific exclusions
 boilermake2025/
+
+# Backend test/temporary files
+backend/sunrich_bottle.jpeg
+backend/dummy_marker.jpg
+backend/dummy_test_image.jpg
+backend/src_list.txt
+backend/.env.backup-*
