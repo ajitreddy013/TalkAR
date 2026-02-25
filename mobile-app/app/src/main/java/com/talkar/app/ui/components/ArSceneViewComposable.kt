@@ -269,6 +269,8 @@ private fun createImageDatabase(
 ): AugmentedImageDatabase {
     val database = AugmentedImageDatabase(session)
     
+    Log.d("ArSceneView", "📸 Creating ARCore image database with ${posters.size} posters")
+    
     posters.forEach { poster ->
         try {
             val bitmap = android.graphics.BitmapFactory.decodeByteArray(
@@ -283,15 +285,16 @@ private fun createImageDatabase(
                     bitmap,
                     poster.physicalWidthMeters
                 )
-                Log.d("ArSceneView", "Added poster to database: ${poster.name}")
+                Log.d("ArSceneView", "  ✅ Added poster to database: ${poster.name} (${bitmap.width}x${bitmap.height})")
             } else {
-                Log.w("ArSceneView", "Failed to decode bitmap for poster: ${poster.name}")
+                Log.w("ArSceneView", "  ❌ Failed to decode bitmap for poster: ${poster.name}")
             }
         } catch (e: Exception) {
-            Log.e("ArSceneView", "Failed to add poster to database: ${poster.name}", e)
+            Log.e("ArSceneView", "  ❌ Failed to add poster to database: ${poster.name}", e)
         }
     }
     
+    Log.d("ArSceneView", "✅ Image database created with ${database.numImages} images")
     return database
 }
 
@@ -347,21 +350,60 @@ private fun startFrameProcessing(
     
     Log.d("ArSceneView", "Starting frame processing with session and tracking manager")
     
-    // Create a simple renderer for ARCore camera feed
+    // Create a renderer for ARCore camera feed with background rendering
     val renderer = object : android.opengl.GLSurfaceView.Renderer {
         private var cameraTextureConfigured = false
         private var cameraTextureId = -1
+        private var shaderProgram = 0
+        private var positionAttrib = 0
+        private var texCoordAttrib = 0
+        private var textureUniform = 0
+        
+        // Vertex shader for camera background
+        private val vertexShaderCode = """
+            attribute vec4 a_Position;
+            attribute vec2 a_TexCoord;
+            varying vec2 v_TexCoord;
+            void main() {
+                gl_Position = a_Position;
+                v_TexCoord = a_TexCoord;
+            }
+        """.trimIndent()
+        
+        // Fragment shader for external OES texture (ARCore camera)
+        private val fragmentShaderCode = """
+            #extension GL_OES_EGL_image_external : require
+            precision mediump float;
+            varying vec2 v_TexCoord;
+            uniform samplerExternalOES u_Texture;
+            void main() {
+                gl_FragColor = texture2D(u_Texture, v_TexCoord);
+            }
+        """.trimIndent()
         
         override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
             Log.d("ArSceneView", "GL Surface created")
             try {
                 // Set clear color
-                android.opengl.GLES20.glClearColor(0.1f, 0.1f, 0.1f, 1.0f)
+                android.opengl.GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
                 
                 // Generate texture for camera
                 val textures = IntArray(1)
                 android.opengl.GLES20.glGenTextures(1, textures, 0)
                 cameraTextureId = textures[0]
+                
+                // Bind and configure texture
+                android.opengl.GLES20.glBindTexture(android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTextureId)
+                android.opengl.GLES20.glTexParameteri(
+                    android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                    android.opengl.GLES20.GL_TEXTURE_MIN_FILTER,
+                    android.opengl.GLES20.GL_LINEAR
+                )
+                android.opengl.GLES20.glTexParameteri(
+                    android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
+                    android.opengl.GLES20.GL_TEXTURE_MAG_FILTER,
+                    android.opengl.GLES20.GL_LINEAR
+                )
                 
                 // Configure ARCore to use the camera texture
                 if (!cameraTextureConfigured && cameraTextureId != -1) {
@@ -370,10 +412,32 @@ private fun startFrameProcessing(
                     Log.d("ArSceneView", "✅ ARCore camera texture configured: $cameraTextureId")
                 }
                 
-                Log.d("ArSceneView", "✅ GL renderer initialized")
+                // Compile shaders
+                val vertexShader = loadShader(android.opengl.GLES20.GL_VERTEX_SHADER, vertexShaderCode)
+                val fragmentShader = loadShader(android.opengl.GLES20.GL_FRAGMENT_SHADER, fragmentShaderCode)
+                
+                // Create shader program
+                shaderProgram = android.opengl.GLES20.glCreateProgram()
+                android.opengl.GLES20.glAttachShader(shaderProgram, vertexShader)
+                android.opengl.GLES20.glAttachShader(shaderProgram, fragmentShader)
+                android.opengl.GLES20.glLinkProgram(shaderProgram)
+                
+                // Get attribute and uniform locations
+                positionAttrib = android.opengl.GLES20.glGetAttribLocation(shaderProgram, "a_Position")
+                texCoordAttrib = android.opengl.GLES20.glGetAttribLocation(shaderProgram, "a_TexCoord")
+                textureUniform = android.opengl.GLES20.glGetUniformLocation(shaderProgram, "u_Texture")
+                
+                Log.d("ArSceneView", "✅ GL renderer initialized with shaders")
             } catch (e: Exception) {
                 Log.e("ArSceneView", "Failed to initialize GL renderer", e)
             }
+        }
+        
+        private fun loadShader(type: Int, shaderCode: String): Int {
+            val shader = android.opengl.GLES20.glCreateShader(type)
+            android.opengl.GLES20.glShaderSource(shader, shaderCode)
+            android.opengl.GLES20.glCompileShader(shader)
+            return shader
         }
         
         override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
@@ -414,9 +478,8 @@ private fun startFrameProcessing(
                 
                 // Only render if tracking
                 if (camera.trackingState == TrackingState.TRACKING) {
-                    // Note: Full camera background rendering requires complex OpenGL shaders
-                    // For now, ARCore is configured and tracking works
-                    // The camera feed rendering can be added later with proper shader implementation
+                    // Draw camera background
+                    drawCameraBackground(frame)
                     
                     // Process frame for poster detection/tracking
                     trackingManager.processFrame(frame)
@@ -430,6 +493,85 @@ private fun startFrameProcessing(
                 if (!isSessionPaused && e !is CameraNotAvailableException) {
                     Log.e("ArSceneView", "Error in draw frame: ${e.message}")
                 }
+            }
+        }
+        
+        private fun drawCameraBackground(frame: Frame) {
+            if (cameraTextureId == -1 || shaderProgram == 0) return
+            
+            try {
+                // Use shader program
+                android.opengl.GLES20.glUseProgram(shaderProgram)
+                
+                // Bind camera texture
+                android.opengl.GLES20.glActiveTexture(android.opengl.GLES20.GL_TEXTURE0)
+                android.opengl.GLES20.glBindTexture(android.opengl.GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTextureId)
+                android.opengl.GLES20.glUniform1i(textureUniform, 0)
+                
+                // Full-screen quad vertices
+                val quadCoords = floatArrayOf(
+                    -1.0f, -1.0f,  // Bottom left
+                     1.0f, -1.0f,  // Bottom right
+                    -1.0f,  1.0f,  // Top left
+                     1.0f,  1.0f   // Top right
+                )
+                
+                // Texture coordinates
+                val quadTexCoords = floatArrayOf(
+                    0.0f, 0.0f,  // Bottom left
+                    1.0f, 0.0f,  // Bottom right
+                    0.0f, 1.0f,  // Top left
+                    1.0f, 1.0f   // Top right
+                )
+                
+                // Transform texture coordinates for ARCore
+                val transformedTexCoords = FloatArray(8)
+                frame.transformDisplayUvCoords(
+                    java.nio.ByteBuffer.allocateDirect(quadTexCoords.size * 4)
+                        .order(java.nio.ByteOrder.nativeOrder())
+                        .asFloatBuffer()
+                        .put(quadTexCoords)
+                        .position(0) as java.nio.FloatBuffer,
+                    java.nio.ByteBuffer.allocateDirect(transformedTexCoords.size * 4)
+                        .order(java.nio.ByteOrder.nativeOrder())
+                        .asFloatBuffer()
+                        .also { it.get(transformedTexCoords) }
+                        .position(0) as java.nio.FloatBuffer
+                )
+                
+                // Set vertex positions
+                val vertexBuffer = java.nio.ByteBuffer.allocateDirect(quadCoords.size * 4)
+                    .order(java.nio.ByteOrder.nativeOrder())
+                    .asFloatBuffer()
+                    .put(quadCoords)
+                    .position(0) as java.nio.FloatBuffer
+                
+                android.opengl.GLES20.glVertexAttribPointer(
+                    positionAttrib, 2, android.opengl.GLES20.GL_FLOAT, false, 0, vertexBuffer
+                )
+                android.opengl.GLES20.glEnableVertexAttribArray(positionAttrib)
+                
+                // Set texture coordinates
+                val texCoordBuffer = java.nio.ByteBuffer.allocateDirect(transformedTexCoords.size * 4)
+                    .order(java.nio.ByteOrder.nativeOrder())
+                    .asFloatBuffer()
+                    .put(transformedTexCoords)
+                    .position(0) as java.nio.FloatBuffer
+                
+                android.opengl.GLES20.glVertexAttribPointer(
+                    texCoordAttrib, 2, android.opengl.GLES20.GL_FLOAT, false, 0, texCoordBuffer
+                )
+                android.opengl.GLES20.glEnableVertexAttribArray(texCoordAttrib)
+                
+                // Draw quad
+                android.opengl.GLES20.glDrawArrays(android.opengl.GLES20.GL_TRIANGLE_STRIP, 0, 4)
+                
+                // Cleanup
+                android.opengl.GLES20.glDisableVertexAttribArray(positionAttrib)
+                android.opengl.GLES20.glDisableVertexAttribArray(texCoordAttrib)
+                
+            } catch (e: Exception) {
+                Log.e("ArSceneView", "Error drawing camera background", e)
             }
         }
     }

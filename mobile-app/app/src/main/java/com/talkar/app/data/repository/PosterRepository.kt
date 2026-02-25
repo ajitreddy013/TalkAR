@@ -29,9 +29,9 @@ class PosterRepository(
         private const val TAG = "PosterRepository"
         private const val DEFAULT_POSTER_WIDTH_METERS = 0.3f // 30cm default poster width
         
-        // Development mode - set to true to use mock data instead of backend
-        // Useful for emulator testing when backend is not available
-        private const val USE_MOCK_DATA = true
+        // Development mode - set to false to use real backend data
+        // Set to true only for testing without backend
+        private const val USE_MOCK_DATA = false
     }
     
     /**
@@ -50,22 +50,28 @@ class PosterRepository(
                 return@withContext loadMockPosters()
             }
             
-            Log.d(TAG, "Loading posters from backend...")
+            Log.d(TAG, "🔍 Loading posters from backend...")
             
             val posters = mutableListOf<ReferencePoster>()
             
             // Get all images from backend
             imageRepository.getAllImages().collect { images ->
-                Log.d(TAG, "Found ${images.size} images from backend")
+                Log.d(TAG, "📥 Found ${images.size} images from backend")
                 
                 for (image in images) {
                     try {
+                        Log.d(TAG, "  - Image: ${image.name} (${image.id})")
+                        Log.d(TAG, "    URL: ${image.imageUrl}")
+                        
                         // Download image data
+                        Log.d(TAG, "    Downloading image...")
                         val imageData = downloadImage(image.imageUrl)
                         if (imageData == null) {
-                            Log.w(TAG, "Failed to download image: ${image.name}")
+                            Log.w(TAG, "    ❌ Failed to download image: ${image.name}")
                             continue
                         }
+                        
+                        Log.d(TAG, "    ✅ Downloaded ${imageData.size} bytes")
                         
                         // Check if image has human face (simplified - assume all have faces for now)
                         // TODO: Integrate with face detection service
@@ -80,10 +86,10 @@ class PosterRepository(
                         )
                         
                         posters.add(poster)
-                        Log.d(TAG, "✅ Loaded poster: ${image.name}")
+                        Log.d(TAG, "    ✅ Loaded poster: ${image.name}")
                         
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed to process image: ${image.name}", e)
+                        Log.e(TAG, "    ❌ Failed to process image: ${image.name}", e)
                     }
                 }
             }
