@@ -28,7 +28,9 @@ fun TalkARScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val viewModel: TalkingPhotoViewModel = viewModel()
+    val viewModel: TalkingPhotoViewModel = viewModel {
+        TalkingPhotoViewModel(context)
+    }
     
     // Use the new TalkingPhotoScreen instead of deprecated TalkARView
     TalkingPhotoScreen(
