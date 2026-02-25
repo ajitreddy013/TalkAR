@@ -18,10 +18,10 @@ object TalkingPhotoControllerFactory {
      * @return Configured TalkingPhotoController instance
      */
     fun create(context: Context): TalkingPhotoController {
-        val backendFetcher = BackendVideoFetcherFactory.create(context)
+        val backendFetcher = BackendVideoFetcherFactory.create()
         val videoCache = VideoCacheImpl(context)
         val videoDecoder = ExoPlayerVideoDecoder(context)
-        val lipRenderer = LipRegionRendererImpl(context)
+        val lipRenderer = LipRegionRendererImpl()
         val renderCoordinator = RenderCoordinatorImpl()
         
         return TalkingPhotoControllerImpl(

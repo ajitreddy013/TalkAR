@@ -1,21 +1,56 @@
 package com.talkar.app.ui.components
 
 import android.view.View
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.ar.core.Anchor
-import com.google.ar.sceneform.ArSceneView
 import com.talkar.app.ar.video.models.TrackingData
 
 /**
- * Composable wrapper for ArSceneView.
+ * Composable wrapper for AR Scene View.
  * 
- * Integrates ARCore's ArSceneView into Jetpack Compose.
- * Provides callbacks for poster detection, tracking updates, and errors.
+ * **NOTE**: This is a placeholder implementation.
+ * The actual AR integration should use ARTrackingManager and TalkingPhotoController.
+ * 
+ * TODO: Integrate with ARTrackingManager for poster detection
+ * TODO: Use TalkingPhotoController for video playback
  * 
  * Requirements: 1.1, 1.4
  */
+@Composable
+fun ArSceneViewComposable(
+    modifier: Modifier = Modifier,
+    onPosterDetected: (posterId: String, anchor: Anchor) -> Unit = { _, _ -> },
+    onPosterLost: (posterId: String) -> Unit = {},
+    onTrackingUpdate: (trackingData: TrackingData) -> Unit = {},
+    onError: (errorMessage: String) -> Unit = {}
+) {
+    // Placeholder implementation
+    // TODO: Replace with actual ARCore integration using ARTrackingManager
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "AR Camera View\n(Integration with ARTrackingManager pending)",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
+    }
+}
+
+/* COMMENTED OUT - Old Sceneform implementation
+ * Sceneform is deprecated. Need to integrate with:
+ * - ARTrackingManager for poster detection
+ * - TalkingPhotoController for orchestration
+ * - Sceneview library for AR rendering
+ *
 @Composable
 fun ArSceneViewComposable(
     modifier: Modifier = Modifier,
@@ -67,3 +102,4 @@ fun ArSceneViewComposable(
         }
     )
 }
+*/
