@@ -33,12 +33,16 @@ fun TalkingPhotoScreen(
     modifier: Modifier = Modifier,
     viewModel: TalkingPhotoViewModel = viewModel()
 ) {
+    android.util.Log.d("TalkingPhotoScreen", "🎬 TalkingPhotoScreen composable entered")
+    
     val context = LocalContext.current
     val state by viewModel.state.collectAsState()
     val error by viewModel.error.collectAsState()
     val isTracking by viewModel.isTracking.collectAsState()
     val generationProgress by viewModel.generationProgress.collectAsState()
     val downloadProgress by viewModel.downloadProgress.collectAsState()
+    
+    android.util.Log.d("TalkingPhotoScreen", "📊 State: $state, isTracking: $isTracking")
     
     Scaffold(
         topBar = {

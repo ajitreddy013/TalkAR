@@ -1,0 +1,111 @@
+02-25 18:03:20.253 29394 29394 D ArSceneView: ✅ GLSurfaceView created, waiting for session to set renderer
+02-25 18:03:20.491 29394 29462 D ArSceneView: Initial renderer: Surface created
+02-25 18:03:20.492 29394 29462 D ArSceneView: Initial renderer: Surface changed
+02-25 18:03:20.569 29394 29419 D ArSceneView: Initializing ARCore session...
+02-25 18:03:22.957 29394 29419 E ARCore-DeviceInformationHelper: 	at com.talkar.app.ui.components.ArSceneViewComposableKt$ArSceneViewComposable$6$1.invokeSuspend(ArSceneViewComposable.kt:106)
+02-25 18:03:29.686 29394 29394 D ArSceneView: Resuming AR session from lifecycle
+02-25 18:03:29.827 29394 29462 D ArSceneView: Initial renderer: Surface changed
+02-25 18:03:29.844 29394 29462 D ArSceneView: Initial renderer: Surface changed
+02-25 18:03:33.433 29394 29421 E PosterRepository: ❌ Failed to load posters
+02-25 18:03:33.433 29394 29421 E PosterRepository: kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 10000 ms
+02-25 18:03:33.433 29394 29421 E PosterRepository: 	at kotlinx.coroutines.TimeoutKt.TimeoutCancellationException(Timeout.kt:191)
+02-25 18:03:33.433 29394 29421 E PosterRepository: 	at kotlinx.coroutines.TimeoutCoroutine.run(Timeout.kt:159)
+02-25 18:03:33.433 29394 29421 E PosterRepository: 	at kotlinx.coroutines.EventLoopImplBase$DelayedRunnableTask.run(EventLoop.common.kt:501)
+02-25 18:03:33.433 29394 29421 E PosterRepository: 	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:280)
+02-25 18:03:33.433 29394 29421 E PosterRepository: 	at kotlinx.coroutines.DefaultExecutor.run(DefaultExecutor.kt:109)
+02-25 18:03:33.433 29394 29421 E PosterRepository: 	at java.lang.Thread.run(Thread.java:1563)
+02-25 18:03:33.436 29394 29421 W ArSceneView: Poster loading timed out, trying test poster
+02-25 18:03:33.439 29394 29421 W PosterRepository: test_poster.jpg not found in assets, creating programmatic test image
+02-25 18:03:33.453 29394 29421 D PosterRepository: Created programmatic test bitmap (512x512)
+02-25 18:03:33.548 29394 29421 D PosterRepository: ✅ Loaded test poster (512x512)
+02-25 18:03:33.549 29394 29421 D ArSceneView: Initializing tracking with 1 posters
+02-25 18:03:34.013 29394 29421 D ArSceneView: Updating ARCore config with image database
+02-25 18:03:34.023 29394 29421 D ArSceneView: 📸 Creating ARCore image database with 1 posters
+02-25 18:03:34.408 29394 29421 D ArSceneView:   ✅ Added poster to database: Test Poster (512x512)
+02-25 18:03:34.408 29394 29421 D ArSceneView: ✅ Image database created with 1 images
+02-25 18:03:34.417 29394 29421 D ArSceneView: ✅ ARCore config updated with 1 poster images
+02-25 18:03:34.417 29394 29421 D ArSceneView: ✅ ARCore initialized successfully with 1 posters
+02-25 18:03:34.424 29394 29394 D ArSceneView: AR session ready, setting up camera renderer
+02-25 18:03:34.424 29394 29394 D ArSceneView: Setting up camera renderer with ARCore session
+02-25 18:03:34.528 29394 29394 E ArSceneView: Error setting camera renderer
+02-25 18:03:34.528 29394 29394 E ArSceneView: java.lang.IllegalStateException: setRenderer has already been called for this instance.
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at android.opengl.GLSurfaceView.checkRenderThreadState(GLSurfaceView.java:1979)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at android.opengl.GLSurfaceView.setRenderer(GLSurfaceView.java:361)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at com.talkar.app.ui.components.ArSceneViewComposableKt.setupCameraRenderer(ArSceneViewComposable.kt:627)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at com.talkar.app.ui.components.ArSceneViewComposableKt.access$setupCameraRenderer(ArSceneViewComposable.kt:1)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at com.talkar.app.ui.components.ArSceneViewComposableKt$ArSceneViewComposable$9.invoke(ArSceneViewComposable.kt:294)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at com.talkar.app.ui.components.ArSceneViewComposableKt$ArSceneViewComposable$9.invoke(ArSceneViewComposable.kt:254)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.ui.viewinterop.ViewFactoryHolder$updateBlock$1.invoke(AndroidView.android.kt:374)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.ui.viewinterop.ViewFactoryHolder$updateBlock$1.invoke(AndroidView.android.kt:374)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.runtime.snapshots.Snapshot$Companion.observe(Snapshot.kt:2303)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.runtime.snapshots.SnapshotStateObserver$ObservedScopeMap.observe(SnapshotStateObserver.kt:500)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.runtime.snapshots.SnapshotStateObserver.observeReads(SnapshotStateObserver.kt:256)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.ui.node.OwnerSnapshotObserver.observeReads$ui_release(OwnerSnapshotObserver.kt:133)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$runUpdate$1.invoke(AndroidViewHolder.android.kt:182)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$runUpdate$1.invoke(AndroidViewHolder.android.kt:178)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$Companion$OnCommitAffectingUpdate$1.invoke$lambda$0(AndroidViewHolder.android.kt:589)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$Companion$OnCommitAffectingUpdate$1.$r8$lambda$ONKzdSlEJ3y5SXQ3mz_NY0YjNXE(Unknown Source:0)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$Companion$OnCommitAffectingUpdate$1$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at android.os.Handler.handleCallback(Handler.java:995)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at android.os.Handler.dispatchMessage(Handler.java:105)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at android.os.Looper.loopOnce(Looper.java:288)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at android.os.Looper.loop(Looper.java:393)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at android.app.ActivityThread.main(ActivityThread.java:9564)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at java.lang.reflect.Method.invoke(Native Method)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:600)
+02-25 18:03:34.528 29394 29394 E ArSceneView: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1010)
+02-25 18:04:17.382 29394 29394 D ArSceneView: Pausing AR session from lifecycle
+02-25 18:04:45.503 31660 31660 D ArSceneView: ✅ GLSurfaceView created, waiting for session to set renderer
+02-25 18:04:45.545 31660 31747 D ArSceneView: Initial renderer: Surface created
+02-25 18:04:45.545 31660 31747 D ArSceneView: Initial renderer: Surface changed
+02-25 18:04:45.556 31660 31686 D ArSceneView: Initializing ARCore session...
+02-25 18:04:45.920 31660 31686 E ARCore-DeviceInformationHelper: 	at com.talkar.app.ui.components.ArSceneViewComposableKt$ArSceneViewComposable$6$1.invokeSuspend(ArSceneViewComposable.kt:106)
+02-25 18:04:56.160 31660 31706 E PosterRepository: ❌ Failed to load posters
+02-25 18:04:56.160 31660 31706 E PosterRepository: kotlinx.coroutines.TimeoutCancellationException: Timed out waiting for 10000 ms
+02-25 18:04:56.160 31660 31706 E PosterRepository: 	at kotlinx.coroutines.TimeoutKt.TimeoutCancellationException(Timeout.kt:191)
+02-25 18:04:56.160 31660 31706 E PosterRepository: 	at kotlinx.coroutines.TimeoutCoroutine.run(Timeout.kt:159)
+02-25 18:04:56.160 31660 31706 E PosterRepository: 	at kotlinx.coroutines.EventLoopImplBase$DelayedRunnableTask.run(EventLoop.common.kt:501)
+02-25 18:04:56.160 31660 31706 E PosterRepository: 	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:280)
+02-25 18:04:56.160 31660 31706 E PosterRepository: 	at kotlinx.coroutines.DefaultExecutor.run(DefaultExecutor.kt:109)
+02-25 18:04:56.160 31660 31706 E PosterRepository: 	at java.lang.Thread.run(Thread.java:1563)
+02-25 18:04:56.161 31660 31706 W ArSceneView: Poster loading timed out, trying test poster
+02-25 18:04:56.166 31660 31706 W PosterRepository: test_poster.jpg not found in assets, creating programmatic test image
+02-25 18:04:56.179 31660 31706 D PosterRepository: Created programmatic test bitmap (512x512)
+02-25 18:04:56.201 31660 31706 D PosterRepository: ✅ Loaded test poster (512x512)
+02-25 18:04:56.201 31660 31706 D ArSceneView: Initializing tracking with 1 posters
+02-25 18:04:56.332 31660 31706 D ArSceneView: Updating ARCore config with image database
+02-25 18:04:56.335 31660 31706 D ArSceneView: 📸 Creating ARCore image database with 1 posters
+02-25 18:04:56.428 31660 31706 D ArSceneView:   ✅ Added poster to database: Test Poster (512x512)
+02-25 18:04:56.428 31660 31706 D ArSceneView: ✅ Image database created with 1 images
+02-25 18:04:56.431 31660 31706 D ArSceneView: ✅ ARCore config updated with 1 poster images
+02-25 18:04:56.431 31660 31706 D ArSceneView: ✅ ARCore initialized successfully with 1 posters
+02-25 18:04:56.433 31660 31660 D ArSceneView: AR session ready, setting up camera renderer
+02-25 18:04:56.433 31660 31660 D ArSceneView: Setting up camera renderer with ARCore session
+02-25 18:04:56.550 31660 31660 E ArSceneView: Error setting camera renderer
+02-25 18:04:56.550 31660 31660 E ArSceneView: java.lang.IllegalStateException: setRenderer has already been called for this instance.
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at android.opengl.GLSurfaceView.checkRenderThreadState(GLSurfaceView.java:1979)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at android.opengl.GLSurfaceView.setRenderer(GLSurfaceView.java:361)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at com.talkar.app.ui.components.ArSceneViewComposableKt.setupCameraRenderer(ArSceneViewComposable.kt:627)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at com.talkar.app.ui.components.ArSceneViewComposableKt.access$setupCameraRenderer(ArSceneViewComposable.kt:1)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at com.talkar.app.ui.components.ArSceneViewComposableKt$ArSceneViewComposable$9.invoke(ArSceneViewComposable.kt:294)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at com.talkar.app.ui.components.ArSceneViewComposableKt$ArSceneViewComposable$9.invoke(ArSceneViewComposable.kt:254)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.ui.viewinterop.ViewFactoryHolder$updateBlock$1.invoke(AndroidView.android.kt:374)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.ui.viewinterop.ViewFactoryHolder$updateBlock$1.invoke(AndroidView.android.kt:374)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.runtime.snapshots.Snapshot$Companion.observe(Snapshot.kt:2303)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.runtime.snapshots.SnapshotStateObserver$ObservedScopeMap.observe(SnapshotStateObserver.kt:500)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.runtime.snapshots.SnapshotStateObserver.observeReads(SnapshotStateObserver.kt:256)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.ui.node.OwnerSnapshotObserver.observeReads$ui_release(OwnerSnapshotObserver.kt:133)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$runUpdate$1.invoke(AndroidViewHolder.android.kt:182)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$runUpdate$1.invoke(AndroidViewHolder.android.kt:178)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$Companion$OnCommitAffectingUpdate$1.invoke$lambda$0(AndroidViewHolder.android.kt:589)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$Companion$OnCommitAffectingUpdate$1.$r8$lambda$ONKzdSlEJ3y5SXQ3mz_NY0YjNXE(Unknown Source:0)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at androidx.compose.ui.viewinterop.AndroidViewHolder$Companion$OnCommitAffectingUpdate$1$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at android.os.Handler.handleCallback(Handler.java:995)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at android.os.Handler.dispatchMessage(Handler.java:105)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at android.os.Looper.loopOnce(Looper.java:288)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at android.os.Looper.loop(Looper.java:393)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at android.app.ActivityThread.main(ActivityThread.java:9564)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at java.lang.reflect.Method.invoke(Native Method)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:600)
+02-25 18:04:56.550 31660 31660 E ArSceneView: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:1010)
+02-25 18:13:33.294 31660 31660 D ArSceneView: Pausing AR session from lifecycle

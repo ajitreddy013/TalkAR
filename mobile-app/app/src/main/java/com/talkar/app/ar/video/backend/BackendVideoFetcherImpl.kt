@@ -36,9 +36,14 @@ class BackendVideoFetcherImpl(
     private var isCancelled = false
     
     override suspend fun generateLipSync(request: TalkingPhotoRequest): Result<String> {
-        Log.d(TAG, "Generating lip-sync video for poster: ${request.posterId}")
+        Log.d(TAG, "🎬 Generating lip-sync video")
+        Log.d(TAG, "  Poster ID: ${request.posterId}")
+        Log.d(TAG, "  Text: ${request.text}")
+        Log.d(TAG, "  Voice: ${request.voiceId}")
         
         return retryWithExponentialBackoff {
+            Log.d(TAG, "  📡 Sending request to backend...")
+            
             val response = apiService.generateTalkingHeadVideo(
                 com.talkar.app.data.api.TalkingHeadRequest(
                     imageId = request.posterId,
@@ -47,13 +52,17 @@ class BackendVideoFetcherImpl(
                 )
             )
             
+            Log.d(TAG, "  📥 Response code: ${response.code()}")
+            Log.d(TAG, "  📥 Response success: ${response.isSuccessful}")
+            
             if (response.isSuccessful && response.body()?.success == true) {
                 val videoId = response.body()?.videoUrl ?: throw Exception("No videoId in response")
-                Log.d(TAG, "✅ Generation started: videoId=$videoId")
+                Log.d(TAG, "  ✅ Generation started: videoId=$videoId")
                 videoId
             } else {
                 val errorMsg = response.body()?.message ?: "Unknown error"
-                Log.e(TAG, "❌ Generation failed: $errorMsg")
+                Log.e(TAG, "  ❌ Generation failed: $errorMsg")
+                Log.e(TAG, "  Response body: ${response.body()}")
                 throw Exception(TalkingPhotoError.GenerationFailed(errorMsg).message)
             }
         }
@@ -65,10 +74,18 @@ class BackendVideoFetcherImpl(
         }
         
         return try {
+            Log.d(TAG, "🔍 Checking status for: $videoId")
+            
             val response = apiService.getLipSyncStatus(videoId)
+            
+            Log.d(TAG, "  📥 Status response code: ${response.code()}")
             
             if (response.isSuccessful && response.body()?.success == true) {
                 val body = response.body()!!
+                
+                Log.d(TAG, "  Status: ${body.status}")
+                Log.d(TAG, "  Video URL: ${body.videoUrl}")
+                Log.d(TAG, "  Processing time: ${body.processingTime}ms")
                 
                 // Map the existing LipSyncResponse to StatusResponse
                 val statusResponse = StatusResponse(
@@ -84,15 +101,15 @@ class BackendVideoFetcherImpl(
                     estimatedTimeRemaining = null
                 )
                 
-                Log.d(TAG, "Status check: videoId=$videoId, status=${statusResponse.status}")
+                Log.d(TAG, "  ✅ Status check successful")
                 Result.success(statusResponse)
             } else {
                 val errorMsg = response.body()?.message ?: "Status check failed"
-                Log.e(TAG, "❌ Status check failed: $errorMsg")
+                Log.e(TAG, "  ❌ Status check failed: $errorMsg")
                 Result.failure(Exception(TalkingPhotoError.BackendUnavailable(errorMsg).message))
             }
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Status check error", e)
+            Log.e(TAG, "  ❌ Status check error", e)
             Result.failure(e)
         }
     }
