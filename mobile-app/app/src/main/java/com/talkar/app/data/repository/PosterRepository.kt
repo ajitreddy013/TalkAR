@@ -108,9 +108,16 @@ class PosterRepository(
      */
     private suspend fun downloadImage(imageUrl: String): ByteArray? = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Downloading image: $imageUrl")
+            // Convert relative URL to absolute URL
+            val fullUrl = if (imageUrl.startsWith("http")) {
+                imageUrl
+            } else {
+                com.talkar.app.data.config.ApiConfig.getFullImageUrl(imageUrl)
+            }
             
-            val url = URL(imageUrl)
+            Log.d(TAG, "Downloading image: $fullUrl")
+            
+            val url = URL(fullUrl)
             val connection = url.openConnection()
             connection.connectTimeout = 10000
             connection.readTimeout = 10000

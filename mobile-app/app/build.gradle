@@ -139,7 +139,8 @@ dependencies {
     implementation 'androidx.compose.material:material-icons-extended:1.5.4'
     
     // ARCore with Sceneview for 3D rendering
-    implementation 'com.google.ar:core:1.43.0'
+    // Updated to latest stable version to fix device compatibility issues
+    implementation 'com.google.ar:core:1.44.0'
     implementation 'io.github.sceneview:arsceneview:2.2.1'
     
     // Sceneform removed due to Filament version conflict with Sceneview

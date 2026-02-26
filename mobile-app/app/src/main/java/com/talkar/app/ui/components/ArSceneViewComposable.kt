@@ -12,8 +12,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.google.ar.core.*
-import com.google.ar.core.exceptions.SessionPausedException
-import com.google.ar.core.exceptions.CameraNotAvailableException
+import com.google.ar.core.exceptions.*
+import com.google.ar.core.ArCoreApk
 import com.talkar.app.ar.video.models.TrackingData
 import com.talkar.app.ar.video.tracking.ARTrackingManager
 import com.talkar.app.ar.video.tracking.ARTrackingManagerImpl
@@ -41,6 +41,9 @@ fun ArSceneViewComposable(
     onTrackingUpdate: (trackingData: TrackingData) -> Unit = {},
     onError: (errorMessage: String) -> Unit = {}
 ) {
+    // Log composable entry
+    Log.d("ArSceneView", "🎬 ArSceneViewComposable entered")
+    
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -49,6 +52,8 @@ fun ArSceneViewComposable(
     var session by remember { mutableStateOf<Session?>(null) }
     var isInitializing by remember { mutableStateOf(false) }
     var frameProcessingStarted by remember { mutableStateOf(false) }
+    
+    Log.d("ArSceneView", "📊 State: isInitializing=$isInitializing, session=${session != null}, frameProcessingStarted=$frameProcessingStarted")
     
     // Lifecycle management for AR session
     DisposableEffect(lifecycleOwner, session) {
@@ -99,28 +104,119 @@ fun ArSceneViewComposable(
         
         withContext(Dispatchers.IO) {
             try {
-                Log.d("ArSceneView", "Initializing ARCore session...")
+                Log.d("ArSceneView", "Checking ARCore availability...")
                 
-                // Create ARCore session with error handling for vendor-specific issues
+                // Check if ARCore is supported and up to date
+                val availability = ArCoreApk.getInstance().checkAvailability(context)
+                when (availability) {
+                    ArCoreApk.Availability.SUPPORTED_INSTALLED -> {
+                        Log.d("ArSceneView", "✅ ARCore supported and installed")
+                    }
+                    ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD,
+                    ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED -> {
+                        Log.w("ArSceneView", "⚠️ ARCore needs update or installation")
+                        withContext(Dispatchers.Main) {
+                            onError("ARCore needs to be updated. Please update from Play Store.")
+                        }
+                        return@withContext
+                    }
+                    else -> {
+                        Log.e("ArSceneView", "❌ ARCore not supported on this device")
+                        withContext(Dispatchers.Main) {
+                            onError("ARCore is not supported on this device.")
+                        }
+                        return@withContext
+                    }
+                }
+                
+                Log.d("ArSceneView", "Creating ARCore session...")
+                
+                // Create ARCore session with comprehensive error handling
                 val arSession = try {
                     Session(context)
+                } catch (e: UnavailableArcoreNotInstalledException) {
+                    Log.e("ArSceneView", "❌ ARCore not installed", e)
+                    withContext(Dispatchers.Main) {
+                        onError("ARCore is not installed. Please install from Play Store.")
+                    }
+                    return@withContext
+                } catch (e: UnavailableApkTooOldException) {
+                    Log.e("ArSceneView", "❌ ARCore APK too old", e)
+                    withContext(Dispatchers.Main) {
+                        onError("ARCore is outdated. Please update from Play Store.")
+                    }
+                    return@withContext
+                } catch (e: UnavailableSdkTooOldException) {
+                    Log.e("ArSceneView", "❌ Android SDK too old", e)
+                    withContext(Dispatchers.Main) {
+                        onError("Your Android version is too old for ARCore.")
+                    }
+                    return@withContext
+                } catch (e: UnavailableDeviceNotCompatibleException) {
+                    Log.e("ArSceneView", "❌ Device not compatible with ARCore", e)
+                    withContext(Dispatchers.Main) {
+                        onError("Your device is not compatible with ARCore.")
+                    }
+                    return@withContext
                 } catch (e: IllegalArgumentException) {
                     // Handle vendor-specific camera tag errors (e.g., OPPO tags on non-OPPO devices)
                     if (e.message?.contains("Could not find tag") == true) {
                         Log.w("ArSceneView", "⚠️ Vendor-specific camera tag not found (this is normal on non-vendor devices)")
                         Log.w("ArSceneView", "Continuing with standard ARCore features...")
-                        Session(context) // Try again, ARCore should continue despite the warning
+                        try {
+                            Session(context) // Try again, ARCore should continue despite the warning
+                        } catch (retryException: Exception) {
+                            Log.e("ArSceneView", "❌ Failed to create session on retry", retryException)
+                            withContext(Dispatchers.Main) {
+                                onError("Failed to initialize AR camera: ${retryException.message}")
+                            }
+                            return@withContext
+                        }
                     } else {
+                        Log.e("ArSceneView", "❌ Illegal argument creating session", e)
                         throw e
                     }
+                } catch (e: Exception) {
+                    Log.e("ArSceneView", "❌ Unexpected error creating ARCore session", e)
+                    withContext(Dispatchers.Main) {
+                        onError("Failed to initialize AR: ${e.message}")
+                    }
+                    return@withContext
                 }
                 
-                // Configure session for augmented images
+                Log.d("ArSceneView", "✅ ARCore session created successfully")
+                
+                // Configure session optimized for image tracking
                 val config = Config(arSession).apply {
                     focusMode = Config.FocusMode.AUTO
-                    updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
+                    
+                    // Use BLOCKING mode to reduce frame skipping and timing issues
+                    // This ensures we process every frame in order, preventing timestamp issues
+                    updateMode = Config.UpdateMode.BLOCKING
+                    
+                    // Disable features that might cause performance issues
+                    planeFindingMode = Config.PlaneFindingMode.DISABLED
+                    lightEstimationMode = Config.LightEstimationMode.DISABLED
+                    depthMode = Config.DepthMode.DISABLED
+                    
+                    // Enable instant placement mode for faster tracking
+                    instantPlacementMode = Config.InstantPlacementMode.DISABLED
+                    
+                    Log.d("ArSceneView", "Configured ARCore with BLOCKING mode for stable tracking")
                 }
+                
+                // Check if configuration is supported
+                if (!arSession.isSupported(config)) {
+                    Log.e("ArSceneView", "❌ ARCore configuration not supported on this device")
+                    withContext(Dispatchers.Main) {
+                        onError("AR configuration not supported on this device.")
+                    }
+                    arSession.close()
+                    return@withContext
+                }
+                
                 arSession.configure(config)
+                Log.d("ArSceneView", "✅ ARCore session configured successfully")
                 
                 // Set the session before loading posters so lifecycle observer can resume it
                 session = arSession
@@ -259,27 +355,8 @@ fun ArSceneViewComposable(
                 onError = onError
             )
             
-            // Get GLSurfaceView and set renderer immediately
-            val glSurfaceView = layout.tag as? android.opengl.GLSurfaceView
-            if (glSurfaceView != null) {
-                // Set a minimal renderer immediately to prevent GLThread null issues
-                glSurfaceView.setRenderer(object : android.opengl.GLSurfaceView.Renderer {
-                    override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
-                        android.opengl.GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                        Log.d("ArSceneView", "Initial renderer: Surface created")
-                    }
-                    
-                    override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
-                        android.opengl.GLES20.glViewport(0, 0, width, height)
-                        Log.d("ArSceneView", "Initial renderer: Surface changed")
-                    }
-                    
-                    override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
-                        android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
-                    }
-                })
-                glSurfaceView.renderMode = android.opengl.GLSurfaceView.RENDERMODE_CONTINUOUSLY
-            }
+            // Note: Renderer will be set later in setupCameraRenderer() when ARCore session is ready
+            // We don't set it here to avoid IllegalStateException from calling setRenderer() twice
             
             layout
         },
@@ -336,8 +413,66 @@ private fun createImageDatabase(
 }
 
 /**
+ * Delegating renderer that switches from placeholder to camera rendering.
+ * This avoids calling setRenderer() twice which causes IllegalStateException.
+ */
+private class DelegatingRenderer : android.opengl.GLSurfaceView.Renderer {
+    @Volatile
+    private var delegateRenderer: android.opengl.GLSurfaceView.Renderer? = null
+    
+    private var surfaceCreatedCalled = false
+    private var lastWidth = 0
+    private var lastHeight = 0
+    private var lastGl: javax.microedition.khronos.opengles.GL10? = null
+    private var lastConfig: javax.microedition.khronos.egl.EGLConfig? = null
+    
+    fun updateDelegate(newDelegate: android.opengl.GLSurfaceView.Renderer) {
+        delegateRenderer = newDelegate
+        // If surface was already created, initialize the new delegate
+        if (surfaceCreatedCalled) {
+            Log.d("ArSceneView", "Initializing new delegate with existing surface")
+            newDelegate.onSurfaceCreated(lastGl, lastConfig)
+            if (lastWidth > 0 && lastHeight > 0) {
+                newDelegate.onSurfaceChanged(lastGl, lastWidth, lastHeight)
+            }
+        }
+    }
+    
+    override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
+        surfaceCreatedCalled = true
+        lastGl = gl
+        lastConfig = config
+        
+        delegateRenderer?.onSurfaceCreated(gl, config) ?: run {
+            // Placeholder rendering
+            android.opengl.GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+            Log.d("ArSceneView", "Placeholder renderer: Surface created")
+        }
+    }
+    
+    override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
+        lastWidth = width
+        lastHeight = height
+        lastGl = gl
+        
+        delegateRenderer?.onSurfaceChanged(gl, width, height) ?: run {
+            // Placeholder rendering
+            android.opengl.GLES20.glViewport(0, 0, width, height)
+            Log.d("ArSceneView", "Placeholder renderer: Surface changed ${width}x${height}")
+        }
+    }
+    
+    override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
+        delegateRenderer?.onDrawFrame(gl) ?: run {
+            // Placeholder rendering
+            android.opengl.GLES20.glClear(android.opengl.GLES20.GL_COLOR_BUFFER_BIT)
+        }
+    }
+}
+
+/**
  * Creates the AR camera view with ARCore rendering.
- * Uses a shared renderer that will be configured when session is ready.
+ * Uses a delegating renderer that can switch from placeholder to camera rendering.
  */
 private fun createARCameraView(
     context: Context,
@@ -351,6 +486,9 @@ private fun createARCameraView(
         setBackgroundColor(android.graphics.Color.BLACK)
     }
     
+    // Create delegating renderer that we can reconfigure later
+    val delegatingRenderer = DelegatingRenderer()
+    
     // Create GLSurfaceView for AR camera preview with OpenGL rendering
     val glSurfaceView = android.opengl.GLSurfaceView(context).apply {
         layoutParams = ViewGroup.LayoutParams(
@@ -361,23 +499,26 @@ private fun createARCameraView(
         setEGLContextClientVersion(2) // OpenGL ES 2.0
         setEGLConfigChooser(8, 8, 8, 8, 16, 0) // RGBA_8888, 16-bit depth
         
-        // Note: Renderer will be set in startFrameProcessing when session is ready
-        // We don't set a placeholder here to avoid the double-set issue
+        // Set the delegating renderer (only called once!)
+        setRenderer(delegatingRenderer)
+        
+        // Use CONTINUOUSLY mode for AR tracking
+        renderMode = android.opengl.GLSurfaceView.RENDERMODE_CONTINUOUSLY
     }
     
     layout.addView(glSurfaceView)
     
-    // Store GL surface view in layout tag for later access
-    layout.tag = glSurfaceView
+    // Store both GL surface view and delegating renderer in layout tag for later access
+    layout.tag = Pair(glSurfaceView, delegatingRenderer)
     
-    Log.d("ArSceneView", "✅ GLSurfaceView created, waiting for session to set renderer")
+    Log.d("ArSceneView", "✅ GLSurfaceView created with delegating renderer")
     return layout
 }
 
 /**
  * Set up camera renderer for ARCore frames.
  * Called from AndroidView update block when session is ready.
- * Note: Renderer is already set in factory block, this just replaces it with the camera renderer.
+ * Updates the delegating renderer to use camera rendering instead of placeholder.
  */
 private fun setupCameraRenderer(
     view: android.view.View,
@@ -387,14 +528,16 @@ private fun setupCameraRenderer(
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
     onError: (String) -> Unit
 ) {
-    // Get the GL surface view from layout
+    // Get the GL surface view and delegating renderer from layout
     val layout = view as? FrameLayout ?: return
-    val glSurfaceView = layout.tag as? android.opengl.GLSurfaceView ?: return
+    val tagPair = layout.tag as? Pair<*, *> ?: return
+    val glSurfaceView = tagPair.first as? android.opengl.GLSurfaceView ?: return
+    val delegatingRenderer = tagPair.second as? DelegatingRenderer ?: return
     
     Log.d("ArSceneView", "Setting up camera renderer with ARCore session")
     
     // Create a renderer for ARCore camera feed with background rendering
-    val renderer = object : android.opengl.GLSurfaceView.Renderer {
+    val cameraRenderer = object : android.opengl.GLSurfaceView.Renderer {
         private var cameraTextureConfigured = false
         private var cameraTextureId = -1
         private var shaderProgram = 0
@@ -425,7 +568,7 @@ private fun setupCameraRenderer(
         """.trimIndent()
         
         override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
-            Log.d("ArSceneView", "GL Surface created")
+            Log.d("ArSceneView", "Camera renderer: GL Surface created")
             try {
                 // Set clear color
                 android.opengl.GLES20.glClearColor(0.0f, 0.0f, 0.0f, 1.0f)
@@ -470,9 +613,9 @@ private fun setupCameraRenderer(
                 texCoordAttrib = android.opengl.GLES20.glGetAttribLocation(shaderProgram, "a_TexCoord")
                 textureUniform = android.opengl.GLES20.glGetUniformLocation(shaderProgram, "u_Texture")
                 
-                Log.d("ArSceneView", "✅ GL renderer initialized with shaders")
+                Log.d("ArSceneView", "✅ Camera renderer initialized with shaders")
             } catch (e: Exception) {
-                Log.e("ArSceneView", "Failed to initialize GL renderer", e)
+                Log.e("ArSceneView", "Failed to initialize camera renderer", e)
             }
         }
         
@@ -484,7 +627,7 @@ private fun setupCameraRenderer(
         }
         
         override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
-            Log.d("ArSceneView", "GL Surface changed: ${width}x${height}")
+            Log.d("ArSceneView", "Camera renderer: GL Surface changed: ${width}x${height}")
             android.opengl.GLES20.glViewport(0, 0, width, height)
             
             try {
@@ -515,8 +658,25 @@ private fun setupCameraRenderer(
                     return
                 }
                 
-                // Update ARCore frame
-                val frame = session.update()
+                // Update ARCore frame with error handling for timestamp issues
+                val frame = try {
+                    session.update()
+                } catch (e: IllegalArgumentException) {
+                    // Handle sensor timestamp errors gracefully
+                    if (e.message?.contains("timestamp") == true || e.message?.contains("monotonic") == true) {
+                        // Skip this frame and continue - ARCore will recover
+                        return
+                    }
+                    throw e
+                } catch (e: Exception) {
+                    // Handle resource exhaustion
+                    if (e.message?.contains("RESOURCE_EXHAUSTED") == true) {
+                        // Skip this frame - system is overloaded
+                        return
+                    }
+                    throw e
+                }
+                
                 val camera = frame.camera
                 
                 // Only render if tracking
@@ -619,17 +779,15 @@ private fun setupCameraRenderer(
         }
     }
     
-    // Replace the initial renderer with the camera renderer
-    // Pause, set new renderer, then resume
+    // Update the delegating renderer to use the camera renderer
+    // This doesn't call setRenderer() again, just updates the delegate
     try {
-        glSurfaceView.onPause()
-        Thread.sleep(100) // Give it time to pause
-        glSurfaceView.setRenderer(renderer)
-        glSurfaceView.renderMode = android.opengl.GLSurfaceView.RENDERMODE_CONTINUOUSLY
-        glSurfaceView.onResume()
-        Log.d("ArSceneView", "✅ Camera renderer set, camera feed should now be visible")
+        Log.d("ArSceneView", "Switching delegating renderer to camera renderer")
+        delegatingRenderer.updateDelegate(cameraRenderer)
+        Log.d("ArSceneView", "✅ Camera renderer activated, camera feed should now be visible")
     } catch (e: Exception) {
-        Log.e("ArSceneView", "Error setting camera renderer", e)
+        Log.e("ArSceneView", "❌ Error activating camera renderer", e)
+        onError("Failed to activate camera renderer: ${e.message}")
     }
 }
 
