@@ -1,10 +1,12 @@
 package com.talkar.app.ui.components
 
 import android.graphics.Matrix
+import android.graphics.Path
+import android.graphics.Paint
+import android.graphics.BlurMaskFilter
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import com.talkar.app.ar.video.models.LipCoordinates
@@ -33,13 +35,54 @@ fun LipRegionOverlay(
     
     Canvas(modifier = modifier) {
         drawIntoCanvas { canvas ->
-            // The actual video rendering is done by LipRegionRenderer
-            // using TextureView with alpha blending shaders.
-            // This canvas is just for positioning reference.
-            
-            // In a full implementation, this would integrate with
-            // the LipRegionRenderer's TextureView to position it
-            // correctly based on the transform matrix.
+            val nativeCanvas = canvas.nativeCanvas
+            val w = size.width
+            val h = size.height
+
+            val left = lipCoordinates.lipX * w
+            val top = lipCoordinates.lipY * h
+            val right = left + (lipCoordinates.lipWidth * w)
+            val bottom = top + (lipCoordinates.lipHeight * h)
+
+            val pts = floatArrayOf(
+                left, top,
+                right, top,
+                right, bottom,
+                left, bottom
+            )
+            transform.mapPoints(pts)
+
+            val minX = minOf(pts[0], pts[2], pts[4], pts[6]).coerceIn(0f, w)
+            val minY = minOf(pts[1], pts[3], pts[5], pts[7]).coerceIn(0f, h)
+            val maxX = maxOf(pts[0], pts[2], pts[4], pts[6]).coerceIn(0f, w)
+            val maxY = maxOf(pts[1], pts[3], pts[5], pts[7]).coerceIn(0f, h)
+
+            val mouthPath = Path().apply {
+                moveTo(pts[0], pts[1])
+                lineTo(pts[2], pts[3])
+                lineTo(pts[4], pts[5])
+                lineTo(pts[6], pts[7])
+                close()
+            }
+
+            val fill = Paint().apply {
+                color = android.graphics.Color.argb(85, 255, 80, 80)
+                style = Paint.Style.FILL
+                isAntiAlias = true
+                // Feathered edge to approximate alpha blending softness.
+                maskFilter = BlurMaskFilter(8f, BlurMaskFilter.Blur.NORMAL)
+            }
+            val stroke = Paint().apply {
+                color = android.graphics.Color.argb(180, 255, 80, 80)
+                style = Paint.Style.STROKE
+                strokeWidth = 2.5f
+                isAntiAlias = true
+            }
+
+            nativeCanvas.save()
+            nativeCanvas.drawPath(mouthPath, fill)
+            nativeCanvas.restore()
+            nativeCanvas.drawRoundRect(minX, minY, maxX, maxY, 10f, 10f, stroke)
         }
     }
 }

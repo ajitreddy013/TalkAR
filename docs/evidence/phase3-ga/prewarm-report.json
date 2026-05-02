@@ -1,0 +1,4 @@
+
+> talkar-backend@1.0.0 phase3:catalog:prewarm
+> node scripts/phase3/catalog-prewarm.js
+

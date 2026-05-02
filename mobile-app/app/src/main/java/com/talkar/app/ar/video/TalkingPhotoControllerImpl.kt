@@ -8,6 +8,7 @@ import com.talkar.app.ar.video.backend.BackendVideoFetcher
 import com.talkar.app.ar.video.cache.VideoCache
 import com.talkar.app.ar.video.errors.TalkingPhotoError
 import com.talkar.app.ar.video.models.LipCoordinates
+import com.talkar.app.ar.video.models.Matrix4
 import com.talkar.app.ar.video.models.TalkingPhotoRequest
 import com.talkar.app.ar.video.models.TalkingPhotoSession
 import com.talkar.app.ar.video.models.TalkingPhotoState
@@ -41,6 +42,10 @@ class TalkingPhotoControllerImpl(
     companion object {
         private const val TAG = "TalkingPhotoController"
         private const val PAUSE_RESOURCE_RELEASE_DELAY_MS = 5000L
+        private const val ARTIFACT_MAX_ATTEMPTS = 10
+        private const val ARTIFACT_INITIAL_RETRY_MS = 1000L
+        private const val ARTIFACT_MAX_RETRY_MS = 6000L
+        private const val ARTIFACT_TOTAL_TIMEOUT_MS = 45000L
     }
     
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -59,19 +64,8 @@ class TalkingPhotoControllerImpl(
                 Log.d(TAG, "Initializing talking photo for poster: $posterId")
                 
                 currentAnchor = anchor
-                setState(TalkingPhotoState.FETCHING_VIDEO)
-                
-                // Check cache first
-                val cachedVideo = videoCache.retrieve(posterId)
-                
-                if (cachedVideo != null) {
-                    Log.d(TAG, "Cache hit for poster: $posterId")
-                    setupVideo(posterId, cachedVideo.videoPath, cachedVideo.lipCoordinates)
-                    Result.success(Unit)
-                } else {
-                    Log.d(TAG, "Cache miss for poster: $posterId, fetching from backend")
-                    fetchAndSetupVideo(posterId)
-                }
+                setState(TalkingPhotoState.DETECTED)
+                fetchAndSetupVideo(posterId)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize talking photo", e)
                 val error = TalkingPhotoError.GenerationFailed("Initialization failed: ${e.message}")
@@ -85,49 +79,77 @@ class TalkingPhotoControllerImpl(
     private suspend fun fetchAndSetupVideo(posterId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                setState(TalkingPhotoState.GENERATING)
+                setState(TalkingPhotoState.FETCHING_ARTIFACT)
                 callbacks?.onGenerationStarted()
-                
-                // Request video generation
-                val request = TalkingPhotoRequest(
-                    posterId = posterId,
-                    text = "Hello! Welcome to TalkAR.",
-                    voiceId = "en-US-male-1"
-                )
-                
-                val videoIdResult = backendFetcher.generateLipSync(request)
-                if (videoIdResult.isFailure) {
-                    throw videoIdResult.exceptionOrNull() 
-                        ?: Exception("Failed to generate video")
+                callbacks?.onGenerationProgress(0.1f)
+                callbacks?.onArtifactStatus("FETCHING")
+
+                var artifact: com.talkar.app.ar.video.models.TalkingPhotoArtifactResponse? = null
+                var lastError: String? = null
+                val fetchStartedAt = System.currentTimeMillis()
+                var backoffMs = ARTIFACT_INITIAL_RETRY_MS
+                for (attempt in 1..ARTIFACT_MAX_ATTEMPTS) {
+                    val elapsed = System.currentTimeMillis() - fetchStartedAt
+                    if (elapsed >= ARTIFACT_TOTAL_TIMEOUT_MS) {
+                        lastError = "ARTIFACT_NOT_READY"
+                        break
+                    }
+
+                    val artifactResult = backendFetcher.getTalkingPhotoArtifact(posterId)
+                    if (artifactResult.isFailure) {
+                        lastError = "NETWORK_UNAVAILABLE"
+                    } else {
+                        val candidate = artifactResult.getOrThrow()
+                        if (candidate.runtimeMode == "ready_only" && candidate.status != "ready") {
+                            lastError = "ARTIFACT_NOT_READY"
+                            break
+                        }
+                        if (candidate.runtimeMode == "enqueue_disabled" && candidate.status != "ready") {
+                            lastError = "ARTIFACT_NOT_READY"
+                            break
+                        }
+                        if (candidate.status == "ready") {
+                            artifact = candidate
+                            break
+                        }
+                        lastError = candidate.errorCode ?: "ARTIFACT_NOT_READY"
+                    }
+
+                    callbacks?.onArtifactStatus("WAITING_$attempt")
+                    setState(TalkingPhotoState.ARTIFACT_WAITING)
+                    delay(backoffMs)
+                    backoffMs = (backoffMs * 2).coerceAtMost(ARTIFACT_MAX_RETRY_MS)
                 }
-                
-                val videoId = videoIdResult.getOrThrow()
-                
-                // Poll for completion
-                var status = backendFetcher.checkStatus(videoId).getOrThrow()
-                while (status.status == "processing") {
-                    callbacks?.onGenerationProgress(status.progress)
-                    delay(2000)
-                    status = backendFetcher.checkStatus(videoId).getOrThrow()
+
+                val resolvedArtifact = artifact ?: throw Exception(lastError ?: "ARTIFACT_NOT_READY")
+
+                val confidence = resolvedArtifact.confidence ?: 0f
+                if (confidence < 0.80f) {
+                    throw Exception("TRACKING_UNSTABLE")
                 }
-                
-                if (status.status == "failed") {
-                    throw Exception(status.errorMessage ?: "Generation failed")
+
+                val lipCoordinates = resolvedArtifact.lipLandmarks?.toLipCoordinates()
+                    ?: throw Exception("ARTIFACT_NOT_READY")
+                val videoUrl = resolvedArtifact.videoUrl
+                    ?: throw Exception("ARTIFACT_NOT_READY")
+                val cacheKey = "${posterId}_v${resolvedArtifact.version}"
+
+                val cachedVideo = videoCache.retrieve(cacheKey)
+                if (cachedVideo != null) {
+                    withContext(Dispatchers.Main) {
+                        setupVideo(posterId, cachedVideo.videoPath, cachedVideo.lipCoordinates)
+                    }
+                    return@withContext Result.success(Unit)
                 }
-                
-                // Download video
-                setState(TalkingPhotoState.DOWNLOADING)
-                val videoUrl = status.videoUrl 
-                    ?: throw Exception("No video URL in response")
-                val lipCoordinates = status.lipCoordinates?.toLipCoordinates()
-                    ?: throw Exception("No lip coordinates in response")
-                
-                // Create destination path
+
+                callbacks?.onGenerationProgress(0.5f)
+                setState(TalkingPhotoState.FETCHING_ARTIFACT)
+
                 val cacheDir = File(context.cacheDir, "talking_photos")
                 if (!cacheDir.exists()) {
                     cacheDir.mkdirs()
                 }
-                val destinationPath = File(cacheDir, "$posterId.mp4").absolutePath
+                val destinationPath = File(cacheDir, "${cacheKey}.mp4").absolutePath
                 
                 val videoPathResult = backendFetcher.downloadVideo(
                     videoUrl = videoUrl,
@@ -146,10 +168,10 @@ class TalkingPhotoControllerImpl(
                 
                 // Cache the video
                 videoCache.store(
-                    posterId = posterId,
+                    posterId = cacheKey,
                     videoPath = videoPath,
                     lipCoordinates = lipCoordinates,
-                    checksum = status.checksum ?: ""
+                    checksum = calculateChecksum(videoPath)
                 )
                 
                 withContext(Dispatchers.Main) {
@@ -159,10 +181,15 @@ class TalkingPhotoControllerImpl(
                 Result.success(Unit)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to fetch and setup video", e)
-                val error = TalkingPhotoError.GenerationFailed(e.message ?: "Unknown error")
+                val error = when (e.message) {
+                    "ARTIFACT_NOT_READY" -> TalkingPhotoError.GenerationFailed("ARTIFACT_NOT_READY")
+                    "TRACKING_UNSTABLE" -> TalkingPhotoError.GenerationFailed("TRACKING_UNSTABLE")
+                    "NETWORK_UNAVAILABLE" -> TalkingPhotoError.BackendUnavailable("NETWORK_UNAVAILABLE")
+                    else -> TalkingPhotoError.GenerationFailed(e.message ?: "Unknown error")
+                }
                 withContext(Dispatchers.Main) {
                     callbacks?.onError(error)
-                    setState(TalkingPhotoState.ERROR)
+                    setState(TalkingPhotoState.ERROR_RETRYABLE)
                 }
                 Result.failure(e)
             }
@@ -180,6 +207,7 @@ class TalkingPhotoControllerImpl(
                 
                 // Initialize renderer with lip coordinates
                 lipRenderer.setLipCoordinates(lipCoordinates)
+                callbacks?.onLipCoordinatesReady(lipCoordinates)
                 
                 // Get surface from renderer
                 val surface = lipRenderer.getSurface()
@@ -247,39 +275,39 @@ class TalkingPhotoControllerImpl(
         if (updatedSession.shouldPause() && currentState == TalkingPhotoState.PLAYING) {
             pausedPosition = videoDecoder.getCurrentPosition()
             videoDecoder.pause()
-            setState(TalkingPhotoState.PAUSED)
+            setState(TalkingPhotoState.LOST_TRACKING)
             callbacks?.onTrackingLost()
             
             // Schedule resource release after delay
             scheduleResourceRelease()
-        } else if (updatedSession.shouldResume() && currentState == TalkingPhotoState.PAUSED) {
+        } else if (updatedSession.shouldResume() && currentState == TalkingPhotoState.LOST_TRACKING) {
             cancelResourceRelease()
             videoDecoder.start()
+            setState(TalkingPhotoState.RESUMED)
             setState(TalkingPhotoState.PLAYING)
             callbacks?.onTrackingResumed()
         }
         
         // Update renderer transform if tracking
         if (trackingData.isTracking) {
-            val anchor = currentAnchor ?: return
-            // Calculate transform using render coordinator
-            // This would typically use ARCore camera and viewport
-            // For now, we'll apply the tracking data directly
-            lipRenderer.setVisible(true)
+            val transform = trackingDataToMatrix(trackingData)
+            lipRenderer.setTransform(transform)
+            lipRenderer.setVisible(updatedSession.isTrackingStable())
+            lipRenderer.renderFrame()
         } else {
             lipRenderer.setVisible(false)
         }
     }
     
     override fun play() {
-        if (currentState != TalkingPhotoState.READY && currentState != TalkingPhotoState.PAUSED) {
+        if (currentState != TalkingPhotoState.READY && currentState != TalkingPhotoState.PAUSED && currentState != TalkingPhotoState.LOST_TRACKING) {
             Log.w(TAG, "Cannot play in state: $currentState")
             return
         }
         
         cancelResourceRelease()
         
-        if (currentState == TalkingPhotoState.PAUSED && pausedPosition > 0) {
+        if ((currentState == TalkingPhotoState.PAUSED || currentState == TalkingPhotoState.LOST_TRACKING) && pausedPosition > 0) {
             videoDecoder.seekTo(pausedPosition)
         }
         
@@ -358,7 +386,7 @@ class TalkingPhotoControllerImpl(
         
         resourceReleaseJob = scope.launch {
             delay(PAUSE_RESOURCE_RELEASE_DELAY_MS)
-            if (isActive && currentState == TalkingPhotoState.PAUSED) {
+            if (isActive && currentState == TalkingPhotoState.LOST_TRACKING) {
                 Log.d(TAG, "Releasing decoder resources after pause timeout")
                 videoDecoder.release()
             }
@@ -368,5 +396,64 @@ class TalkingPhotoControllerImpl(
     private fun cancelResourceRelease() {
         resourceReleaseJob?.cancel()
         resourceReleaseJob = null
+    }
+
+    private fun trackingDataToMatrix(trackingData: TrackingData): Matrix4 {
+        val view = trackingData.viewMatrix
+        val projection = trackingData.projectionMatrix
+        if (view != null && projection != null && view.size == 16 && projection.size == 16) {
+            val model = floatArrayOf(
+                1f, 0f, 0f, 0f,
+                0f, 1f, 0f, 0f,
+                0f, 0f, 1f, 0f,
+                trackingData.position.x, trackingData.position.y, trackingData.position.z, 1f
+            )
+            val vp = multiply4x4(projection, view)
+            return Matrix4(multiply4x4(vp, model))
+        }
+
+        val tx = trackingData.position.x
+        val ty = trackingData.position.y
+        val tz = trackingData.position.z
+        val sx = (1f + trackingData.scale.x * 0.25f).coerceAtLeast(0.1f)
+        val sy = (1f + trackingData.scale.y * 0.25f).coerceAtLeast(0.1f)
+        return Matrix4(
+            floatArrayOf(
+                sx, 0f, 0f, 0f,
+                0f, sy, 0f, 0f,
+                0f, 0f, 1f, 0f,
+                tx, ty, tz, 1f
+            )
+        )
+    }
+
+    private fun multiply4x4(a: FloatArray, b: FloatArray): FloatArray {
+        val out = FloatArray(16)
+        for (row in 0..3) {
+            for (col in 0..3) {
+                var sum = 0f
+                for (k in 0..3) {
+                    sum += a[row * 4 + k] * b[k * 4 + col]
+                }
+                out[row * 4 + col] = sum
+            }
+        }
+        return out
+    }
+
+    private fun calculateChecksum(filePath: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val file = File(filePath)
+        file.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            var bytesRead = input.read(buffer)
+            while (bytesRead != -1) {
+                digest.update(buffer, 0, bytesRead)
+                bytesRead = input.read(buffer)
+            }
+        }
+        val hashBytes = digest.digest()
+        val hexString = hashBytes.joinToString("") { "%02x".format(it) }
+        return "sha256:$hexString"
     }
 }

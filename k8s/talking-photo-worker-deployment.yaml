@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talkar-talking-photo-worker
+  labels:
+    app: talkar-talking-photo-worker
+    tier: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: talkar-talking-photo-worker
+  template:
+    metadata:
+      labels:
+        app: talkar-talking-photo-worker
+        tier: worker
+    spec:
+      containers:
+        - name: talking-photo-worker
+          image: talkar-backend:latest
+          command: ["node", "dist/scripts/talkingPhotoWorker.js"]
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: TALKING_PHOTO_SQS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: talking-photo-sqs-url
+            - name: TALKING_PHOTO_WORKER_BATCH_SIZE
+              value: "5"
+            - name: TALKING_PHOTO_WORKER_MAX_CONCURRENCY
+              value: "2"
+            - name: TALKING_PHOTO_WORKER_WAIT_SECONDS
+              value: "20"
+            - name: TALKING_PHOTO_WORKER_VISIBILITY_TIMEOUT_SECONDS
+              value: "120"
+            - name: TALKING_PHOTO_DRAIN_MODE
+              value: "false"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: database-url
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: jwt-secret
+            - name: SYNC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: sync-api-key
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: aws-access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: aws-secret-access-key
+            - name: AWS_S3_BUCKET
+              value: "talkar-production-assets"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "1024Mi"
+              cpu: "1000m"
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: talkar-talking-photo-worker-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: talkar-talking-photo-worker
+  minReplicas: 2
+  maxReplicas: 20
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 30
+          periodSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+

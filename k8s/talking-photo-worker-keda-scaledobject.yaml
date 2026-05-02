@@ -1,0 +1,22 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: talkar-talking-photo-worker-scaledobject
+spec:
+  scaleTargetRef:
+    name: talkar-talking-photo-worker
+  minReplicaCount: 2
+  maxReplicaCount: 30
+  cooldownPeriod: 300
+  pollingInterval: 30
+  triggers:
+    - type: aws-sqs-queue
+      metadata:
+        queueURL: "https://sqs.us-east-1.amazonaws.com/123456789012/talkar-talking-photo"
+        awsRegion: "us-east-1"
+        queueLength: "20"
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "70"
+

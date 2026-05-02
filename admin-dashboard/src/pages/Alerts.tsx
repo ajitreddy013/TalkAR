@@ -10,6 +10,10 @@ import {
   Chip,
   LinearProgress,
   Alert as MuiAlert,
+  FormControlLabel,
+  Switch,
+  Button,
+  Stack,
 } from "@mui/material";
 import {
   CheckCircle,
@@ -17,7 +21,7 @@ import {
   Error as ErrorIcon,
   Info,
 } from "@mui/icons-material";
-import { AnalyticsService, AggregatedMetric } from "../services/analyticsService";
+import { ImageService } from "../services/imageService";
 
 interface AlertItem {
   id: string;
@@ -30,6 +34,30 @@ interface AlertItem {
 const Alerts: React.FC = () => {
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [runtimeMode, setRuntimeMode] = useState<string>("normal");
+  const [toggles, setToggles] = useState<{
+    disableEnqueue: boolean;
+    forceReadyOnly: boolean;
+    enableFallback: boolean;
+  }>({
+    disableEnqueue: false,
+    forceReadyOnly: false,
+    enableFallback: false,
+  });
+
+  const updateToggle = async (key: "disableEnqueue" | "forceReadyOnly" | "enableFallback", value: boolean) => {
+    setLoading(true);
+    try {
+      await ImageService.setPosterOpsToggles({
+        [key]: value,
+        actor: "admin_dashboard",
+      });
+      await checkSystemStatus();
+    } catch (err) {
+      console.error("Failed updating runtime toggle", err);
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     checkSystemStatus();
@@ -38,64 +66,38 @@ const Alerts: React.FC = () => {
   const checkSystemStatus = async () => {
     setLoading(true);
     try {
-      const response = await AnalyticsService.getAggregatedMetrics();
-      const metrics = response.data;
-      
+      const [alertsResponse, togglesResponse] = await Promise.all([
+        ImageService.getPosterOpsAlerts(),
+        ImageService.getPosterOpsToggles(),
+      ]);
+
+      const payload = alertsResponse.data;
+      const togglesPayload = togglesResponse.data;
+      setRuntimeMode(payload.runtimeMode);
+      setToggles({
+        disableEnqueue: !!togglesPayload?.effective?.disableEnqueue,
+        forceReadyOnly: !!togglesPayload?.effective?.forceReadyOnly,
+        enableFallback: !!togglesPayload?.effective?.enableFallback,
+      });
+
       const newAlerts: AlertItem[] = [];
       const today = new Date();
-
-      // Check if we have data for today
-      const todayStr = today.toISOString().split('T')[0];
-      const todayMetric = metrics.find(m => m.date === todayStr);
-
-      if (todayMetric) {
-        // Check latency
-        if (todayMetric.avg_latency_ms > 5000) {
-          newAlerts.push({
-            id: "latency-high",
-            severity: "error",
-            title: "High Latency Detected",
-            message: `Average latency is ${todayMetric.avg_latency_ms}ms, exceeding the 5000ms threshold.`,
-            timestamp: today,
-          });
-        } else if (todayMetric.avg_latency_ms > 2000) {
-          newAlerts.push({
-            id: "latency-warn",
-            severity: "warning",
-            title: "Elevated Latency",
-            message: `Average latency is ${todayMetric.avg_latency_ms}ms.`,
-            timestamp: today,
-          });
-        } else {
-           newAlerts.push({
-            id: "latency-ok",
-            severity: "success",
-            title: "Latency Normal",
-            message: `Average latency is ${todayMetric.avg_latency_ms}ms.`,
-            timestamp: today,
-          });
-        }
-
-        // Check feedback
-        const totalFeedback = todayMetric.likes + todayMetric.dislikes;
-        if (totalFeedback > 0) {
-          const dislikeRate = todayMetric.dislikes / totalFeedback;
-          if (dislikeRate > 0.5) {
-             newAlerts.push({
-              id: "feedback-neg",
-              severity: "warning",
-              title: "Negative Feedback Trend",
-              message: `Dislike rate is ${(dislikeRate * 100).toFixed(1)}%.`,
-              timestamp: today,
-            });
-          }
-        }
-      } else {
+      payload.alerts.forEach((a) => {
+        const severity: AlertItem["severity"] = a.active ? a.severity : "success";
         newAlerts.push({
-          id: "no-data",
-          severity: "info",
-          title: "No Data for Today",
-          message: "Waiting for interactions to generate metrics.",
+          id: a.key,
+          severity,
+          title: a.key.replace(/_/g, " ").toUpperCase(),
+          message: a.message,
+          timestamp: today,
+        });
+      });
+      if (newAlerts.length === 0) {
+        newAlerts.push({
+          id: "no-alerts",
+          severity: "success",
+          title: "No Active Alerts",
+          message: "All runtime alert checks are healthy.",
           timestamp: today,
         });
       }
@@ -122,6 +124,45 @@ const Alerts: React.FC = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>System Alerts</Typography>
+      <Box display="flex" gap={1} mb={2}>
+        <Chip label={`Runtime: ${runtimeMode}`} color="primary" variant="outlined" />
+        <Chip label={`Enqueue: ${toggles.disableEnqueue ? "OFF" : "ON"}`} />
+        <Chip label={`Ready-Only: ${toggles.forceReadyOnly ? "ON" : "OFF"}`} />
+        <Chip label={`Fallback: ${toggles.enableFallback ? "ON" : "OFF"}`} />
+      </Box>
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" gutterBottom>Emergency Runtime Controls</Typography>
+        <Stack direction="row" gap={2} flexWrap="wrap">
+          <FormControlLabel
+            control={
+              <Switch
+                checked={toggles.disableEnqueue}
+                onChange={(_, checked) => updateToggle("disableEnqueue", checked)}
+              />
+            }
+            label="Disable Enqueue"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={toggles.forceReadyOnly}
+                onChange={(_, checked) => updateToggle("forceReadyOnly", checked)}
+              />
+            }
+            label="Ready-Only Mode"
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={toggles.enableFallback}
+                onChange={(_, checked) => updateToggle("enableFallback", checked)}
+              />
+            }
+            label="Enable Fallback"
+          />
+          <Button variant="outlined" onClick={checkSystemStatus}>Refresh</Button>
+        </Stack>
+      </Paper>
       
       <Paper sx={{ p: 2 }}>
         {alerts.length === 0 ? (
@@ -137,9 +178,9 @@ const Alerts: React.FC = () => {
                   primary={
                     <Box display="flex" alignItems="center" gap={1}>
                       <Typography variant="subtitle1">{alert.title}</Typography>
-                      <Chip 
-                        label={alert.severity.toUpperCase()} 
-                        color={alert.severity as any} 
+                      <Chip
+                        label={alert.severity.toUpperCase()}
+                        color={alert.severity}
                         size="small" 
                         variant="outlined"
                       />

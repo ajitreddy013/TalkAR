@@ -71,6 +71,28 @@ export interface AnalyticsData {
   timestamp: string;
 }
 
+interface ImageTriggersResponse {
+  total: number;
+  recent: ImageTriggerEvent[];
+  byImage: Array<{ imageId: string; imageName: string; count: number }>;
+  byVoice: Array<{ voiceId: string; count: number }>;
+}
+
+interface AvatarPlaysResponse {
+  total: number;
+  completed: number;
+  interrupted: number;
+  averageDuration: number;
+  recent: AvatarPlayEvent[];
+}
+
+interface AIPipelineEventsResponse {
+  total: number;
+  recent: AIPipelineEvent[];
+  byType: Array<{ eventType: string; count: number }>;
+  errors: number;
+}
+
 export interface AggregatedMetric {
   date: string;
   scans: number;
@@ -95,13 +117,13 @@ export interface Interaction {
 export const AnalyticsService = {
   getAnalytics: () => api.get<{ success: boolean; analytics: AnalyticsData; timestamp: string }>("/api/v1/analytics"),
   
-  getImageTriggers: () => api.get<{ success: boolean; imageTriggers: any; timestamp: string }>("/api/v1/analytics/image-triggers"),
+  getImageTriggers: () => api.get<{ success: boolean; imageTriggers: ImageTriggersResponse; timestamp: string }>("/api/v1/analytics/image-triggers"),
   
-  getAvatarPlays: () => api.get<{ success: boolean; avatarPlays: any; timestamp: string }>("/api/v1/analytics/avatar-plays"),
+  getAvatarPlays: () => api.get<{ success: boolean; avatarPlays: AvatarPlaysResponse; timestamp: string }>("/api/v1/analytics/avatar-plays"),
   
   getPerformance: () => api.get<{ success: boolean; performance: PerformanceMetrics; timestamp: string }>("/api/v1/analytics/performance"),
   
-  getAIPipelineEvents: () => api.get<{ success: boolean; aiPipelineEvents: any; timestamp: string }>("/api/v1/analytics/ai-pipeline-events"),
+  getAIPipelineEvents: () => api.get<{ success: boolean; aiPipelineEvents: AIPipelineEventsResponse; timestamp: string }>("/api/v1/analytics/ai-pipeline-events"),
 
   // New Admin Endpoints
   getAggregatedMetrics: () => api.get<AggregatedMetric[]>("/api/v1/admin/metrics"),

@@ -1,0 +1,52 @@
+
+> talkar-backend@1.0.0 phase3:cutover:gate
+> node scripts/phase3/cutover-gate-check.js
+
+{
+  "generatedAt": "2026-05-02T10:10:03.065Z",
+  "step": "50",
+  "canPromote": false,
+  "checks": [
+    {
+      "gate": "load_report_present",
+      "pass": false,
+      "detail": "missing ../docs/evidence/phase3-ga/step-50/load-soak-report.json"
+    },
+    {
+      "gate": "security_report_present",
+      "pass": false,
+      "detail": "missing ../docs/evidence/phase3-ga/step-50/security-report.json"
+    },
+    {
+      "gate": "mobile_matrix_present",
+      "pass": false,
+      "detail": "missing ../docs/evidence/phase3-ga/step-50/mobile-matrix.json"
+    },
+    {
+      "gate": "alerts_summary_present",
+      "pass": false,
+      "detail": "missing ../docs/evidence/phase3-ga/step-50/alerts-summary.json"
+    },
+    {
+      "gate": "load_success_rate",
+      "pass": false,
+      "detail": "n/a"
+    },
+    {
+      "gate": "load_generation_p95",
+      "pass": false,
+      "detail": "n/a"
+    },
+    {
+      "gate": "security_passed",
+      "pass": false,
+      "detail": "n/a"
+    },
+    {
+      "gate": "alerts_no_critical_lingering",
+      "pass": false,
+      "detail": "n/a"
+    }
+  ],
+  "next": "Block promotion at 50% and remediate failed gates."
+}

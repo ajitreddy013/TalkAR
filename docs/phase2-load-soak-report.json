@@ -1,0 +1,7 @@
+{
+  "generatedAt": "2026-05-01T20:12:32Z",
+  "baseUrl": "http://127.0.0.1:4000",
+  "profile": "internal-health-smoke",
+  "totals": {"requests": 60, "success": 60, "failed": 0, "successRate": 1.0000},
+  "latencyMs": {"p50": 1, "p95": 1, "p99": 9}
+}

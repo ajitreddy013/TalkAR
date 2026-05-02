@@ -1,0 +1,26 @@
+
+> talkar-backend@1.0.0 phase2:promotion:summary
+> node scripts/phase2/promotion-gate-summary.js
+
+{
+  "generatedAt": "2026-05-01T21:24:35.505Z",
+  "readyForPhase3": true,
+  "checks": [
+    {
+      "gate": "security_passed",
+      "pass": true,
+      "detail": "passed=true"
+    },
+    {
+      "gate": "load_p95_threshold",
+      "pass": true,
+      "detail": "p95=1ms threshold<=6000ms"
+    },
+    {
+      "gate": "load_success_rate_threshold",
+      "pass": true,
+      "detail": "successRate=1 threshold>=0.95"
+    }
+  ],
+  "next": "Proceed to staging/beta execution gates and Phase 3 kickoff."
+}

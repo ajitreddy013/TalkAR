@@ -2,6 +2,7 @@ package com.talkar.app.ar.video.backend
 
 import com.talkar.app.ar.video.models.GenerateResponse
 import com.talkar.app.ar.video.models.StatusResponse
+import com.talkar.app.ar.video.models.TalkingPhotoArtifactResponse
 import com.talkar.app.ar.video.models.TalkingPhotoRequest
 
 /**
@@ -11,6 +12,7 @@ import com.talkar.app.ar.video.models.TalkingPhotoRequest
  * and video download with progress tracking.
  */
 interface BackendVideoFetcher {
+    suspend fun getTalkingPhotoArtifact(posterId: String): Result<TalkingPhotoArtifactResponse>
     /**
      * Requests lip-sync video generation for a poster.
      * 

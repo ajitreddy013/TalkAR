@@ -37,10 +37,17 @@ import feedbackRoutes from "./routes/feedback";
 import settingsRoutes from "./routes/settings";
 import generateDynamicScriptRoutes from "./routes/generateDynamicScript";
 import betaFeedbackRoutes from "./routes/betaFeedbackRoutes";
+import postersRoutes from "./routes/posters";
 import http from "http";
 import { SimpleCache } from "./utils/simpleCache";
 import path from "path";
 import { AnalyticsWorker } from "./services/analyticsWorker";
+import { randomUUID } from "crypto";
+import { WorkerAuthMetricsService } from "./services/workerAuthMetricsService";
+import {
+  logStartupReleasePolicy,
+  validateReleasePolicyAtStartup,
+} from "./services/talkingPhotoRuntimeService";
 
 import { config } from "./config";
 
@@ -87,13 +94,22 @@ app.use(
   cors({
     origin: [config.frontendOrigin, "http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-idempotency-key", "x-correlation-id"],
     credentials: true,
   })
 );
 app.use(morgan("combined"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Correlation ID propagation
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const incomingId = req.header("x-correlation-id");
+  const correlationId = incomingId && incomingId.trim() !== "" ? incomingId : randomUUID();
+  (req as any).correlationId = correlationId;
+  res.setHeader("x-correlation-id", correlationId);
+  next();
+});
 
 // Rate Limiting
 const limiter = rateLimit({
@@ -158,6 +174,7 @@ app.use("/api/v1/feedback", feedbackRoutes);
 app.use("/api/v1/settings", settingsRoutes);
 app.use("/api/v1/generate-dynamic-script", generateDynamicScriptRoutes);
 app.use("/api/v1/beta-feedback", betaFeedbackRoutes);
+app.use("/api/v1/posters", postersRoutes);
 
 // Legacy routes (for backward compatibility)
 app.use("/api/multi-images", multiImageRoutes);
@@ -171,11 +188,19 @@ app.use("/api/v1/analytics", analyticsRoutes);
 app.get("/health", async (req: Request, res: Response) => {
   try {
     await sequelize.authenticate();
-    res.json({
+    const workerAuthHealth = WorkerAuthMetricsService.getHealthStatus();
+    const strictWorkerAuth =
+      String(req.query.workerAuthStrict || "false").toLowerCase() === "true";
+    const isHealthy = !strictWorkerAuth || workerAuthHealth.healthy;
+    const statusCode = isHealthy ? 200 : 503;
+
+    res.status(statusCode).json({
       status: "OK",
       timestamp: new Date().toISOString(),
       version: "1.0.0",
-      db: "connected"
+      db: "connected",
+      workerAuth: workerAuthHealth,
+      strictWorkerAuth,
     });
   } catch (e: any) {
     res.status(500).json({ 
@@ -193,6 +218,7 @@ app.use(errorHandler);
 // Database connection and server startup
 const startServer = async () => {
   try {
+    validateReleasePolicyAtStartup();
     await sequelize.authenticate();
     console.log("Database connection established successfully.");
 
@@ -202,6 +228,7 @@ const startServer = async () => {
 
     await sequelize.sync();
     console.log("Database synchronized.");
+    logStartupReleasePolicy();
 
     // Create HTTP server and Socket.IO server
     const server = createServer(app);

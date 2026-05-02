@@ -14,7 +14,9 @@ data class TrackingData(
     val rotation: Quaternion,
     val scale: Vector2,
     val isTracking: Boolean,
-    val timestamp: Long
+    val timestamp: Long,
+    val viewMatrix: FloatArray? = null,
+    val projectionMatrix: FloatArray? = null
 )
 
 /**

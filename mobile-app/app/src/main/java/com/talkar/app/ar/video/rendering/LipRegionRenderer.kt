@@ -66,6 +66,14 @@ interface LipRegionRenderer {
      * @param visible True to show overlay, false to hide
      */
     fun setVisible(visible: Boolean)
+
+    /**
+     * Renders one frame of lip overlay composition.
+     *
+     * This is called from the tracking/update loop to keep the overlay
+     * synchronized with camera motion.
+     */
+    fun renderFrame()
     
     /**
      * Releases rendering resources.

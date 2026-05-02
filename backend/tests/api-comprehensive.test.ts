@@ -15,6 +15,8 @@ import express from 'express';
 import { sequelize } from '../src/config/database';
 import { Image, Dialogue } from '../src/models/Image';
 import { Avatar } from '../src/models/Avatar';
+import { TalkingPhotoArtifact } from '../src/models/TalkingPhotoArtifact';
+import { defineAssociations } from '../src/models/associations';
 import { clearUsers } from '../src/services/authService';
 import imageRoutes from '../src/routes/images';
 import syncRoutes from '../src/routes/sync';
@@ -22,6 +24,7 @@ import authRoutes from '../src/routes/auth';
 import adminRoutes from '../src/routes/admin';
 import aiPipelineRoutes from '../src/routes/aiPipeline';
 import scriptsRoutes from '../src/routes/scripts';
+import { AIPipelineService } from '../src/services/aiPipelineService';
 
 // Create Express app for testing
 const app = express();
@@ -49,6 +52,7 @@ describe('TalkAR API Test Suite', () => {
   // Setup database before tests
   beforeAll(async () => {
     try {
+      defineAssociations();
       await sequelize.sync({ force: true });
       
       // Create a test image for use across multiple tests
@@ -283,6 +287,64 @@ describe('TalkAR API Test Suite', () => {
         expect(response.status).toBe(200);
         expect(response.body.length).toBeGreaterThan(0);
         expect(response.body[0]).toHaveProperty('dialogues');
+      });
+
+      it('should support query mode pagination and status filtering', async () => {
+        const filteredImage = await Image.create({
+          name: 'Filtered Ready Image',
+          description: 'Ready artifact image',
+          imageUrl: '/uploads/filter-ready.jpg',
+          thumbnailUrl: '/uploads/filter-ready-thumb.jpg',
+          isActive: true,
+        } as any);
+        await Dialogue.create({
+          imageId: filteredImage.id,
+          text: 'Ready script',
+          language: 'en',
+          isDefault: true,
+          isActive: true,
+        } as any);
+        await TalkingPhotoArtifact.create({
+          imageId: filteredImage.id,
+          status: 'ready',
+          confidence: 0.93,
+          version: 1,
+        } as any);
+
+        const otherImage = await Image.create({
+          name: 'Filtered Failed Image',
+          description: 'Failed artifact image',
+          imageUrl: '/uploads/filter-failed.jpg',
+          thumbnailUrl: '/uploads/filter-failed-thumb.jpg',
+          isActive: true,
+        } as any);
+        await Dialogue.create({
+          imageId: otherImage.id,
+          text: 'Failed script',
+          language: 'en',
+          isDefault: true,
+          isActive: true,
+        } as any);
+        await TalkingPhotoArtifact.create({
+          imageId: otherImage.id,
+          status: 'failed',
+          confidence: 0.41,
+          version: 1,
+        } as any);
+
+        const response = await request(app).get(
+          '/api/v1/images?status=ready&confidenceMin=0.8&page=1&pageSize=5&sortBy=confidence&sortDir=desc'
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty('items');
+        expect(response.body).toHaveProperty('total');
+        expect(response.body).toHaveProperty('page', 1);
+        expect(response.body).toHaveProperty('pageSize', 5);
+        expect(Array.isArray(response.body.items)).toBe(true);
+        expect(response.body.items.length).toBeGreaterThan(0);
+        expect(response.body.items[0]).toHaveProperty('talkingPhotoArtifact');
+        expect(response.body.items.every((img: any) => img.talkingPhotoArtifact?.status === 'ready')).toBe(true);
       });
     });
 
@@ -571,6 +633,28 @@ describe('TalkAR API Test Suite', () => {
   });
 
   describe('AI Pipeline API', () => {
+    beforeAll(() => {
+      jest.spyOn(AIPipelineService, 'generateScript').mockResolvedValue({
+        text: 'Mock generated script',
+        language: 'en',
+        emotion: 'neutral'
+      } as any);
+
+      jest.spyOn(AIPipelineService, 'generateProductScript').mockResolvedValue(
+        'Mock product script'
+      );
+
+      jest.spyOn(AIPipelineService, 'generateAdContent').mockResolvedValue({
+        script: 'Mock ad script',
+        audioUrl: 'http://localhost:4000/audio/mock.mp3',
+        videoUrl: 'http://localhost:4000/video/mock.mp4'
+      } as any);
+    });
+
+    afterAll(() => {
+      jest.restoreAllMocks();
+    });
+
     describe('POST /api/v1/ai-pipeline/generate', () => {
       it('should reject request without imageId', async () => {
         const response = await request(app)
@@ -581,7 +665,7 @@ describe('TalkAR API Test Suite', () => {
           });
 
         expect(response.status).toBe(400);
-        expect(response.body).toHaveProperty('error', 'Missing required parameter: imageId');
+        expect(response.body).toHaveProperty('error', 'Missing required parameter: image_id');
       });
 
       it('should start AI pipeline with valid parameters', async () => {

@@ -2,6 +2,27 @@ import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { ImageService } from "../../services/imageService";
 import { MultiImageService } from "../../services/multiImageService";
 
+interface MultiImageItem {
+  id: string;
+  name: string;
+  imageType: string;
+  imageUrl: string;
+}
+
+interface MultiImageSet {
+  objectName: string;
+  createdAt: string;
+  images: MultiImageItem[];
+}
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === "object" && error !== null) {
+    const maybeResponse = (error as { response?: { data?: { error?: string } } }).response;
+    return maybeResponse?.data?.error || fallback;
+  }
+  return fallback;
+};
+
 export interface Image {
   id: string;
   name: string;
@@ -56,12 +77,12 @@ export const fetchImages = createAsyncThunk(
       ]);
 
       const singleImages = singleImagesResponse.data || [];
-      const multiImageSets = multiImagesResponse.imageSets || [];
+      const multiImageSets: MultiImageSet[] = multiImagesResponse.imageSets || [];
 
       // Convert multi-image sets to individual image entries
       const multiImages: Image[] = [];
-      multiImageSets.forEach((set: any) => {
-        set.images.forEach((img: any) => {
+      multiImageSets.forEach((set) => {
+        set.images.forEach((img) => {
           multiImages.push({
             id: img.id,
             name: img.name,
@@ -89,11 +110,9 @@ export const fetchImages = createAsyncThunk(
       console.log("Multi images:", multiImages.length);
       console.log("All images:", allImages);
       return allImages;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Failed to fetch images:", error);
-      return rejectWithValue(
-        error.response?.data?.error || "Failed to fetch images"
-      );
+      return rejectWithValue(getErrorMessage(error, "Failed to fetch images"));
     }
   }
 );
@@ -104,10 +123,8 @@ export const createImage = createAsyncThunk(
     try {
       const response = await ImageService.createImage(imageData);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.error || "Failed to create image"
-      );
+    } catch (error: unknown) {
+      return rejectWithValue(getErrorMessage(error, "Failed to create image"));
     }
   }
 );
@@ -121,10 +138,8 @@ export const updateImage = createAsyncThunk(
     try {
       const response = await ImageService.updateImage(id, data);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.error || "Failed to update image"
-      );
+    } catch (error: unknown) {
+      return rejectWithValue(getErrorMessage(error, "Failed to update image"));
     }
   }
 );
@@ -135,10 +150,8 @@ export const deleteImage = createAsyncThunk(
     try {
       await ImageService.deleteImage(id);
       return id;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.error || "Failed to delete image"
-      );
+    } catch (error: unknown) {
+      return rejectWithValue(getErrorMessage(error, "Failed to delete image"));
     }
   }
 );

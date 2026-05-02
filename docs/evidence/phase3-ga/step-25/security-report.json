@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-05-02T10:50:00Z",
+  "step": "25",
+  "status": "blocked",
+  "passed": false,
+  "checks": [
+    {
+      "name": "ops_alerts_requires_auth",
+      "status": "not_executed",
+      "ok": false
+    },
+    {
+      "name": "ops_toggles_write_requires_auth",
+      "status": "not_executed",
+      "ok": false
+    },
+    {
+      "name": "worker_auth_replay_protection",
+      "status": "not_executed",
+      "ok": false
+    }
+  ],
+  "notes": "Security drill evidence is pending a live staging or local test harness run."
+}

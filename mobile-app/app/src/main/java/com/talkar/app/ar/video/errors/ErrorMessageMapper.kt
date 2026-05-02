@@ -55,9 +55,37 @@ object ErrorMessageMapper {
             )
             
             is TalkingPhotoError.GenerationFailed -> ErrorMessage(
-                title = "Generation Failed",
-                message = "Failed to generate the lip-sync video.",
-                action = "Please try again. If the problem persists, try a different poster.",
+                title = when (error.message) {
+                    "ARTIFACT_NOT_READY" -> "Artifact Not Ready"
+                    "TRACKING_UNSTABLE" -> "Tracking Unstable"
+                    "NO_DEFAULT_SCRIPT" -> "Script Missing"
+                    "NO_FACE_IN_POSTER" -> "Face Not Detected"
+                    "PROVIDER_FAILED" -> "Provider Failed"
+                    "NETWORK_UNAVAILABLE" -> "Network Unavailable"
+                    else -> "Generation Failed"
+                },
+                message = if (error.message == "ARTIFACT_NOT_READY") {
+                    "Lip-sync artifact is not ready yet for this poster."
+                } else if (error.message == "TRACKING_UNSTABLE") {
+                    "Tracking or face alignment confidence is too low."
+                } else if (error.message == "NO_DEFAULT_SCRIPT") {
+                    "No default script exists for this poster."
+                } else if (error.message == "NO_FACE_IN_POSTER") {
+                    "Poster face confidence is too low for lip-sync overlay."
+                } else if (error.message == "PROVIDER_FAILED") {
+                    "Video provider failed while preparing the artifact."
+                } else if (error.message == "NETWORK_UNAVAILABLE") {
+                    "Network is unavailable while fetching poster artifact."
+                } else {
+                    "Failed to generate the lip-sync video."
+                },
+                action = if (error.message == "ARTIFACT_NOT_READY") {
+                    "Wait a moment and retry scan."
+                } else if (error.message == "TRACKING_UNSTABLE") {
+                    "Re-align the poster, improve lighting, and keep camera steady."
+                } else {
+                    "Please try again. If the problem persists, try a different poster."
+                },
                 isRetryable = true,
                 technicalDetails = "Error ${error.code}: ${error.message}" + 
                     if (error.videoId != null) " (Video ID: ${error.videoId})" else ""

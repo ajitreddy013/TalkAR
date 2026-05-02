@@ -1,5 +1,7 @@
 import { DataTypes, Model, Optional } from "sequelize";
 import { sequelize } from "../config/database";
+import { TalkingPhotoArtifact } from "./TalkingPhotoArtifact";
+import { PosterPreprocessResult } from "./PosterPreprocessResult";
 
 export interface ImageAttributes {
   id: string;
@@ -28,6 +30,8 @@ export class Image
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
   public dialogues?: Dialogue[];
+  public talkingPhotoArtifact?: TalkingPhotoArtifact;
+  public preprocessResult?: PosterPreprocessResult;
 
   // Associations
   public getDialogues!: () => Promise<Dialogue[]>;

@@ -494,23 +494,15 @@ class ConversationalARService(
 
 
     private fun getLocalFallback(objectName: String): Int {
-        // Use explicit R.raw references for safety
-        // Files are: sunrich_1.mp4, sunrich_2.mp4, etc.
-        return when (objectName.lowercase()) {
-            "sunrich" -> com.talkar.app.R.raw.sunrich_2 // Swapped based on user feedback
-            "lebron" -> com.talkar.app.R.raw.lebron_1
-            "chanel" -> com.talkar.app.R.raw.chanel_1
-            else -> 0
-        }
+        // Raw fallback media can be absent in some builds/worktrees.
+        // Returning 0 cleanly disables local raw fallback paths.
+        return 0
     }
 
     private fun getLocalResponseFallback(objectName: String): Int {
-         return when (objectName.lowercase()) {
-            "sunrich" -> com.talkar.app.R.raw.sunrich_1 // Swapped based on user feedback
-            "lebron" -> com.talkar.app.R.raw.lebron_2
-            "chanel" -> com.talkar.app.R.raw.chanel_2
-            else -> 0
-        }
+         // Raw fallback media can be absent in some builds/worktrees.
+         // Returning 0 cleanly disables local raw fallback paths.
+         return 0
     }
 
 }

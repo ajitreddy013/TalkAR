@@ -49,58 +49,149 @@ class PosterRepository(
                 Log.d(TAG, "🔧 Development mode: Using mock poster data")
                 return@withContext loadMockPosters()
             }
-            
-            Log.d(TAG, "🔍 Loading posters from backend...")
-            
-            val posters = mutableListOf<ReferencePoster>()
-            
-            // Get all images from backend
-            imageRepository.getAllImages().collect { images ->
-                Log.d(TAG, "📥 Found ${images.size} images from backend")
-                
-                for (image in images) {
-                    try {
-                        Log.d(TAG, "  - Image: ${image.name} (${image.id})")
-                        Log.d(TAG, "    URL: ${image.imageUrl}")
-                        
-                        // Download image data
-                        Log.d(TAG, "    Downloading image...")
-                        val imageData = downloadImage(image.imageUrl)
-                        if (imageData == null) {
-                            Log.w(TAG, "    ❌ Failed to download image: ${image.name}")
-                            continue
-                        }
-                        
-                        Log.d(TAG, "    ✅ Downloaded ${imageData.size} bytes")
-                        
-                        // Check if image has human face (simplified - assume all have faces for now)
-                        // TODO: Integrate with face detection service
-                        val hasHumanFace = true
-                        
-                        val poster = ReferencePoster(
-                            id = image.id,
-                            name = image.name,
-                            imageData = imageData,
-                            physicalWidthMeters = DEFAULT_POSTER_WIDTH_METERS,
-                            hasHumanFace = hasHumanFace
-                        )
-                        
-                        posters.add(poster)
-                        Log.d(TAG, "    ✅ Loaded poster: ${image.name}")
-                        
-                    } catch (e: Exception) {
-                        Log.e(TAG, "    ❌ Failed to process image: ${image.name}", e)
-                    }
-                }
+
+            Log.d(TAG, "📦 Poster loading pipeline: backend -> bundled fallback -> test poster")
+
+            val backendPosters = loadPostersFromBackend()
+            if (backendPosters.isNotEmpty()) {
+                Log.d(TAG, "✅ Using backend posters (${backendPosters.size})")
+                return@withContext Result.success(backendPosters)
             }
-            
-            Log.d(TAG, "✅ Successfully loaded ${posters.size} posters")
-            Result.success(posters)
-            
+            Log.w(TAG, "⚠️ Backend posters unavailable or empty, switching to bundled fallback posters")
+
+            val bundledFallbackResult = loadBundledFallbackPosters()
+            val bundledFallback = bundledFallbackResult.getOrNull().orEmpty()
+            if (bundledFallback.isNotEmpty()) {
+                Log.d(TAG, "✅ Using bundled fallback posters (${bundledFallback.size})")
+                return@withContext Result.success(bundledFallback)
+            }
+            Log.w(TAG, "⚠️ Bundled fallback posters unavailable, switching to test poster fallback")
+
+            val testPosterResult = loadTestPoster()
+            val testPoster = testPosterResult.getOrNull()
+            if (testPoster != null) {
+                Log.d(TAG, "✅ Using test poster fallback")
+                return@withContext Result.success(listOf(testPoster))
+            }
+
+            val failure = testPosterResult.exceptionOrNull()
+                ?: bundledFallbackResult.exceptionOrNull()
+                ?: IllegalStateException("No posters available from backend, bundled assets, or test fallback")
+            Log.e(TAG, "❌ Poster loading failed in all fallback stages", failure)
+            Result.failure(failure)
         } catch (e: Exception) {
             Log.e(TAG, "❌ Failed to load posters", e)
             Result.failure(e)
         }
+    }
+
+    /**
+     * Load production fallback posters bundled in app assets.
+     */
+    suspend fun loadBundledFallbackPosters(): Result<List<ReferencePoster>> = withContext(Dispatchers.IO) {
+        try {
+            val fallbackFiles = listOf(
+                Triple("fallback_water_bottle", "Sunrich Water Bottle", "fallbacks/water-bottle.jpg"),
+                Triple("fallback_backpack", "Adventure Backpack", "fallbacks/backpack.jpg"),
+                Triple("fallback_shoes", "Stride Pro Shoes", "fallbacks/shoes.jpg")
+            )
+
+            val posters = mutableListOf<ReferencePoster>()
+            fallbackFiles.forEach { (id, name, assetPath) ->
+                try {
+                    val imageData = context.assets.open(assetPath).use { it.readBytes() }
+                    posters.add(
+                        ReferencePoster(
+                            id = id,
+                            name = name,
+                            imageData = imageData,
+                            physicalWidthMeters = DEFAULT_POSTER_WIDTH_METERS,
+                            hasHumanFace = true
+                        )
+                    )
+                    Log.d(TAG, "✅ Bundled fallback loaded: $assetPath")
+                } catch (e: Exception) {
+                    Log.w(TAG, "⚠️ Failed to load bundled fallback asset: $assetPath", e)
+                }
+            }
+
+            if (posters.isEmpty()) {
+                Result.failure(IllegalStateException("No bundled fallback posters could be loaded"))
+            } else {
+                Result.success(posters)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Failed loading bundled fallback posters", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun loadPostersFromBackend(): List<ReferencePoster> = withContext(Dispatchers.IO) {
+        val posters = mutableListOf<ReferencePoster>()
+        Log.d(TAG, "🔍 Loading posters from backend...")
+
+        try {
+            val indexResponse = apiClient.getPosterIndex()
+            if (indexResponse.isSuccessful) {
+                val activePosters = indexResponse.body()?.posters.orEmpty()
+                Log.d(TAG, "📥 Found ${activePosters.size} posters from /posters/index")
+                for (poster in activePosters) {
+                    try {
+                        val imageData = downloadImage(poster.imageUrl)
+                        if (imageData == null) {
+                            Log.w(TAG, "    ❌ Failed to download image: ${poster.name}")
+                            continue
+                        }
+                        posters.add(
+                            ReferencePoster(
+                                id = poster.id,
+                                name = poster.name,
+                                imageData = imageData,
+                                physicalWidthMeters = DEFAULT_POSTER_WIDTH_METERS,
+                                hasHumanFace = poster.talkingPhoto.eligible || poster.talkingPhoto.confidence == null
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "    ❌ Failed to process index poster: ${poster.name}", e)
+                    }
+                }
+                if (posters.isNotEmpty()) {
+                    return@withContext posters
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "⚠️ /posters/index unavailable, falling back to legacy images list", e)
+        }
+
+        imageRepository.getAllImages().collect { images ->
+            Log.d(TAG, "📥 Found ${images.size} images from backend")
+
+            for (image in images) {
+                try {
+                    Log.d(TAG, "  - Image: ${image.name} (${image.id})")
+                    val imageData = downloadImage(image.imageUrl)
+                    if (imageData == null) {
+                        Log.w(TAG, "    ❌ Failed to download image: ${image.name}")
+                        continue
+                    }
+
+                    posters.add(
+                        ReferencePoster(
+                            id = image.id,
+                            name = image.name,
+                            imageData = imageData,
+                            physicalWidthMeters = DEFAULT_POSTER_WIDTH_METERS,
+                            hasHumanFace = true
+                        )
+                    )
+                    Log.d(TAG, "    ✅ Loaded backend poster: ${image.name}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "    ❌ Failed to process backend image: ${image.name}", e)
+                }
+            }
+        }
+
+        posters
     }
     
     /**

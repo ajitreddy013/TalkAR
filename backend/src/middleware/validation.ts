@@ -9,7 +9,7 @@ export const validateImageUpload = (
   const schema = Joi.object({
     name: Joi.string().required().min(1).max(100),
     description: Joi.string().optional().allow('').max(500),
-    script: Joi.string().optional().allow('').max(2000),
+    script: Joi.string().required().min(1).max(2000),
   });
 
   const { error } = schema.validate(req.body);

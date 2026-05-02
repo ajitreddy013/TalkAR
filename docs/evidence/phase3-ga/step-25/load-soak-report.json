@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-05-02T10:50:00Z",
+  "step": "25",
+  "status": "blocked",
+  "canPromote": false,
+  "profile": "phase3-step-25-dry-run",
+  "totals": {
+    "requests": 0,
+    "success": 0,
+    "failed": 0,
+    "successRate": 0
+  },
+  "latencyMs": {
+    "p50": null,
+    "p95": null,
+    "p99": null
+  },
+  "notes": "No load/soak run was executed in this session because staging access was unavailable."
+}

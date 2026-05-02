@@ -10,6 +10,7 @@ import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response as OkHttpResponse
 import java.io.IOException
+import com.talkar.app.ar.video.models.TalkingPhotoArtifactResponse
 
 class RetryInterceptor : Interceptor {
     companion object {
@@ -94,6 +95,12 @@ interface ApiService {
     
     @GET("sync/talking-head/{imageId}")
     suspend fun getTalkingHeadVideo(@Path("imageId") imageId: String, @Query("language") language: String?): Response<TalkingHeadVideo>
+
+    @GET("posters/{id}/talking-photo")
+    suspend fun getTalkingPhotoArtifact(@Path("id") imageId: String): Response<TalkingPhotoArtifactResponse>
+
+    @GET("posters/index")
+    suspend fun getPosterIndex(): Response<PosterIndexResponse>
     
     // Avatar endpoints
     @GET("avatars")
@@ -232,6 +239,29 @@ data class Voice(
     val name: String,
     val language: String,
     val gender: String
+)
+
+data class PosterIndexResponse(
+    val posters: List<PosterIndexItem>,
+    val count: Int,
+    val generatedAt: String
+)
+
+data class PosterIndexItem(
+    val id: String,
+    val name: String,
+    val imageUrl: String,
+    val thumbnailUrl: String?,
+    val updatedAt: String,
+    val talkingPhoto: PosterTalkingPhotoSummary
+)
+
+data class PosterTalkingPhotoSummary(
+    val status: String,
+    val version: Int,
+    val confidence: Float?,
+    val eligible: Boolean,
+    val errorCode: String?
 )
 
 data class TalkingHeadRequest(

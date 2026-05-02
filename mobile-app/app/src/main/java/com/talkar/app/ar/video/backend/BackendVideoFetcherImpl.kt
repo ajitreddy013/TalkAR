@@ -4,6 +4,7 @@ import android.util.Log
 import com.talkar.app.ar.video.errors.TalkingPhotoError
 import com.talkar.app.ar.video.models.GenerateResponse
 import com.talkar.app.ar.video.models.StatusResponse
+import com.talkar.app.ar.video.models.TalkingPhotoArtifactResponse
 import com.talkar.app.ar.video.models.TalkingPhotoRequest
 import com.talkar.app.data.api.ApiService
 import kotlinx.coroutines.delay
@@ -34,6 +35,27 @@ class BackendVideoFetcherImpl(
     
     @Volatile
     private var isCancelled = false
+
+    override suspend fun getTalkingPhotoArtifact(posterId: String): Result<TalkingPhotoArtifactResponse> {
+        return try {
+            val response = apiService.getTalkingPhotoArtifact(posterId)
+            if (response.isSuccessful && response.body() != null) {
+                Result.success(response.body()!!)
+            } else {
+                val rawError = response.errorBody()?.string().orEmpty()
+                val mapped = when {
+                    rawError.contains("ARTIFACT_NOT_READY") -> "ARTIFACT_NOT_READY"
+                    rawError.contains("NO_DEFAULT_SCRIPT") -> "NO_DEFAULT_SCRIPT"
+                    rawError.contains("NO_FACE_IN_POSTER") -> "NO_FACE_IN_POSTER"
+                    rawError.contains("PROVIDER_FAILED") -> "PROVIDER_FAILED"
+                    else -> "NETWORK_UNAVAILABLE"
+                }
+                Result.failure(Exception(mapped))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
     
     override suspend fun generateLipSync(request: TalkingPhotoRequest): Result<String> {
         Log.d(TAG, "🎬 Generating lip-sync video")

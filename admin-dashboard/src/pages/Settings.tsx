@@ -10,7 +10,6 @@ import {
   Switch,
   FormControlLabel,
   Slider,
-  TextField,
   Button,
   Divider,
   Alert,
@@ -121,7 +120,7 @@ export default function Settings() {
     }
   };
 
-  const handleChange = (field: keyof SettingsData, value: any) => {
+  const handleChange = <K extends keyof SettingsData>(field: K, value: SettingsData[K]) => {
     setSettings((prev) => ({
       ...prev,
       [field]: value,
