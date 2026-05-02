@@ -68,6 +68,29 @@ export const uploadToS3 = async (file: Express.Multer.File, folder: string = 'im
   }
 };
 
+export const uploadBufferToS3 = async (
+  buffer: Buffer,
+  key: string,
+  contentType: string = "video/mp4"
+): Promise<string> => {
+  try {
+    const bucket = process.env.AWS_S3_BUCKET || "talkar-assets";
+    const result = await s3
+      .upload({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        ACL: "public-read",
+      })
+      .promise();
+    return result.Location;
+  } catch (error) {
+    console.error("S3 buffer upload error:", error);
+    throw new Error("Failed to upload buffer to S3");
+  }
+};
+
 export const deleteFromS3 = async (url: string): Promise<void> => {
   try {
     const key = url.split('/').slice(-2).join('/'); // Extract key from URL
@@ -89,4 +112,3 @@ export const generateThumbnail = async (imageUrl: string): Promise<string> => {
   // For now, return the original URL
   return imageUrl;
 };
-

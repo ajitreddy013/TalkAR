@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Typography, Paper, List, ListItem, ListItemText, Chip } from '@mui/material';
-import { io, Socket } from 'socket.io-client';
+import { io } from 'socket.io-client';
 import { API_ORIGIN } from '../services/api';
 
 interface InteractionEvent {
@@ -15,12 +15,10 @@ interface InteractionEvent {
 
 const LiveMonitor: React.FC = () => {
   const [events, setEvents] = useState<InteractionEvent[]>([]);
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     const newSocket = io(API_ORIGIN);
-    setSocket(newSocket);
 
     newSocket.on('connect', () => {
       console.log('Connected to WebSocket');

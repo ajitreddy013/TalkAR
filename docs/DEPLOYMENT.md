@@ -147,6 +147,109 @@ kubectl get all -n talkar-production
 
 ## 🔧 Configuration Management
 
+## 🩺 Health Probe Configuration (Worker Auth Strict Mode)
+
+For production readiness, configure readiness checks to use strict worker-auth health:
+
+- Endpoint: `/health?workerAuthStrict=true`
+- Behavior:
+  - returns `200` when DB and worker-auth health are OK
+  - returns `503` if worker-auth alert thresholds are breached
+
+### Kubernetes Readiness Probe Example
+
+```yaml
+readinessProbe:
+  httpGet:
+    path: /health?workerAuthStrict=true
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 3
+```
+
+### AWS ALB Health Check Example
+
+Set target-group health check values:
+
+- Protocol: `HTTP`
+- Path: `/health?workerAuthStrict=true`
+- Success codes: `200`
+- Interval: `15s`
+- Timeout: `5s`
+- Healthy threshold: `2`
+- Unhealthy threshold: `3`
+
+Example ingress annotations:
+
+```yaml
+metadata:
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /health?workerAuthStrict=true
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-port: traffic-port
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+```
+
+Reference manifest:
+- `k8s/ingress.yaml` (ALB ingress with strict worker-auth health checks for `api.talkar.com`)
+
+Worker-auth threshold environment variables:
+
+- `WORKER_AUTH_HEALTH_WINDOW_MINUTES`
+- `WORKER_AUTH_FAILURE_RATE_THRESHOLD`
+- `WORKER_AUTH_HEALTH_MIN_REQUESTS`
+- `WORKER_AUTH_REASON_COUNT_THRESHOLD`
+
+### Phase 2 Runtime Controls
+
+Release profile:
+- `TALKING_PHOTO_RELEASE_PROFILE=internal|beta|ga`
+
+Emergency runtime switches:
+- `TALKING_PHOTO_DISABLE_ENQUEUE=true|false`
+- `TALKING_PHOTO_FORCE_READY_ONLY=true|false`
+- `TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK=true|false`
+- `TALKING_PHOTO_DRAIN_MODE=true|false` (worker drain mode)
+
+Alert thresholds:
+- `TALKING_PHOTO_QUEUE_BACKLOG_THRESHOLD` (default `50`)
+- `TALKING_PHOTO_QUEUE_BACKLOG_THRESHOLD_WARNING` (default `50`)
+- `TALKING_PHOTO_QUEUE_BACKLOG_THRESHOLD_CRITICAL` (default `150`)
+- `PROVIDER_FAILURE_SPIKE_THRESHOLD` (default `20`)
+- `TALKING_PHOTO_FAILED_RATIO_THRESHOLD` (default `0.35`)
+- `TALKING_PHOTO_MAX_MESSAGE_AGE_SECONDS_THRESHOLD` (default `300`)
+- `TALKING_PHOTO_DLQ_BACKLOG_THRESHOLD` (default `5`)
+- `TALKING_PHOTO_QUEUE_OLDEST_MESSAGE_AGE_SECONDS` (set by metrics pipeline)
+- `TALKING_PHOTO_DLQ_BACKLOG` (set by metrics pipeline)
+
+Operational APIs:
+- `GET /api/v1/posters/ops/alerts`
+- `GET /api/v1/posters/ops/toggles`
+- `POST /api/v1/posters/ops/toggles`
+
+All `/api/v1/posters/ops/*` endpoints require `Authorization: Bearer <admin_jwt>`.
+
+### Phase 3 GA Operations
+
+Worker autoscaling manifests:
+- `k8s/talking-photo-worker-deployment.yaml`
+- `k8s/talking-photo-worker-keda-scaledobject.yaml` (optional KEDA)
+
+Phase 3 runbook and evidence:
+- `docs/PHASE3_GA_EXECUTION_RUNBOOK.md`
+- `docs/evidence/phase3-ga/`
+
+Phase 3 helper commands:
+- `cd backend && npm run phase3:catalog:sweep`
+- `cd backend && npm run phase3:catalog:prewarm`
+- `cd backend && npm run phase3:cutover:gate`
+
 ### Environment Variables
 
 #### Backend Configuration

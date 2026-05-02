@@ -1,0 +1,11 @@
+{
+	"generatedAt": "2026-05-02T10:35:00Z",
+	"step": "10",
+	"status": "blocked",
+	"canPromote": false,
+	"service": "staging",
+	"details": {
+		"serviceHealth": "503 Service Unavailable",
+		"notes": "Staging health endpoint could not be validated during this run."
+	}
+}

@@ -1,0 +1,11 @@
+{
+	"generatedAt": "2026-05-02T10:35:00Z",
+	"step": "10",
+	"status": "blocked",
+	"canPromote": false,
+	"service": "staging",
+	"details": {
+		"request": "POST /api/v1/posters",
+		"notes": "Smoke create was not executed because the staging admin token and service validation are unavailable in this session."
+	}
+}

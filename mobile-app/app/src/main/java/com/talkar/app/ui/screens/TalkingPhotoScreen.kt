@@ -8,7 +8,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.talkar.app.ar.video.models.TalkingPhotoState
@@ -35,12 +34,11 @@ fun TalkingPhotoScreen(
 ) {
     android.util.Log.d("TalkingPhotoScreen", "🎬 TalkingPhotoScreen composable entered")
     
-    val context = LocalContext.current
     val state by viewModel.state.collectAsState()
     val error by viewModel.error.collectAsState()
     val isTracking by viewModel.isTracking.collectAsState()
-    val generationProgress by viewModel.generationProgress.collectAsState()
-    val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val lipCoordinates by viewModel.lipCoordinates.collectAsState()
+    val transform by viewModel.transform.collectAsState()
     
     android.util.Log.d("TalkingPhotoScreen", "📊 State: $state, isTracking: $isTracking")
     
@@ -63,6 +61,8 @@ fun TalkingPhotoScreen(
             // AR Camera View
             ArSceneViewComposable(
                 modifier = Modifier.fillMaxSize(),
+                onPreviewReady = { viewModel.onPreviewReady() },
+                onTrackingReady = { viewModel.onTrackingReady() },
                 onPosterDetected = { posterId, anchor ->
                     viewModel.onPosterDetected(posterId, anchor)
                 },
@@ -81,8 +81,8 @@ fun TalkingPhotoScreen(
             if (state == TalkingPhotoState.PLAYING && isTracking) {
                 LipRegionOverlay(
                     modifier = Modifier.fillMaxSize(),
-                    lipCoordinates = viewModel.lipCoordinates.collectAsState().value,
-                    transform = viewModel.transform.collectAsState().value
+                    lipCoordinates = lipCoordinates,
+                    transform = transform
                 )
             }
             
@@ -99,8 +99,30 @@ fun TalkingPhotoScreen(
                     TalkingPhotoState.IDLE -> {
                         ScanningInstructionCard()
                     }
+
+                    TalkingPhotoState.PREVIEW_READY,
+                    TalkingPhotoState.POSTERS_LOADING,
+                    TalkingPhotoState.TRACKING_READY -> {
+                        ScanningInstructionCard()
+                    }
+
+                    TalkingPhotoState.POSTER_DETECTED -> {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            )
+                        ) {
+                            Text(
+                                text = "Poster detected. Preparing lip sync...",
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
                     
-                    TalkingPhotoState.FETCHING_VIDEO -> {
+                    TalkingPhotoState.DETECTED,
+                    TalkingPhotoState.FETCHING_ARTIFACT -> {
                         Card(
                             colors = CardDefaults.cardColors(
                                 containerColor = MaterialTheme.colorScheme.primaryContainer
@@ -123,13 +145,20 @@ fun TalkingPhotoScreen(
                             }
                         }
                     }
-                    
-                    TalkingPhotoState.GENERATING -> {
-                        GeneratingIndicator(progress = generationProgress)
-                    }
-                    
-                    TalkingPhotoState.DOWNLOADING -> {
-                        DownloadingIndicator(progress = downloadProgress)
+
+                    TalkingPhotoState.ARTIFACT_WAITING -> {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            )
+                        ) {
+                            Text(
+                                text = "Preparing lip sync artifact...",
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
                     }
                     
                     TalkingPhotoState.READY -> {
@@ -152,6 +181,10 @@ fun TalkingPhotoScreen(
                             AlignPosterMessage()
                         }
                     }
+
+                    TalkingPhotoState.LOST_TRACKING -> {
+                        AlignPosterMessage()
+                    }
                     
                     TalkingPhotoState.PAUSED -> {
                         if (!isTracking) {
@@ -171,8 +204,33 @@ fun TalkingPhotoScreen(
                             }
                         }
                     }
+
+                    TalkingPhotoState.RESUMED -> {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                            )
+                        ) {
+                            Text(
+                                text = "Tracking resumed",
+                                modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        }
+                    }
                     
                     TalkingPhotoState.ERROR -> {
+                        error?.let { err ->
+                            ErrorMessageCard(
+                                error = err,
+                                onRetry = { viewModel.retry() },
+                                onDismiss = { viewModel.clearError() }
+                            )
+                        }
+                    }
+
+                    TalkingPhotoState.ERROR_RETRYABLE -> {
                         error?.let { err ->
                             ErrorMessageCard(
                                 error = err,
@@ -187,6 +245,7 @@ fun TalkingPhotoScreen(
             // Refresh Scan Button (bottom center)
             if (state == TalkingPhotoState.PLAYING || 
                 state == TalkingPhotoState.PAUSED || 
+                state == TalkingPhotoState.LOST_TRACKING || 
                 state == TalkingPhotoState.READY) {
                 RefreshScanButton(
                     modifier = Modifier

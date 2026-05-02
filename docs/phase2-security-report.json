@@ -1,0 +1,10 @@
+{
+  "generatedAt": "2026-05-01T20:11:43Z",
+  "baseUrl": "http://127.0.0.1:4000",
+  "checks": [
+    {"check":"ops_alerts_requires_auth","status":401,"ok":true},
+    {"check":"ops_toggles_write_requires_auth","status":401,"ok":true},
+    {"check":"ops_toggles_admin_read_allowed","status":200,"ok":true}
+  ],
+  "passed": true
+}

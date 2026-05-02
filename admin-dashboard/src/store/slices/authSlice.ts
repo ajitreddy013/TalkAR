@@ -1,5 +1,13 @@
-import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { AuthService } from "../../services/authService";
+
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === "object" && error !== null) {
+    const maybeResponse = (error as { response?: { data?: { error?: string } } }).response;
+    return maybeResponse?.data?.error || fallback;
+  }
+  return fallback;
+};
 
 interface User {
   id: string;
@@ -34,8 +42,8 @@ export const login = createAsyncThunk(
       const response = await AuthService.login(credentials);
       localStorage.setItem("token", response.data.token);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || "Login failed");
+    } catch (error: unknown) {
+      return rejectWithValue(getErrorMessage(error, "Login failed"));
     }
   }
 );
@@ -46,7 +54,7 @@ export const logout = createAsyncThunk(
     try {
       localStorage.removeItem("token");
       return null;
-    } catch (error: any) {
+    } catch (_error: unknown) {
       return rejectWithValue("Logout failed");
     }
   }
@@ -58,10 +66,8 @@ export const getCurrentUser = createAsyncThunk(
     try {
       const response = await AuthService.getCurrentUser();
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.error || "Failed to get user"
-      );
+    } catch (error: unknown) {
+      return rejectWithValue(getErrorMessage(error, "Failed to get user"));
     }
   }
 );

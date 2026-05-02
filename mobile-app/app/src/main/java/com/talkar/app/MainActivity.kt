@@ -23,18 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 // import com.talkar.app.ui.screens.ARScreen // Disabled for new AR implementation
 // import com.talkar.app.ui.screens.Week2ARScreen // Disabled for new AR implementation
 import com.talkar.app.ui.screens.TalkARScreen
 import com.talkar.app.ui.theme.TalkARTheme
-import com.talkar.app.ui.viewmodels.SimpleARViewModel
-import com.talkar.app.ui.viewmodels.EnhancedARViewModel
-import com.talkar.app.data.repository.ImageRepository
-import com.talkar.app.data.api.ApiClient
-import com.talkar.app.data.local.ImageDatabase
 import com.talkar.app.data.services.ConfigSyncService
 
 class MainActivity : ComponentActivity() {
@@ -91,17 +84,6 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    // Lazy initialization of ViewModels
-                    val simpleViewModel: SimpleARViewModel = viewModel()
-                    
-                    // Enhanced AR ViewModel for Week 2
-                    val enhancedViewModel: EnhancedARViewModel = viewModel {
-                        val apiService = ApiClient.create()
-                        val database = ImageDatabase.getDatabase(this@MainActivity)
-                        val repository = ImageRepository(apiService, database, this@MainActivity)
-                        EnhancedARViewModel(repository)
-                    }
-                    
                     // Check permissions in background to avoid blocking UI
                     LaunchedEffect(Unit) {
                         withContext(kotlinx.coroutines.Dispatchers.IO) {

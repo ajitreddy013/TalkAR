@@ -1,29 +1,117 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
+import { Op, col } from "sequelize";
 import { Image, Dialogue } from "../models/Image";
 import { ImageAvatarMapping } from "../models/ImageAvatarMapping";
 import { uploadImage, uploadToS3 } from "../services/uploadService";
 import { validateImageUpload, validateDialogue } from "../middleware/validation";
 import path from "path";
+import { TalkingPhotoArtifact } from "../models/TalkingPhotoArtifact";
+import { enqueueTalkingPhotoGeneration } from "../services/talkingPhotoArtifactService";
+import { sequelize } from "../config/database";
+import { preprocessPosterImage } from "../services/posterPreprocessService";
+import { PosterPreprocessResult } from "../models/PosterPreprocessResult";
 
 const router = express.Router();
 
 // Get all images
-router.get("/", async (req, res, next) => {
+router.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const images = await Image.findAll({
-      where: { isActive: true },
-      include: [
-        {
-          model: Dialogue,
-          as: "dialogues",
-        },
-      ],
-      order: [["createdAt", "DESC"]],
+    const { search, status, sortBy, sortDir, page, pageSize, confidenceMin, confidenceMax } = req.query;
+    const hasQueryMode = [search, status, sortBy, sortDir, page, pageSize, confidenceMin, confidenceMax].some(
+      (value) => value !== undefined
+    );
+
+    const include = [
+      {
+        model: Dialogue,
+        as: "dialogues",
+      },
+      {
+        model: TalkingPhotoArtifact,
+        as: "talkingPhotoArtifact",
+        required: false,
+      },
+      {
+        model: PosterPreprocessResult,
+        as: "preprocessResult",
+        required: false,
+      },
+    ];
+
+    if (!hasQueryMode) {
+      const images = await Image.findAll({
+        where: { isActive: true },
+        include,
+        order: [["createdAt", "DESC"]],
+      });
+
+      return res.json(images);
+    }
+
+    const likeOp = sequelize.getDialect() === "sqlite" ? Op.like : (Op as any).iLike || Op.like;
+    const whereClause: any = { isActive: true };
+
+    if (typeof search === "string" && search.trim() !== "") {
+      whereClause[Op.or] = [
+        { name: { [likeOp]: `%${search.trim()}%` } },
+        { description: { [likeOp]: `%${search.trim()}%` } },
+      ];
+    }
+
+    if (typeof status === "string" && ["queued", "processing", "ready", "failed"].includes(status)) {
+      whereClause["$talkingPhotoArtifact.status$"] = status;
+    }
+
+    const confidenceFilter: Record<symbol, number> = {} as Record<symbol, number>;
+    if (typeof confidenceMin === "string" && confidenceMin !== "" && !Number.isNaN(Number(confidenceMin))) {
+      confidenceFilter[Op.gte] = Number(confidenceMin);
+    }
+    if (typeof confidenceMax === "string" && confidenceMax !== "" && !Number.isNaN(Number(confidenceMax))) {
+      confidenceFilter[Op.lte] = Number(confidenceMax);
+    }
+    if (Object.getOwnPropertySymbols(confidenceFilter).length > 0) {
+      whereClause["$talkingPhotoArtifact.confidence$"] = confidenceFilter;
+    }
+
+    const direction = typeof sortDir === "string" && sortDir.toLowerCase() === "asc" ? "ASC" : "DESC";
+    const order = (() => {
+      switch (sortBy) {
+        case "name":
+          return [["name", direction]];
+        case "createdAt":
+          return [["createdAt", direction]];
+        case "confidence":
+          return [[col("talkingPhotoArtifact.confidence"), direction]];
+        case "artifactStatus":
+          return [[col("talkingPhotoArtifact.status"), direction]];
+        case "updatedAt":
+        default:
+          return [["updatedAt", direction]];
+      }
+    })();
+
+    const normalizedPage = Math.max(Number(page) || 1, 1);
+    const normalizedPageSize = Math.min(Math.max(Number(pageSize) || 10, 1), 100);
+    const offset = (normalizedPage - 1) * normalizedPageSize;
+
+    const { count, rows } = await Image.findAndCountAll({
+      where: whereClause,
+      include,
+      order: order as any,
+      limit: normalizedPageSize,
+      offset,
+      distinct: true,
+      subQuery: false,
     });
 
-    res.json(images);
+    return res.json({
+      items: rows,
+      total: count,
+      page: normalizedPage,
+      pageSize: normalizedPageSize,
+    });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -36,6 +124,14 @@ router.get("/:id", async (req, res, next) => {
         {
           model: Dialogue,
           as: "dialogues",
+        },
+        {
+          model: TalkingPhotoArtifact,
+          as: "talkingPhotoArtifact",
+        },
+        {
+          model: PosterPreprocessResult,
+          as: "preprocessResult",
         },
       ],
     });
@@ -111,8 +207,18 @@ router.post(
       }
 
       const createdImage = await Image.findByPk(image.id, {
-        include: [{ model: Dialogue, as: "dialogues" }]
+        include: [
+          { model: Dialogue, as: "dialogues" },
+          { model: TalkingPhotoArtifact, as: "talkingPhotoArtifact" },
+          { model: PosterPreprocessResult, as: "preprocessResult" },
+        ]
       });
+
+      await preprocessPosterImage(image.id);
+
+      if (script && script.trim() !== "") {
+        await enqueueTalkingPhotoGeneration(image.id);
+      }
 
       return res.status(201).json(createdImage);
     } catch (error) {
@@ -135,7 +241,11 @@ router.put(
       const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
 
       const image = await Image.findByPk(id, {
-        include: [{ model: Dialogue, as: "dialogues" }]
+        include: [
+          { model: Dialogue, as: "dialogues" },
+          { model: TalkingPhotoArtifact, as: "talkingPhotoArtifact" },
+          { model: PosterPreprocessResult, as: "preprocessResult" },
+        ]
       });
       
       if (!image) {
@@ -144,6 +254,7 @@ router.put(
 
       let imageUrl = image.imageUrl;
       let thumbnailUrl = image.thumbnailUrl;
+      let shouldRegenerateArtifact = false;
 
       // Handle file updates
       if (files) {
@@ -154,6 +265,7 @@ router.put(
           } else {
             imageUrl = `/uploads/${path.basename(mainFile.path)}`;
           }
+          shouldRegenerateArtifact = true;
         }
 
         if (files["thumbnail"] && files["thumbnail"].length > 0) {
@@ -174,9 +286,14 @@ router.put(
         thumbnailUrl,
       });
 
+      if (shouldRegenerateArtifact) {
+        await preprocessPosterImage(id);
+      }
+
       // Update default script if provided
       if (script !== undefined) {
         const defaultDialogue = image.dialogues?.find((d: Dialogue) => d.isDefault);
+        const scriptChanged = defaultDialogue?.text !== script;
         if (defaultDialogue) {
           await defaultDialogue.update({ text: script });
         } else if (script.trim() !== "") {
@@ -188,10 +305,19 @@ router.put(
             isDefault: true,
           });
         }
+        if (script.trim() !== "" && scriptChanged) {
+          await enqueueTalkingPhotoGeneration(id);
+        }
+      } else if (shouldRegenerateArtifact) {
+        await enqueueTalkingPhotoGeneration(id);
       }
 
       const updatedImage = await Image.findByPk(id, {
-        include: [{ model: Dialogue, as: "dialogues" }]
+        include: [
+          { model: Dialogue, as: "dialogues" },
+          { model: TalkingPhotoArtifact, as: "talkingPhotoArtifact" },
+          { model: PosterPreprocessResult, as: "preprocessResult" },
+        ]
       });
 
       return res.json(updatedImage);
@@ -242,6 +368,10 @@ router.post("/:id/dialogues", validateDialogue, async (req, res, next) => {
       isActive: true,
     });
 
+    if (dialogue.isDefault || !language) {
+      await enqueueTalkingPhotoGeneration(id);
+    }
+
     return res.status(201).json(dialogue);
   } catch (error) {
     return next(error);
@@ -268,6 +398,10 @@ router.put("/:imageId/dialogues/:dialogueId", async (req, res, next) => {
       voiceId: voiceId !== undefined ? voiceId : dialogue.voiceId,
       isDefault: isDefault !== undefined ? isDefault : dialogue.isDefault,
     });
+
+    if (dialogue.isDefault) {
+      await enqueueTalkingPhotoGeneration(imageId);
+    }
 
     return res.json(dialogue);
   } catch (error) {

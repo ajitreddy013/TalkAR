@@ -1,5 +1,6 @@
 import express from "express";
 import { PerformanceMetricsService } from "../services/performanceMetricsService";
+import { WorkerAuthMetricsService } from "../services/workerAuthMetricsService";
 
 const router = express.Router();
 
@@ -16,6 +17,36 @@ router.get("/", async (req, res, next) => {
         videoRenderDelay: "≤ 3s",
         totalPipelineTime: "≤ 5s"
       },
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Get worker auth security telemetry
+router.get("/worker-auth", async (req, res, next) => {
+  try {
+    const snapshot = WorkerAuthMetricsService.getSnapshot();
+    const health = WorkerAuthMetricsService.getHealthStatus();
+    return res.json({
+      success: true,
+      workerAuth: snapshot,
+      health,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+router.get("/worker-auth/health", async (req, res, next) => {
+  try {
+    const health = WorkerAuthMetricsService.getHealthStatus();
+    const statusCode = health.healthy ? 200 : 503;
+    return res.status(statusCode).json({
+      success: health.healthy,
+      health,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

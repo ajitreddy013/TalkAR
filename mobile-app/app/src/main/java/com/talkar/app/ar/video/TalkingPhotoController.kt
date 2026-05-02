@@ -2,6 +2,7 @@ package com.talkar.app.ar.video
 
 import com.google.ar.core.Anchor
 import com.talkar.app.ar.video.errors.TalkingPhotoError
+import com.talkar.app.ar.video.models.LipCoordinates
 import com.talkar.app.ar.video.models.TalkingPhotoState
 import com.talkar.app.ar.video.models.TrackingData
 
@@ -71,10 +72,12 @@ interface TalkingPhotoController {
 interface TalkingPhotoCallbacks {
     fun onGenerationStarted() {}
     fun onGenerationProgress(progress: Float) {}
+    fun onArtifactStatus(status: String) {}
     fun onVideoReady() {}
     fun onFirstFrameRendered() {}
     fun onPlaybackComplete() {}
     fun onError(error: TalkingPhotoError) {}
     fun onTrackingLost() {}
     fun onTrackingResumed() {}
+    fun onLipCoordinatesReady(lipCoordinates: LipCoordinates) {}
 }

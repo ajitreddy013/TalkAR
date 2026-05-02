@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Box,
   Typography,
   Paper,
   Button,
-  LinearProgress,
   Alert,
   TextField,
   MenuItem,
@@ -31,11 +30,7 @@ const Interactions: React.FC = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  useEffect(() => {
-    fetchInteractions(page, pageSize);
-  }, [page, pageSize]);
-
-  const fetchInteractions = async (p: number, s: number) => {
+  const fetchInteractions = useCallback(async (p: number, s: number) => {
     setLoading(true);
     try {
       // API uses 1-based page index
@@ -55,7 +50,11 @@ const Interactions: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter, posterIdFilter, startDate, endDate]);
+
+  useEffect(() => {
+    fetchInteractions(page, pageSize);
+  }, [fetchInteractions, page, pageSize]);
 
   const handleApplyFilters = () => {
     setPage(0); // Reset to first page when filtering
@@ -81,7 +80,7 @@ const Interactions: React.FC = () => {
       field: "created_at", 
       headerName: "Timestamp", 
       width: 200,
-      valueFormatter: (params: any) => new Date(params.value as string).toLocaleString(),
+      valueFormatter: ({ value }) => new Date(String(value)).toLocaleString(),
     },
     {
       field: "script",

@@ -5,7 +5,6 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.talkar.app.R
 import com.talkar.app.ar.SpeechRecognitionService
 import com.talkar.app.data.api.TalkARApiService
 import com.talkar.app.data.api.ApiException
@@ -310,14 +309,8 @@ class TalkARViewModel(private val context: Context) : ViewModel() {
      * Used when backend is unavailable or returns empty URL.
      */
     private fun getLocalVideoUri(imageName: String): Uri {
-        // Map image names to video resources
-        val videoResId = when (imageName.lowercase()) {
-            "sunrich" -> R.raw.sunrich_video
-            "tony" -> R.raw.sunrich_video // Using same video for now
-            else -> R.raw.sunrich_video // Default fallback
-        }
-        
-        return Uri.parse("android.resource://${context.packageName}/$videoResId")
+        // Raw bundled media can be absent in this workspace; use a remote fallback.
+        return Uri.parse("https://assets.sync.so/docs/example-talking-head.mp4")
     }
     
     override fun onCleared() {

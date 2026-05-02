@@ -259,6 +259,25 @@ For manual development setup:
 
 ### Secret Rotation
 
+### Production Health Probes (Worker Auth Strict)
+
+For production deployments, use strict worker-auth readiness checks:
+
+- Endpoint: `/health?workerAuthStrict=true`
+- `200`: healthy
+- `503`: worker-auth thresholds breached (pod should be considered not ready)
+
+Kubernetes example:
+
+```yaml
+readinessProbe:
+  httpGet:
+    path: /health?workerAuthStrict=true
+    port: 3000
+```
+
+See [Deployment Guide](docs/DEPLOYMENT.md) and [Worker Auth Runbook](docs/WORKER_AUTH_INCIDENT_RUNBOOK.md) for full alerting and incident response setup.
+
 - Rotate JWT secrets periodically
 - Rotate AWS credentials using IAM roles where possible
 - Update Sync API keys through their dashboard

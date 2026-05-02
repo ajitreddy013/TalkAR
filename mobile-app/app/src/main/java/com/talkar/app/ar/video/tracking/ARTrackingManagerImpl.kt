@@ -59,25 +59,33 @@ class ARTrackingManagerImpl(
             
             // Add each poster to the database
             humanFacePosters.forEachIndexed { index, poster ->
-                val bitmap = BitmapFactory.decodeByteArray(
-                    poster.imageData,
-                    0,
-                    poster.imageData.size
-                )
-                
-                if (bitmap == null) {
-                    Log.w(TAG, "Failed to decode image for poster: ${poster.id}")
-                    return@forEachIndexed
+                try {
+                    val bitmap = BitmapFactory.decodeByteArray(
+                        poster.imageData,
+                        0,
+                        poster.imageData.size
+                    )
+
+                    if (bitmap == null) {
+                        Log.w(TAG, "Failed to decode image for poster: ${poster.id}")
+                        return@forEachIndexed
+                    }
+
+                    val imageIndex = database.addImage(
+                        poster.name,
+                        bitmap,
+                        poster.physicalWidthMeters
+                    )
+
+                    posterMap = posterMap + (imageIndex to poster)
+                    Log.d(TAG, "Added poster ${poster.id} at index $imageIndex")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Skipping low-quality/invalid poster image: ${poster.id}", e)
                 }
-                
-                val imageIndex = database.addImage(
-                    poster.name,
-                    bitmap,
-                    poster.physicalWidthMeters
-                )
-                
-                posterMap = posterMap + (imageIndex to poster)
-                Log.d(TAG, "Added poster ${poster.id} at index $imageIndex")
+            }
+
+            if (posterMap.isEmpty()) {
+                return Result.failure(Exception("No usable poster images for AR tracking"))
             }
             
             imageDatabase = database

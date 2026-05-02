@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-05-02T10:35:00Z",
+  "step": "10",
+  "status": "blocked",
+  "passed": false,
+  "matrix": [
+    {
+      "scenario": "startup_camera_preview",
+      "result": "not_executed"
+    },
+    {
+      "scenario": "poster_detection_and_polling",
+      "result": "not_executed"
+    },
+    {
+      "scenario": "stable_overlay_on_slight_movement",
+      "result": "not_executed"
+    },
+    {
+      "scenario": "tracking_loss_pause_and_resume",
+      "result": "not_executed"
+    }
+  ],
+  "notes": "Mobile matrix evidence has not yet been captured against a real device in this session."
+}

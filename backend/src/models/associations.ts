@@ -6,6 +6,8 @@ import Feedback from "./Feedback";
 import Settings from "./Settings";
 import Interaction from "./Interaction";
 import Metric from "./Metric";
+import { TalkingPhotoArtifact } from "./TalkingPhotoArtifact";
+import { PosterPreprocessResult } from "./PosterPreprocessResult";
 
 // Define all model associations
 export function defineAssociations() {
@@ -29,6 +31,27 @@ export function defineAssociations() {
     onDelete: "CASCADE",
   });
   ImageAvatarMapping.belongsTo(Image, { foreignKey: "imageId", as: "associatedImage" });
+
+  // Talking photo artifact (one active artifact per image)
+  Image.hasOne(TalkingPhotoArtifact, {
+    foreignKey: "imageId",
+    as: "talkingPhotoArtifact",
+    onDelete: "CASCADE",
+  });
+  TalkingPhotoArtifact.belongsTo(Image, {
+    foreignKey: "imageId",
+    as: "image",
+  });
+
+  Image.hasOne(PosterPreprocessResult, {
+    foreignKey: "imageId",
+    as: "preprocessResult",
+    onDelete: "CASCADE",
+  });
+  PosterPreprocessResult.belongsTo(Image, {
+    foreignKey: "imageId",
+    as: "image",
+  });
 
   // Avatar-Dialogue associations (for voice mapping)
   // Note: This is a loose association based on voiceId string matching

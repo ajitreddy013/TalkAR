@@ -23,8 +23,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   AreaChart,
   Area,
 } from "recharts";
@@ -59,9 +57,6 @@ function a11yProps(index: number) {
     "aria-controls": `analytics-tabpanel-${index}`,
   };
 }
-
-const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
-const FEEDBACK_COLORS = ["#4CAF50", "#F44336"]; // Green for positive, Red for negative
 
 export default function Analytics() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
@@ -98,7 +93,7 @@ export default function Analytics() {
     }
   };
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
 
@@ -118,14 +113,6 @@ export default function Analytics() {
     if (!analytics?.imageTriggers?.byVoice) return [];
     return analytics.imageTriggers.byVoice.map((item) => ({
       name: item.voiceId,
-      count: item.count,
-    }));
-  };
-
-  const getAIPipelineData = () => {
-    if (!analytics?.aiPipelineEvents?.byType) return [];
-    return analytics.aiPipelineEvents.byType.map((item) => ({
-      name: item.eventType.replace("_", " "),
       count: item.count,
     }));
   };

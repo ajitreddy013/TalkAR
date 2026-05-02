@@ -1,6 +1,14 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { DialogueService } from "../../services/dialogueService";
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (typeof error === "object" && error !== null) {
+    const maybeResponse = (error as { response?: { data?: { error?: string } } }).response;
+    return maybeResponse?.data?.error || fallback;
+  }
+  return fallback;
+};
+
 export interface Dialogue {
   id: string;
   imageId: string;
@@ -34,10 +42,8 @@ export const fetchDialogues = createAsyncThunk(
     try {
       const response = await DialogueService.getDialoguesByImageId(imageId);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.error || "Failed to fetch dialogues"
-      );
+    } catch (error: unknown) {
+      return rejectWithValue(getErrorMessage(error, "Failed to fetch dialogues"));
     }
   }
 );
@@ -51,10 +57,8 @@ export const createDialogue = createAsyncThunk(
     try {
       const response = await DialogueService.createDialogue(dialogueData);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.error || "Failed to create dialogue"
-      );
+    } catch (error: unknown) {
+      return rejectWithValue(getErrorMessage(error, "Failed to create dialogue"));
     }
   }
 );
@@ -68,10 +72,8 @@ export const updateDialogue = createAsyncThunk(
     try {
       const response = await DialogueService.updateDialogue(id, data);
       return response.data;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.error || "Failed to update dialogue"
-      );
+    } catch (error: unknown) {
+      return rejectWithValue(getErrorMessage(error, "Failed to update dialogue"));
     }
   }
 );
@@ -82,10 +84,8 @@ export const deleteDialogue = createAsyncThunk(
     try {
       await DialogueService.deleteDialogue(id);
       return id;
-    } catch (error: any) {
-      return rejectWithValue(
-        error.response?.data?.error || "Failed to delete dialogue"
-      );
+    } catch (error: unknown) {
+      return rejectWithValue(getErrorMessage(error, "Failed to delete dialogue"));
     }
   }
 );

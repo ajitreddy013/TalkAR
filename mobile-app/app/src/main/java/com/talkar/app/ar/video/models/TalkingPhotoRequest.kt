@@ -53,6 +53,27 @@ data class StatusResponse(
     val estimatedTimeRemaining: Int? = null
 )
 
+data class TalkingPhotoArtifactResponse(
+    val imageId: String,
+    val status: String,
+    val runtimeMode: String? = null,
+    val version: Int,
+    val videoUrl: String? = null,
+    val lipLandmarks: LipCoordinatesDto? = null,
+    val posterFaceBox: PosterFaceBoxDto? = null,
+    val confidence: Float? = null,
+    val errorCode: String? = null,
+    val errorMessage: String? = null,
+    val updatedAt: String? = null
+)
+
+data class PosterFaceBoxDto(
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float
+)
+
 /**
  * DTO for lip coordinates from backend API.
  * 
