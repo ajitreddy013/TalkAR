@@ -1,12 +1,14 @@
 # TalkAR Production Readiness Plan (Backend + Frontend + Mobile)
 
 ## Current Phase Gate (As of 2026-05-02)
+
 - Current phase: **Phase 3 (GA rollout)**
 - Phase 3 completion: **NOT COMPLETE**
 - Next phase: **Phase 4 (Post-GA stabilization and optimization)**
 - Move decision: **BLOCKED until Phase 3 evidence gates are fully passed**
 
 ### Required to move to next phase
+
 - `docs/evidence/phase3-ga/step-10/cutover-gate-summary.json` with `"canPromote": true`
 - `docs/evidence/phase3-ga/step-25/cutover-gate-summary.json` with `"canPromote": true`
 - `docs/evidence/phase3-ga/step-50/cutover-gate-summary.json` with `"canPromote": true`
@@ -16,13 +18,16 @@
 - `docs/evidence/phase3-ga/approvals.md` signed by Engineering, SRE/Platform, Product, QA
 
 ### Current blocker snapshot
-- Only partial step-10 artifacts are present in repository evidence.
-- Step-25/50/100 gate summaries are not present.
+
+- Step-10/25/50/100 evidence folders exist, but the live gates are still failing.
+- Prewarm found no eligible posters, so load/soak evidence cannot pass yet.
+- Security checks are failing on the ops endpoints.
 - Final go/no-go and required approvals are not finalized.
 - Detailed gate-by-gate status is tracked in `docs/PHASE3_CLOSEOUT_STATUS.md`.
 - Step-by-step execution commands are in `docs/PHASE3_COMPLETION_PLAYBOOK.md`.
 
 ## Summary
+
 Build a production-grade, end-to-end “scan poster → detect from backend catalog → generate/fetch talking artifact → stable AR talking overlay” system with **hybrid lip-sync (day-1)**, **AWS deployment target**, and **reliability-first release scope**.
 
 Implementation will be done in 8 ordered tracks so each track closes specific gaps before the next one starts.
@@ -30,6 +35,7 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
 ## Implementation Changes (Ordered, Decision-Complete)
 
 1. **Define Canonical Product Flow + Contracts (P0)**
+
 - Lock one runtime flow for app:
   1. App loads active poster index from backend.
   2. ARCore detects known poster.
@@ -41,6 +47,7 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
 - Add artifact versioning contract: cache key = `posterId + artifactVersion`.
 
 2. **Backend Production Pipeline (P0)**
+
 - Replace in-process `setTimeout` generation with durable async jobs (AWS SQS + worker service).
 - Split backend responsibilities:
   - API service: auth, poster CRUD, artifact status API.
@@ -53,6 +60,7 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
 - Remove mock-only behavior from production route path; keep mock behind explicit `NODE_ENV=development` + feature flag.
 
 3. **Poster Preprocessing + Data Quality Gate (P0)**
+
 - On poster create/update, run async preprocessing:
   - Face presence detection.
   - Face box + normalized lip ROI extraction.
@@ -62,6 +70,7 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
 - Ensure inactive posters are excluded from mobile poster index response.
 
 4. **Storage, CDN, and Artifact Lifecycle (P0)**
+
 - Store generated videos/artifacts in S3.
 - Serve via CloudFront signed URLs (short TTL, refreshable).
 - Add artifact lifecycle rules:
@@ -70,6 +79,7 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
 - Mobile download endpoint should return signed URL + expiry metadata.
 
 5. **Mobile App Runtime Hardening (P0)**
+
 - Keep existing flow entrypoint (`MainActivity -> TalkARScreen -> TalkingPhotoScreen`) but stabilize runtime behavior:
   - Poster index refresh on app start + periodic background sync.
   - Single active poster session policy with clean reset.
@@ -85,6 +95,7 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
   - hard timeout to reset session if tracking does not recover.
 
 6. **Frontend (Admin Dashboard) Production Controls (P1)**
+
 - Add artifact operations panel per poster:
   - preprocess status,
   - artifact generation status/version/provider,
@@ -101,6 +112,7 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
   - queue backlog.
 
 7. **Reliability, Security, and Ops (P0)**
+
 - Add idempotency key for generation enqueue requests.
 - Add distributed tracing/correlation IDs across API→queue→worker.
 - Implement rate limiting for generation triggers.
@@ -116,6 +128,7 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
   - rising `failed` artifact ratio.
 
 8. **Release Strategy (P0/P1)**
+
 - Phase A (internal): managed provider only, fallback disabled but wired.
 - Phase B (beta): enable fallback provider, limited poster set, monitored rollout.
 - Phase C (GA): full catalog, autoscaling workers, dashboard ops enabled.
@@ -125,6 +138,7 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
   - disable secondary provider quickly.
 
 ## Public API / Interface Additions
+
 - `GET /api/v1/posters/:id/talking-photo` response contract finalized:
   - `{ imageId, status, version, videoUrl, lipLandmarks, posterFaceBox, confidence, errorCode, errorMessage, updatedAt }`
 - New/updated endpoints:
@@ -135,13 +149,16 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
   - `generateTalkingArtifact({ posterId, script, language, voiceId, preferredProvider }) -> { status, artifactUrl, landmarks, confidence, provider, timings }`
 
 ## Test Plan (Must-Pass)
+
 1. **Backend integration**
+
 - Poster upload triggers preprocess job and persists quality metadata.
 - Talking-photo enqueue creates one job per idempotency key.
 - Managed-provider failure triggers secondary fallback exactly once.
 - Artifact status transitions validly and terminal states are durable.
 
 2. **Mobile integration/E2E**
+
 - App launch shows camera preview reliably.
 - Known backend poster detection triggers artifact fetch/poll.
 - `ready` artifact starts playback and overlays at lip region.
@@ -150,15 +167,18 @@ Implementation will be done in 8 ordered tracks so each track closes specific ga
 - Failed artifact shows retryable UX with correct code mapping.
 
 3. **Frontend/Admin**
+
 - Operator can see preprocessing/artifact statuses and retry safely.
 - Dashboard metrics reflect live pipeline outcomes.
 
 4. **Non-functional**
+
 - Load test concurrent scans + artifact requests.
 - Soak test worker stability and queue drain behavior.
 - Security tests for signed URL expiry and unauthorized artifact access.
 
 ## Assumptions and Defaults
+
 - Chosen decisions:
   - Lip-sync strategy: **Hybrid from day 1**.
   - Infra target: **AWS stack**.

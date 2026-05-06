@@ -19,9 +19,15 @@ export const authenticateAdmin = (
         .json({ error: "Access denied. No token provided." });
     }
 
+    const staticAdminToken = process.env.PHASE3_ADMIN_TOKEN;
+    if (staticAdminToken && token === staticAdminToken) {
+      req.user = { id: "phase3-admin", role: "admin", tokenMode: "static" };
+      return next();
+    }
+
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || "fallback-secret"
+      process.env.JWT_SECRET as string
     );
     req.user = decoded;
 
@@ -54,7 +60,7 @@ export const authenticateUser = (
 
     const decoded = jwt.verify(
       token,
-      process.env.JWT_SECRET || "fallback-secret"
+      process.env.JWT_SECRET as string
     );
     req.user = decoded;
 

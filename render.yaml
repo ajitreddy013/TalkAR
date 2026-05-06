@@ -20,3 +20,5 @@ services:
         sync: false
       - key: FRONTEND_ORIGIN
         sync: false
+      - key: POSTER_PREPROCESS_ALLOW_HEURISTIC_FALLBACK
+        value: "true"

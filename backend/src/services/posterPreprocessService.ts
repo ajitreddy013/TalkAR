@@ -2,12 +2,37 @@ import axios from "axios";
 import crypto from "crypto";
 import { Image } from "../models/Image";
 import { PosterPreprocessResult } from "../models/PosterPreprocessResult";
+import { Settings } from "../models/Settings";
 
 type FaceBox = { x: number; y: number; width: number; height: number };
 type LipRoi = { lipX: number; lipY: number; lipWidth: number; lipHeight: number };
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
+}
+
+async function getBooleanSetting(key: string, fallback: boolean): Promise<boolean> {
+  try {
+    const setting = await Settings.findOne({ where: { key } });
+    if (!setting) return fallback;
+    const raw = String(setting.value).trim().toLowerCase();
+    if (raw === "true" || raw === "1" || raw === "yes") return true;
+    if (raw === "false" || raw === "0" || raw === "no") return false;
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function getNumberSetting(key: string, fallback: number): Promise<number> {
+  try {
+    const setting = await Settings.findOne({ where: { key } });
+    if (!setting) return fallback;
+    const parsed = Number(setting.value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function buildHeuristicFromImage(imageId: string, imageUrl: string): {
@@ -55,7 +80,7 @@ export async function preprocessPosterImage(
   }
 
   const providerUrl = process.env.POSTER_PREPROCESSOR_URL;
-  const minConfidence = Number(process.env.POSTER_PREPROCESS_MIN_CONFIDENCE || 0.75);
+  const minConfidence = await getNumberSetting("poster_preprocess_min_confidence", Number(process.env.POSTER_PREPROCESS_MIN_CONFIDENCE || 0.75));
 
   let status: "ready" | "failed" = "failed";
   let provider = "none";
@@ -65,6 +90,11 @@ export async function preprocessPosterImage(
   let lipRoi: LipRoi | null = null;
   let errorCode: string | null = null;
   let errorMessage: string | null = null;
+
+  const allowHeuristicFallback = await getBooleanSetting(
+    "poster_preprocess_allow_heuristic_fallback",
+    process.env.POSTER_PREPROCESS_ALLOW_HEURISTIC_FALLBACK !== "false"
+  );
 
   try {
     if (providerUrl) {
@@ -84,7 +114,7 @@ export async function preprocessPosterImage(
       confidence = typeof data.confidence === "number" ? clamp01(data.confidence) : null;
       faceBox = data.faceBox || null;
       lipRoi = data.lipRoi || null;
-    } else if (process.env.NODE_ENV !== "production") {
+    } else if (process.env.NODE_ENV !== "production" || allowHeuristicFallback) {
       provider = "heuristic_nonprod";
       const heuristic = buildHeuristicFromImage(image.id, image.imageUrl);
       faceDetected = heuristic.confidence >= minConfidence;

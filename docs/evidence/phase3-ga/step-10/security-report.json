@@ -1,24 +1,25 @@
 {
-  "generatedAt": "2026-05-02T10:35:00Z",
-  "step": "10",
-  "status": "blocked",
+  "generatedAt": "2026-05-02T20:15:37.174Z",
+  "profile": "phase3-security-check",
   "passed": false,
   "checks": [
     {
-      "name": "ops_alerts_requires_auth",
-      "status": "not_executed",
-      "ok": false
+      "path": "/api/v1/posters/ops/alerts",
+      "status": 401,
+      "ok": false,
+      "error": "Request failed with status code 401"
     },
     {
-      "name": "ops_toggles_write_requires_auth",
-      "status": "not_executed",
-      "ok": false
+      "path": "/api/v1/posters/ops/toggles",
+      "status": 401,
+      "ok": false,
+      "error": "Request failed with status code 401"
     },
     {
-      "name": "worker_auth_replay_protection",
-      "status": "not_executed",
-      "ok": false
+      "path": "/api/v1/posters/ops/stats",
+      "status": 404,
+      "ok": false,
+      "error": "Request failed with status code 404"
     }
-  ],
-  "notes": "Security drill evidence is pending a live staging or local test harness run."
+  ]
 }

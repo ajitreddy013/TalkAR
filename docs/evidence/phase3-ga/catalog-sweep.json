@@ -2,3 +2,36 @@
 > talkar-backend@1.0.0 phase3:catalog:sweep
 > node scripts/phase3/catalog-ga-sweep.js
 
+{
+  "generatedAt": "2026-05-03T10:13:41.163Z",
+  "baseUrl": "https://talkar-backend.onrender.com",
+  "totalActivePosters": 3,
+  "eligible": 0,
+  "ineligible": 3,
+  "ineligiblePosters": [
+    {
+      "id": "ad59561b-2d36-4722-9009-fbedb9b937a7",
+      "name": "Phase3 Face Poster",
+      "preprocessStatus": "failed",
+      "faceDetected": false,
+      "confidence": null,
+      "errorCode": "PROVIDER_FAILED"
+    },
+    {
+      "id": "ab30bf6d-2f4e-43e7-9c82-c584f90984f7",
+      "name": "Phase3 Face Poster",
+      "preprocessStatus": "failed",
+      "faceDetected": false,
+      "confidence": null,
+      "errorCode": "PROVIDER_FAILED"
+    },
+    {
+      "id": "eabe999b-1b06-43a8-94bf-ced2951877ec",
+      "name": "Phase3 Test Poster",
+      "preprocessStatus": "failed",
+      "faceDetected": false,
+      "confidence": null,
+      "errorCode": "PROVIDER_FAILED"
+    }
+  ]
+}

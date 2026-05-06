@@ -3,7 +3,7 @@
 > node scripts/phase3/cutover-gate-check.js
 
 {
-  "generatedAt": "2026-05-02T10:44:06.503Z",
+  "generatedAt": "2026-05-02T20:17:42.507Z",
   "step": "10",
   "canPromote": false,
   "checks": [

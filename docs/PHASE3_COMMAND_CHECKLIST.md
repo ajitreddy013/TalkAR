@@ -3,6 +3,7 @@
 Date: 2026-05-02
 
 ## 0) Set environment variables once
+
 ```bash
 export STAGING_API_BASE_URL="https://<staging-api-domain>"
 export PROD_API_BASE_URL="https://<prod-api-domain>"
@@ -11,6 +12,7 @@ export PHASE3_EVIDENCE_ROOT="../docs/evidence/phase3-ga"
 ```
 
 ## 1) Repo preflight (local)
+
 ```bash
 cd backend
 npm run test:phase2
@@ -19,6 +21,7 @@ npm run phase2:promotion:summary
 ```
 
 ## 2) Catalog readiness (staging)
+
 ```bash
 cd backend
 PHASE3_BASE_URL="$STAGING_API_BASE_URL" \
@@ -27,6 +30,7 @@ npm run phase3:catalog:sweep | tee "$PHASE3_EVIDENCE_ROOT/catalog-sweep.json"
 ```
 
 ## 3) Prewarm hot posters (staging)
+
 ```bash
 cd backend
 PHASE3_BASE_URL="$STAGING_API_BASE_URL" \
@@ -36,13 +40,37 @@ npm run phase3:catalog:prewarm | tee "$PHASE3_EVIDENCE_ROOT/prewarm-report.json"
 ```
 
 ## 4) Deploy worker autoscaling (K8s)
+
 ```bash
 kubectl apply -f k8s/talking-photo-worker-deployment.yaml -n talkar-production
 kubectl apply -f k8s/talking-photo-worker-keda-scaledobject.yaml -n talkar-production
 kubectl get deploy,hpa,scaledobject -n talkar-production | rg "talkar-talking-photo-worker|NAME"
 ```
 
+## 4.1) Seed at least one eligible poster if the catalog is empty
+
+```bash
+cd backend
+PHASE3_BASE_URL="$STAGING_API_BASE_URL" \
+npm run phase3:seed-poster -- ../mobile-app/app/src/main/assets/images/sunrich.jpg "Phase3 Face Poster" "Seeded for Phase 3 rollout" "Hello from TalkAR Phase 3"
+```
+
+This uses the bundled face poster asset so the catalog sweep and prewarm steps have real work to process.
+
+If the deployed backend is using the settings-backed fallback, enable it and keep the threshold permissive before seeding:
+
+```bash
+curl -s -X POST "$STAGING_API_BASE_URL/api/v1/settings/poster_preprocess_allow_heuristic_fallback" \
+  -H "Content-Type: application/json" \
+  -d '{"value":true,"description":"Allow heuristic fallback for Phase 3 poster preprocessing"}' | jq .
+
+curl -s -X POST "$STAGING_API_BASE_URL/api/v1/settings/poster_preprocess_min_confidence" \
+  -H "Content-Type: application/json" \
+  -d '{"value":0.75,"description":"Phase 3 preprocess confidence threshold"}' | jq .
+```
+
 ## 5) Rollback toggle quick commands
+
 ```bash
 # force ready-only
 curl -s -X POST "$PROD_API_BASE_URL/api/v1/posters/ops/toggles" \
@@ -71,6 +99,7 @@ curl -s -X POST "$PROD_API_BASE_URL/api/v1/posters/ops/toggles" \
 ```
 
 ## 6) Cutover step gate (repeat per step)
+
 Use this for `10`, `25`, `50`, `100` after each hold period and evidence upload.
 
 ```bash
@@ -81,11 +110,13 @@ npm run phase3:cutover:gate | tee "$PHASE3_EVIDENCE_ROOT/step-10/cutover-gate-su
 ```
 
 Repeat with:
+
 - `PHASE3_STEP=25` -> `step-25/cutover-gate-summary.json`
 - `PHASE3_STEP=50` -> `step-50/cutover-gate-summary.json`
 - `PHASE3_STEP=100` -> `step-100/cutover-gate-summary.json`
 
 ## 7) Alert snapshot capture
+
 ```bash
 curl -s "$PROD_API_BASE_URL/api/v1/posters/ops/alerts" \
   -H "Authorization: Bearer $PHASE3_ADMIN_TOKEN" \
@@ -95,7 +126,9 @@ curl -s "$PROD_API_BASE_URL/api/v1/posters/ops/alerts" \
 Store one per step (`step-25`, `step-50`, `step-100`).
 
 ## 8) Security report placeholders per step
+
 Run your staged security drill commands and save output:
+
 ```bash
 cat > "$PHASE3_EVIDENCE_ROOT/step-10/security-report.json" << 'EOF'
 {
@@ -106,13 +139,29 @@ EOF
 ```
 
 ## 9) Load/soak report placeholders per step
+
 Save your real load test output JSON to:
+
 - `step-10/load-soak-report.json`
 - `step-25/load-soak-report.json`
 - `step-50/load-soak-report.json`
 - `step-100/load-soak-report.json`
 
+## 9.1) Mobile matrix report per step
+
+Use the Phase 3 mobile matrix generator to capture the required scenarios in a repeatable shape:
+
+```bash
+cd backend
+PHASE3_STEP=10 node scripts/phase3/mobile-matrix-run.js \
+  --results='[{"scenario":"startup_camera_preview","result":"passed"},{"scenario":"poster_detection_and_polling","result":"passed"},{"scenario":"stable_overlay_on_slight_movement","result":"passed"},{"scenario":"tracking_loss_pause_and_resume","result":"passed"}]' \
+  | tee "$PHASE3_EVIDENCE_ROOT/step-10/mobile-matrix.json"
+```
+
+Repeat for `25`, `50`, and `100`. Replace the `result` values with the actual device outcome if a scenario fails.
+
 ## 10) Final signoff files
+
 ```bash
 open ../docs/evidence/phase3-ga/go-no-go.md
 open ../docs/evidence/phase3-ga/approvals.md
@@ -120,6 +169,7 @@ open ../docs/evidence/phase3-ga/incident-notes.md
 ```
 
 ## Completion Criteria
+
 - All 4 cutover gate summaries show `"canPromote": true`.
 - `go-no-go.md` finalized as `GO`.
 - `approvals.md` contains required signoffs.
@@ -198,13 +248,13 @@ curl -s "$STAGING_API_BASE_URL/api/health" | jq .
 echo "Monitoring Phase 3 deployment for 15 minutes..."
 for min in {1..15}; do
   TIMESTAMP=$(date '+%H:%M:%S')
-  ERROR_COUNT=$(curl -s "$STAGING_API_BASE_URL/api/v1/posters/ops/stats" \
+  ERROR_COUNT=$(curl -s "$STAGING_API_BASE_URL/api/v1/posters/ops/metrics" \
     -H "Authorization: Bearer $PHASE3_ADMIN_TOKEN" 2>/dev/null | jq .totalErrors // 0)
-  SUCCESS_RATE=$(curl -s "$STAGING_API_BASE_URL/api/v1/posters/ops/stats" \
-    -H "Authorization: Bearer $PHASE3_ADMIN_TOKEN" 2>/dev/null | jq .successRate // 0)
-  
+  SUCCESS_RATE=$(curl -s "$STAGING_API_BASE_URL/api/v1/posters/ops/metrics" \
+    -H "Authorization: Bearer $PHASE3_ADMIN_TOKEN" 2>/dev/null | jq .generation.successRate // 0)
+
   echo "[$TIMESTAMP] Min $min: ErrorCount=$ERROR_COUNT, SuccessRate=$SUCCESS_RATE"
-  
+
   if [ "$min" -lt 15 ]; then
     sleep 60
   fi
@@ -224,7 +274,7 @@ curl -s "$STAGING_API_BASE_URL/api/health" \
   | tee "$PHASE3_EVIDENCE_ROOT/step-10/health.json"
 
 # Operational stats
-curl -s "$STAGING_API_BASE_URL/api/v1/posters/ops/stats" \
+curl -s "$STAGING_API_BASE_URL/api/v1/posters/ops/metrics" \
   -H "Authorization: Bearer $PHASE3_ADMIN_TOKEN" \
   | tee "$PHASE3_EVIDENCE_ROOT/step-10/ops-stats.json"
 
@@ -309,7 +359,7 @@ done
 # 2c. Collect evidence
 mkdir -p "$PHASE3_EVIDENCE_ROOT/step-25"
 curl -s "$STAGING_API_BASE_URL/api/health" > "$PHASE3_EVIDENCE_ROOT/step-25/health.json"
-curl -s "$STAGING_API_BASE_URL/api/v1/posters/ops/stats" \
+curl -s "$STAGING_API_BASE_URL/api/v1/posters/ops/metrics" \
   -H "Authorization: Bearer $PHASE3_ADMIN_TOKEN" \
   > "$PHASE3_EVIDENCE_ROOT/step-25/ops-stats.json"
 
@@ -437,4 +487,3 @@ tar -czf "$PHASE3_EVIDENCE_ROOT/phase3-ga-evidence-$(date +%s).tar.gz" \
 
 echo "✅ Phase 3 GA rollout complete and archived"
 ```
-

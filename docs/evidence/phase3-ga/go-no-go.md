@@ -5,6 +5,7 @@ Environment: staging / phase3-ga evidence bundle
 Release owner: Ajit Reddy
 
 ## Gate Results
+
 - Step 10% gate summary: FAIL
 - Step 25% gate summary: FAIL
 - Step 50% gate summary: FAIL
@@ -14,10 +15,12 @@ Release owner: Ajit Reddy
 - Alert stability (no critical > 15 min): FAIL
 
 ## Decision
+
 - Final decision: NO-GO
 - Rationale: the Phase 3 cutover cannot proceed because the per-step evidence bundle is incomplete and every current cutover gate summary reports `canPromote: false`.
 
 ## Evidence Links
+
 - catalog-sweep: `catalog-sweep.json`
 - prewarm: `prewarm-report.json` (incomplete)
 - step-10 summary: `step-10/cutover-gate-summary.json`
@@ -27,6 +30,7 @@ Release owner: Ajit Reddy
 - incident notes: `incident-notes.md`
 
 ## Current Blockers
+
 - `step-10/load-soak-report.json` missing
 - `step-10/security-report.json` missing
 - `step-10/mobile-matrix.json` missing
@@ -35,5 +39,5 @@ Release owner: Ajit Reddy
 - `prewarm-report.json` does not yet contain a successful completed report body
 
 ## Next Action
-Complete the missing per-step evidence, rerun cutover gates, and update this file to `GO` only if all four step gates pass.
 
+Complete the missing per-step evidence, rerun cutover gates, and update this file to `GO` only if all four step gates pass.

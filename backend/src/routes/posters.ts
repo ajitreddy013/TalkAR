@@ -28,6 +28,85 @@ const talkingPhotoRetryLimiter = rateLimit({
   message: "Too many talking-photo retry requests. Please try again in a minute.",
 });
 
+async function buildOpsMetricsPayload() {
+  const runtime = getEffectiveRuntimeFlags();
+  const [total, ready, failed, processing, queued] = await Promise.all([
+    TalkingPhotoArtifact.count(),
+    TalkingPhotoArtifact.count({ where: { status: "ready" } }),
+    TalkingPhotoArtifact.count({ where: { status: "failed" } }),
+    TalkingPhotoArtifact.count({ where: { status: "processing" } }),
+    TalkingPhotoArtifact.count({ where: { status: "queued" } }),
+  ]);
+
+  const successRate = total > 0 ? ready / total : 0;
+
+  const readyArtifacts = await TalkingPhotoArtifact.findAll({
+    where: {
+      status: "ready",
+      lastProcessingDurationMs: { [Op.ne]: null },
+    },
+    attributes: ["lastProcessingDurationMs", "provider", "errorCode"],
+    limit: 500,
+    order: [["updatedAt", "DESC"]],
+  });
+  const durations = readyArtifacts
+    .map((a: any) => Number(a.lastProcessingDurationMs))
+    .filter((v) => Number.isFinite(v) && v > 0)
+    .sort((a, b) => a - b);
+  const medianGenerationTimeMs =
+    durations.length === 0 ? null : durations[Math.floor(durations.length / 2)];
+
+  const providerFailureBreakdown = {
+    managed: 0,
+    self_hosted: 0,
+    none: 0,
+    unknown: 0,
+  };
+  const failedArtifacts = await TalkingPhotoArtifact.findAll({
+    where: { status: "failed" },
+    attributes: ["provider"],
+    limit: 500,
+    order: [["updatedAt", "DESC"]],
+  });
+  for (const row of failedArtifacts as any[]) {
+    const provider = row.provider;
+    if (provider === "managed") providerFailureBreakdown.managed++;
+    else if (provider === "self_hosted") providerFailureBreakdown.self_hosted++;
+    else if (provider === "none") providerFailureBreakdown.none++;
+    else providerFailureBreakdown.unknown++;
+  }
+
+  const preprocessSummary = await PosterPreprocessResult.findAll({
+    attributes: ["status", "eligibleForTalkingPhoto"],
+    limit: 500,
+    order: [["updatedAt", "DESC"]],
+  });
+  const preprocess = {
+    total: preprocessSummary.length,
+    ready: preprocessSummary.filter((p: any) => p.status === "ready").length,
+    failed: preprocessSummary.filter((p: any) => p.status === "failed").length,
+    eligible: preprocessSummary.filter((p: any) => !!p.eligibleForTalkingPhoto)
+      .length,
+  };
+
+  return {
+    runtimeMode: runtime.runtimeMode,
+    generation: {
+      total,
+      ready,
+      failed,
+      queued,
+      processing,
+      successRate,
+      medianGenerationTimeMs,
+    },
+    queueBacklog: queued + processing,
+    providerFailureBreakdown,
+    preprocess,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
 router.get("/index", async (req, res, next) => {
   try {
     const activePosters = await Image.findAll({
@@ -404,84 +483,15 @@ router.get("/:id/preprocess-status", async (req, res, next) => {
 
 router.get("/ops/metrics", async (_req, res, next) => {
   try {
-    const runtime = getEffectiveRuntimeFlags();
-    const [total, ready, failed, processing, queued] = await Promise.all([
-      TalkingPhotoArtifact.count(),
-      TalkingPhotoArtifact.count({ where: { status: "ready" } }),
-      TalkingPhotoArtifact.count({ where: { status: "failed" } }),
-      TalkingPhotoArtifact.count({ where: { status: "processing" } }),
-      TalkingPhotoArtifact.count({ where: { status: "queued" } }),
-    ]);
+    return res.json(await buildOpsMetricsPayload());
+  } catch (error) {
+    return next(error);
+  }
+});
 
-    const successRate = total > 0 ? ready / total : 0;
-
-    const readyArtifacts = await TalkingPhotoArtifact.findAll({
-      where: {
-        status: "ready",
-        lastProcessingDurationMs: { [Op.ne]: null },
-      },
-      attributes: ["lastProcessingDurationMs", "provider", "errorCode"],
-      limit: 500,
-      order: [["updatedAt", "DESC"]],
-    });
-    const durations = readyArtifacts
-      .map((a: any) => Number(a.lastProcessingDurationMs))
-      .filter((v) => Number.isFinite(v) && v > 0)
-      .sort((a, b) => a - b);
-    const medianGenerationTimeMs =
-      durations.length === 0
-        ? null
-        : durations[Math.floor(durations.length / 2)];
-
-    const providerFailureBreakdown = {
-      managed: 0,
-      self_hosted: 0,
-      none: 0,
-      unknown: 0,
-    };
-    const failedArtifacts = await TalkingPhotoArtifact.findAll({
-      where: { status: "failed" },
-      attributes: ["provider"],
-      limit: 500,
-      order: [["updatedAt", "DESC"]],
-    });
-    for (const row of failedArtifacts as any[]) {
-      const provider = row.provider;
-      if (provider === "managed") providerFailureBreakdown.managed++;
-      else if (provider === "self_hosted") providerFailureBreakdown.self_hosted++;
-      else if (provider === "none") providerFailureBreakdown.none++;
-      else providerFailureBreakdown.unknown++;
-    }
-
-    const preprocessSummary = await PosterPreprocessResult.findAll({
-      attributes: ["status", "eligibleForTalkingPhoto"],
-      limit: 500,
-      order: [["updatedAt", "DESC"]],
-    });
-    const preprocess = {
-      total: preprocessSummary.length,
-      ready: preprocessSummary.filter((p: any) => p.status === "ready").length,
-      failed: preprocessSummary.filter((p: any) => p.status === "failed").length,
-      eligible: preprocessSummary.filter((p: any) => !!p.eligibleForTalkingPhoto)
-        .length,
-    };
-
-    return res.json({
-      runtimeMode: runtime.runtimeMode,
-      generation: {
-        total,
-        ready,
-        failed,
-        queued,
-        processing,
-        successRate,
-        medianGenerationTimeMs,
-      },
-      queueBacklog: queued + processing,
-      providerFailureBreakdown,
-      preprocess,
-      generatedAt: new Date().toISOString(),
-    });
+router.get("/ops/stats", async (req, res, next) => {
+  try {
+    return res.json(await buildOpsMetricsPayload());
   } catch (error) {
     return next(error);
   }

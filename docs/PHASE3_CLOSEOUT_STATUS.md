@@ -6,6 +6,7 @@ Overall decision: **NOT READY TO MOVE TO PHASE 4**
 Latest execution update: 2026-05-02 10:10 UTC gate run captured for steps 10/25/50/100
 
 ## Gate Matrix
+
 - [x] `catalog-sweep.json` exists
 - [ ] `prewarm-report.json` valid and complete (current run timed out)
 - [ ] `step-10/cutover-gate-summary.json` has `"canPromote": true` (currently `false`)
@@ -21,36 +22,43 @@ Latest execution update: 2026-05-02 10:10 UTC gate run captured for steps 10/25/
 - [ ] `approvals.md` finalized with required signoffs
 
 ## What exists right now
+
 - `docs/evidence/phase3-ga/catalog-sweep.json`
 - `docs/evidence/phase3-ga/phase2-promotion-summary.json`
-- `docs/evidence/phase3-ga/prewarm-report.json` (incomplete due to timeout)
-- `docs/evidence/phase3-ga/step-10/health.json`
-- `docs/evidence/phase3-ga/step-10/smoke-create.json`
-- `docs/evidence/phase3-ga/step-10/cutover-gate-summary.json` (`canPromote=false`)
-- `docs/evidence/phase3-ga/step-25/cutover-gate-summary.json` (`canPromote=false`)
-- `docs/evidence/phase3-ga/step-50/cutover-gate-summary.json` (`canPromote=false`)
-- `docs/evidence/phase3-ga/step-100/cutover-gate-summary.json` (`canPromote=false`)
-
-## Missing high-priority files
-- Valid prewarm output (retry needed due to timeout)
+- `docs/evidence/phase3-ga/prewarm-report.json` (no eligible posters found)
 - `docs/evidence/phase3-ga/step-10/load-soak-report.json`
 - `docs/evidence/phase3-ga/step-10/security-report.json`
 - `docs/evidence/phase3-ga/step-10/mobile-matrix.json`
 - `docs/evidence/phase3-ga/step-10/alerts-summary.json`
+- `docs/evidence/phase3-ga/step-10/health.json`
+- `docs/evidence/phase3-ga/step-10/smoke-create.json`
+- `docs/evidence/phase3-ga/step-10/cutover-gate-summary.json` (`canPromote=false`)
 - `docs/evidence/phase3-ga/step-25/load-soak-report.json`
 - `docs/evidence/phase3-ga/step-25/security-report.json`
 - `docs/evidence/phase3-ga/step-25/mobile-matrix.json`
 - `docs/evidence/phase3-ga/step-25/alerts-summary.json`
+- `docs/evidence/phase3-ga/step-25/cutover-gate-summary.json` (`canPromote=false`)
 - `docs/evidence/phase3-ga/step-50/load-soak-report.json`
 - `docs/evidence/phase3-ga/step-50/security-report.json`
 - `docs/evidence/phase3-ga/step-50/mobile-matrix.json`
 - `docs/evidence/phase3-ga/step-50/alerts-summary.json`
+- `docs/evidence/phase3-ga/step-50/cutover-gate-summary.json` (`canPromote=false`)
 - `docs/evidence/phase3-ga/step-100/load-soak-report.json`
 - `docs/evidence/phase3-ga/step-100/security-report.json`
 - `docs/evidence/phase3-ga/step-100/mobile-matrix.json`
 - `docs/evidence/phase3-ga/step-100/alerts-summary.json`
+- `docs/evidence/phase3-ga/step-100/cutover-gate-summary.json` (`canPromote=false`)
+
+## Missing high-priority files
+
+- Valid prewarm output with eligible posters
+- Passing load/soak metrics for every step
+- Passing security checks for every step
+- Approved mobile matrix evidence for every step
+- Gate summaries that return `canPromote: true`
 
 ## Fastest path to unblock
+
 Run from `backend/` after setting env vars in `docs/PHASE3_COMMAND_CHECKLIST.md`:
 
 ```bash
@@ -69,6 +77,7 @@ done
 ```
 
 Then finalize:
+
 - `docs/evidence/phase3-ga/go-no-go.md`
 - `docs/evidence/phase3-ga/approvals.md`
 

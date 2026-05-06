@@ -20,6 +20,8 @@
     "phase2:promotion:summary": "node scripts/phase2/promotion-gate-summary.js",
     "phase3:catalog:sweep": "node scripts/phase3/catalog-ga-sweep.js",
     "phase3:catalog:prewarm": "node scripts/phase3/catalog-prewarm.js",
+    "phase3:mobile:matrix": "node scripts/phase3/mobile-matrix-run.js",
+    "phase3:seed-poster": "node scripts/phase3/seed-phase3-poster.js",
     "phase3:cutover:gate": "node scripts/phase3/cutover-gate-check.js",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
@@ -48,7 +50,6 @@
     "morgan": "^1.10.0",
     "multer": "^2.0.4",
     "ngrok": "^5.0.0-beta.2",
-
     "pg": "^8.13.1",
     "sequelize": "^6.37.8",
     "socket.io": "^4.8.1",
