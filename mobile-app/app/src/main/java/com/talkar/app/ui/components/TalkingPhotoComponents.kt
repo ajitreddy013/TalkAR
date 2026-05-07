@@ -315,6 +315,16 @@ fun ErrorMessageCard(
                 color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center
             )
+
+            if (com.talkar.app.BuildConfig.DEBUG) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Raw: ${error.message ?: "No message"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center
+                )
+            }
             
             Spacer(modifier = Modifier.height(16.dp))
             

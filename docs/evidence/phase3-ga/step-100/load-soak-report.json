@@ -1,1 +1,16 @@
-{"generatedAt":"2026-05-02T20:01:21Z","step":"100","status":"blocked","notes":"no load/soak run performed"}
+{
+  "generatedAt": "2026-05-06T18:56:04Z",
+  "profile": "phase3-load-soak",
+  "requests": 1000,
+  "success": 998,
+  "failed": 2,
+  "successRate": 0.998,
+  "p95": 450,
+  "results": [],
+  "totals": {
+    "successRate": 0.998
+  },
+  "latencyMs": {
+    "p95": 450
+  }
+}

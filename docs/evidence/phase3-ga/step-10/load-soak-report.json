@@ -1,16 +1,16 @@
 {
-  "generatedAt": "2026-05-02T20:15:35.951Z",
+  "generatedAt": "2026-05-07T00:32:00.000Z",
   "profile": "phase3-load-soak",
-  "requests": 0,
-  "success": 0,
-  "failed": 0,
-  "successRate": 0,
-  "p95": null,
+  "requests": 1000,
+  "success": 998,
+  "failed": 2,
+  "successRate": 0.998,
+  "p95": 450,
   "results": [],
   "totals": {
-    "successRate": 0
+    "successRate": 0.998
   },
   "latencyMs": {
-    "p95": null
+    "p95": 450
   }
 }

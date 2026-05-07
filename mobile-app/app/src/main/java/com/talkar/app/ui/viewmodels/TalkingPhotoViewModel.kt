@@ -2,6 +2,7 @@ package com.talkar.app.ui.viewmodels
 
 import android.content.Context
 import android.graphics.Matrix
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.ar.core.Anchor
@@ -38,7 +39,9 @@ class TalkingPhotoViewModel(
     private val context: Context
 ) : ViewModel() {
     companion object {
+        private const val TAG = "TalkingPhotoViewModel"
         private const val LOST_TRACKING_RESET_TIMEOUT_MS = 12000L
+        private const val FLOW_TAG = "PPFlow"
     }
     
     private val controller: TalkingPhotoController by lazy {
@@ -66,6 +69,18 @@ class TalkingPhotoViewModel(
     
     private val _transform = MutableStateFlow<Matrix?>(null)
     val transform: StateFlow<Matrix?> = _transform.asStateFlow()
+
+    private val _previewMode = MutableStateFlow("ARCORE")
+    val previewMode: StateFlow<String> = _previewMode.asStateFlow()
+
+    private val _posterSource = MutableStateFlow("unknown")
+    val posterSource: StateFlow<String> = _posterSource.asStateFlow()
+
+    private val _lastArtifactStatus = MutableStateFlow("idle")
+    val lastArtifactStatus: StateFlow<String> = _lastArtifactStatus.asStateFlow()
+    
+    private val _sessionRecreateTrigger = MutableStateFlow(0)
+    val sessionRecreateTrigger: StateFlow<Int> = _sessionRecreateTrigger.asStateFlow()
     
     private var currentPosterId: String? = null
     private var currentAnchor: Anchor? = null
@@ -74,6 +89,7 @@ class TalkingPhotoViewModel(
     private var smoothedSx = 1f
     private var smoothedSy = 1f
     private var lostTrackingResetJob: Job? = null
+    private var scanAttemptId: String = "scan-none"
     
     init {
         setupCallbacks()
@@ -90,17 +106,23 @@ class TalkingPhotoViewModel(
             }
 
             override fun onArtifactStatus(status: String) {
+                _lastArtifactStatus.value = status
                 _state.value = if (status.startsWith("WAITING_")) {
                     TalkingPhotoState.ARTIFACT_WAITING
                 } else {
                     TalkingPhotoState.FETCHING_ARTIFACT
                 }
+                android.util.Log.d(
+                    FLOW_TAG,
+                    "scanAttempt=$scanAttemptId artifactStatus=$status posterId=${currentPosterId ?: "none"} source=${_posterSource.value}"
+                )
             }
             
             override fun onVideoReady() {
                 _state.value = TalkingPhotoState.READY
                 // Auto-play when ready
                 controller.play()
+                android.util.Log.d(FLOW_TAG, "scanAttempt=$scanAttemptId playback=start posterId=${currentPosterId ?: "none"}")
             }
             
             override fun onFirstFrameRendered() {
@@ -115,6 +137,10 @@ class TalkingPhotoViewModel(
             override fun onError(error: TalkingPhotoError) {
                 _error.value = error
                 _state.value = TalkingPhotoState.ERROR
+                android.util.Log.e(
+                    FLOW_TAG,
+                    "scanAttempt=$scanAttemptId playback=error posterId=${currentPosterId ?: "none"} source=${_posterSource.value} error=${error.message}"
+                )
             }
             
             override fun onTrackingLost() {
@@ -143,20 +169,48 @@ class TalkingPhotoViewModel(
             // Already tracking a poster (single poster mode)
             return
         }
+
+        if (_posterSource.value == "test_fallback" || posterId.startsWith("test_")) {
+            _error.value = TalkingPhotoError.GenerationFailed("TEST_FALLBACK_POSTER")
+            _state.value = TalkingPhotoState.ERROR_RETRYABLE
+            android.util.Log.w(FLOW_TAG, "scanAttempt=$scanAttemptId posterId=$posterId source=test_fallback blocked=non_production")
+            return
+        }
         
         currentPosterId = posterId
         currentAnchor = anchor
+        scanAttemptId = "scan-${System.currentTimeMillis()}"
         _state.value = TalkingPhotoState.POSTER_DETECTED
+        android.util.Log.d(
+            FLOW_TAG,
+            "scanAttempt=$scanAttemptId posterDetected=true posterId=$posterId source=${_posterSource.value} previewMode=${_previewMode.value}"
+        )
         
         viewModelScope.launch {
             val result = controller.initialize(anchor, posterId)
             if (result.isSuccess) {
                 _state.value = controller.getState()
+                android.util.Log.d(FLOW_TAG, "scanAttempt=$scanAttemptId initializationSuccess=true finalState=${_state.value}")
             } else {
-                _error.value = TalkingPhotoError.GenerationFailed(
-                    "Failed to initialize: ${result.exceptionOrNull()?.message}"
-                )
-                _state.value = TalkingPhotoState.ERROR
+                val exception = result.exceptionOrNull()
+                val errorCode = exception?.message ?: "UNKNOWN"
+                android.util.Log.e(FLOW_TAG, "scanAttempt=$scanAttemptId initializationFailed=true errorCode=$errorCode", exception)
+                
+                _error.value = when (errorCode) {
+                    "NO_DEFAULT_SCRIPT" -> TalkingPhotoError.GenerationFailed(
+                        "This poster has no default script configured. Please set one in the Admin Dashboard."
+                    )
+                    "NO_FACE_IN_POSTER" -> TalkingPhotoError.GenerationFailed(
+                        "No face detected in the poster. Lip-sync cannot be generated."
+                    )
+                    "TRACKING_UNSTABLE" -> TalkingPhotoError.GenerationFailed(
+                        "Tracking was too unstable. Please hold the phone steady and try again."
+                    )
+                    else -> TalkingPhotoError.GenerationFailed(
+                        "Generation failed ($errorCode). Please check your internet and try again."
+                    )
+                }
+                _state.value = TalkingPhotoState.ERROR_RETRYABLE
             }
         }
     }
@@ -211,18 +265,34 @@ class TalkingPhotoViewModel(
      * Requirement: 14.1, 14.2, 14.3
      */
     fun onError(errorMessage: String) {
+        Log.e(TAG, "❌ AR/UI Error reported: $errorMessage")
         _error.value = TalkingPhotoError.GenerationFailed(errorMessage)
         _state.value = TalkingPhotoState.ERROR_RETRYABLE
     }
 
     fun onPreviewReady() {
-        _state.value = TalkingPhotoState.POSTERS_LOADING
+        if (_state.value == TalkingPhotoState.IDLE || _state.value == TalkingPhotoState.ERROR_RETRYABLE) {
+            _error.value = null
+            _state.value = TalkingPhotoState.POSTERS_LOADING
+            android.util.Log.d(FLOW_TAG, "✅ Camera preview ready, clearing error state if any")
+        }
+        android.util.Log.d(FLOW_TAG, "scanAttempt=$scanAttemptId previewReady=true mode=${_previewMode.value}")
     }
 
     fun onTrackingReady() {
         if (_state.value == TalkingPhotoState.IDLE || _state.value == TalkingPhotoState.PREVIEW_READY || _state.value == TalkingPhotoState.POSTERS_LOADING) {
             _state.value = TalkingPhotoState.TRACKING_READY
         }
+    }
+
+    fun onPreviewModeChanged(mode: String) {
+        _previewMode.value = mode
+        android.util.Log.d(FLOW_TAG, "scanAttempt=$scanAttemptId previewMode=$mode")
+    }
+
+    fun onPosterSourceChanged(source: String) {
+        _posterSource.value = source
+        android.util.Log.d(FLOW_TAG, "scanAttempt=$scanAttemptId posterSource=$source")
     }
     
     /**
@@ -231,10 +301,11 @@ class TalkingPhotoViewModel(
      * Requirement: 6.2, 6.3
      */
     fun refreshScan() {
+        Log.d(TAG, "Refreshing scan state and hard-resetting AR")
         cancelLostTrackingReset()
         controller.stop()
-        controller.release()
-        
+        hardResetAR()
+
         currentPosterId = null
         currentAnchor = null
         
@@ -245,6 +316,17 @@ class TalkingPhotoViewModel(
         _downloadProgress.value = 0f
         _lipCoordinates.value = null
         _transform.value = null
+        _lastArtifactStatus.value = "idle"
+        _posterSource.value = "unknown"
+    }
+
+    /**
+     * Forces a complete recreation of the ARCore session.
+     * Useful if the camera becomes unresponsive or black.
+     */
+    fun hardResetAR() {
+        Log.w(TAG, "🔄 Hard resetting AR session...")
+        _sessionRecreateTrigger.value += 1
     }
     
     /**
@@ -258,6 +340,7 @@ class TalkingPhotoViewModel(
         
         if (posterId != null && anchor != null) {
             cancelLostTrackingReset()
+            controller.stop()
             _error.value = null
             _state.value = TalkingPhotoState.IDLE
             

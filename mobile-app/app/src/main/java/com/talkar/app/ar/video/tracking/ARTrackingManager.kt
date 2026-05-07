@@ -4,9 +4,10 @@ import com.google.ar.core.Anchor
 import com.google.ar.core.Frame
 import com.talkar.app.ar.video.models.TrackedImage
 
+import com.google.ar.core.AugmentedImageDatabase
+
 /**
  * Manages ARCore poster detection and tracking with single poster mode.
- *
  * Responsibilities:
  * - Initialize AR session with poster database
  * - Detect and track posters with human faces
@@ -17,6 +18,13 @@ import com.talkar.app.ar.video.models.TrackedImage
  * Requirements: 1.1, 1.2, 1.3, 1.4, 6.1, 6.2, 6.3, 6.4
  */
 interface ARTrackingManager {
+    
+    /**
+     * Gets the augmented image database used for tracking.
+     * 
+     * @return The database if initialized, null otherwise
+     */
+    fun getAugmentedImageDatabase(): AugmentedImageDatabase?
     
     /**
      * Initializes AR session with poster database.

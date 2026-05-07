@@ -173,17 +173,41 @@ class EnhancedARService(private val context: Context) {
 
 	/**
 	 * Generate ad content for the provided backend image id. Returns Result wrapping AdContent or error.
-	 * This stub returns a successful Result with null content to indicate "no-op" generation.
+	 * Calls the production generation pipeline via ApiClient.
 	 */
-	fun generateAdContentForImage(imageId: String, productName: String): Result<AdContent?> {
+	suspend fun generateAdContentForImage(imageId: String, productName: String): Result<AdContent?> {
 		// Check cache first
 		val cachedContent = getCachedAdContent(imageId)
 		if (cachedContent != null) {
 			return Result.success(cachedContent)
 		}
 		
-		// Real implementation would call generation pipeline and return AdContent
-		return Result.success(null)
+		return try {
+			val apiClient = com.talkar.app.TalkARApplication.instance.apiClient
+			val request = com.talkar.app.data.api.PosterAdContentRequest(image_id = imageId)
+			val response = apiClient.generateAdContentFromPoster(request)
+			
+			if (response.isSuccessful) {
+				val body = response.body()
+				if (body != null && body.success) {
+					val adContent = AdContent(
+						script = body.script ?: "Welcome to $productName!",
+						audioUrl = body.audio_url,
+						videoUrl = body.video_url,
+						productName = body.metadata?.product_name ?: productName
+					)
+					cacheAdContent(imageId, adContent)
+					Result.success(adContent)
+				} else {
+					Result.failure(Exception(body?.script ?: "Failed to generate ad content"))
+				}
+			} else {
+				Result.failure(Exception("API error: ${response.code()}"))
+			}
+		} catch (e: Exception) {
+			android.util.Log.e("EnhancedARService", "Error generating ad content", e)
+			Result.failure(e)
+		}
 	}
 
 	/**
@@ -204,4 +228,34 @@ class EnhancedARService(private val context: Context) {
 	fun setLightingQuality(quality: LightingQuality) { _lightingQuality.value = quality }
 	fun setTrackingQuality(quality: TrackingQuality) { _trackingQuality.value = quality }
 	fun setLightEstimate(estimate: LightEstimate?) { _lightEstimate.value = estimate }
+
+	// --- ARCore Delegation Methods ---
+
+	/** Get the underlying AR session if available */
+	fun getSession(): com.google.ar.core.Session? = imageService.getSession()
+
+	/** Process an AR frame for image recognition */
+	fun processFrame(frame: com.google.ar.core.Frame) {
+		imageService.processFrame(frame)
+	}
+
+	/** Set display geometry for the AR session */
+	fun setDisplayGeometry(rotation: Int, width: Int, height: Int) {
+		imageService.getSession()?.setDisplayGeometry(rotation, width, height)
+	}
+
+	/** Set camera texture name for the AR session */
+	fun setCameraTextureName(textureId: Int) {
+		imageService.getSession()?.setCameraTextureName(textureId)
+	}
+
+	/** Load images from API into AR database */
+	suspend fun loadImagesFromAPI(images: List<ImageRecognition>) {
+		imageService.loadImagesFromAPI(images)
+	}
+
+	/** Clean up all resources used by the service */
+	fun cleanup() {
+		imageService.cleanup()
+	}
 }

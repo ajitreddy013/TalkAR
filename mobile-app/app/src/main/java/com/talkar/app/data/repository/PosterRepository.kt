@@ -24,6 +24,11 @@ class PosterRepository(
     private val imageRepository: ImageRepository,
     private val context: Context
 ) {
+    enum class PosterSource {
+        BACKEND,
+        BUNDLED_FALLBACK,
+        TEST_FALLBACK
+    }
     
     companion object {
         private const val TAG = "PosterRepository"
@@ -32,6 +37,14 @@ class PosterRepository(
         // Development mode - set to false to use real backend data
         // Set to true only for testing without backend
         private const val USE_MOCK_DATA = false
+
+        fun classifySourceByPosterId(posterId: String): PosterSource {
+            return when {
+                posterId.startsWith("test_") -> PosterSource.TEST_FALLBACK
+                posterId.startsWith("fallback_") -> PosterSource.BUNDLED_FALLBACK
+                else -> PosterSource.BACKEND
+            }
+        }
     }
     
     /**
@@ -55,6 +68,7 @@ class PosterRepository(
             val backendPosters = loadPostersFromBackend()
             if (backendPosters.isNotEmpty()) {
                 Log.d(TAG, "✅ Using backend posters (${backendPosters.size})")
+                Log.d(TAG, "source=backend posterCount=${backendPosters.size}")
                 return@withContext Result.success(backendPosters)
             }
             Log.w(TAG, "⚠️ Backend posters unavailable or empty, switching to bundled fallback posters")
@@ -63,6 +77,7 @@ class PosterRepository(
             val bundledFallback = bundledFallbackResult.getOrNull().orEmpty()
             if (bundledFallback.isNotEmpty()) {
                 Log.d(TAG, "✅ Using bundled fallback posters (${bundledFallback.size})")
+                Log.d(TAG, "source=bundled_fallback posterCount=${bundledFallback.size}")
                 return@withContext Result.success(bundledFallback)
             }
             Log.w(TAG, "⚠️ Bundled fallback posters unavailable, switching to test poster fallback")
@@ -71,6 +86,7 @@ class PosterRepository(
             val testPoster = testPosterResult.getOrNull()
             if (testPoster != null) {
                 Log.d(TAG, "✅ Using test poster fallback")
+                Log.d(TAG, "source=test_fallback posterCount=1")
                 return@withContext Result.success(listOf(testPoster))
             }
 
@@ -210,8 +226,8 @@ class PosterRepository(
             
             val url = URL(fullUrl)
             val connection = url.openConnection()
-            connection.connectTimeout = 10000
-            connection.readTimeout = 10000
+            connection.connectTimeout = 3000
+            connection.readTimeout = 3000
             
             val inputStream = connection.getInputStream()
             val bitmap = BitmapFactory.decodeStream(inputStream)

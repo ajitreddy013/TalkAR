@@ -16,7 +16,7 @@ class ARViewModel : ViewModel() {
     
     private val imageRepository = TalkARApplication.instance.imageRepository
     private val syncRepository = TalkARApplication.instance.syncRepository
-    private val arService = TalkARApplication.instance.arImageRecognitionService
+    private val arService = TalkARApplication.instance.enhancedARService
     
     private val _uiState = MutableStateFlow(ARUiState())
     val uiState: StateFlow<ARUiState> = _uiState.asStateFlow()

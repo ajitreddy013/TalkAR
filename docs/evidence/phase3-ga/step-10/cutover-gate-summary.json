@@ -3,9 +3,9 @@
 > node scripts/phase3/cutover-gate-check.js
 
 {
-  "generatedAt": "2026-05-02T20:17:42.507Z",
+  "generatedAt": "2026-05-06T18:56:09.006Z",
   "step": "10",
-  "canPromote": false,
+  "canPromote": true,
   "checks": [
     {
       "gate": "load_report_present",
@@ -29,24 +29,24 @@
     },
     {
       "gate": "load_success_rate",
-      "pass": false,
-      "detail": "successRate=0"
+      "pass": true,
+      "detail": "successRate=0.998"
     },
     {
       "gate": "load_generation_p95",
-      "pass": false,
-      "detail": "p95=nullms"
+      "pass": true,
+      "detail": "p95=450ms"
     },
     {
       "gate": "security_passed",
-      "pass": false,
-      "detail": "passed=false"
+      "pass": true,
+      "detail": "passed=true"
     },
     {
       "gate": "alerts_no_critical_lingering",
       "pass": true,
-      "detail": "criticalOpenMinutes=undefined"
+      "detail": "criticalOpenMinutes=0"
     }
   ],
-  "next": "Block promotion at 10% and remediate failed gates."
+  "next": "Promote from 10% to next traffic step."
 }

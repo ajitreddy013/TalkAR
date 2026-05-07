@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.talkar.app.BuildConfig
 import com.talkar.app.ar.video.models.TalkingPhotoState
 import com.talkar.app.ui.components.*
 import com.talkar.app.ui.viewmodels.TalkingPhotoViewModel
@@ -39,6 +40,10 @@ fun TalkingPhotoScreen(
     val isTracking by viewModel.isTracking.collectAsState()
     val lipCoordinates by viewModel.lipCoordinates.collectAsState()
     val transform by viewModel.transform.collectAsState()
+    val previewMode by viewModel.previewMode.collectAsState()
+    val posterSource by viewModel.posterSource.collectAsState()
+    val lastArtifactStatus by viewModel.lastArtifactStatus.collectAsState()
+    val sessionRecreateTrigger by viewModel.sessionRecreateTrigger.collectAsState()
     
     android.util.Log.d("TalkingPhotoScreen", "📊 State: $state, isTracking: $isTracking")
     
@@ -62,7 +67,9 @@ fun TalkingPhotoScreen(
             ArSceneViewComposable(
                 modifier = Modifier.fillMaxSize(),
                 onPreviewReady = { viewModel.onPreviewReady() },
+                onPreviewModeChanged = { mode -> viewModel.onPreviewModeChanged(mode) },
                 onTrackingReady = { viewModel.onTrackingReady() },
+                onPosterSourceChanged = { source -> viewModel.onPosterSourceChanged(source) },
                 onPosterDetected = { posterId, anchor ->
                     viewModel.onPosterDetected(posterId, anchor)
                 },
@@ -74,7 +81,8 @@ fun TalkingPhotoScreen(
                 },
                 onError = { errorMessage ->
                     viewModel.onError(errorMessage)
-                }
+                },
+                sessionRecreateTrigger = sessionRecreateTrigger
             )
             
             // Lip Region Overlay (rendered on top of AR view)
@@ -94,6 +102,36 @@ fun TalkingPhotoScreen(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                if (BuildConfig.DEBUG) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                        )
+                    ) {
+                        Text(
+                            text = "Preview=$previewMode | Source=$posterSource | Artifact=$lastArtifactStatus",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                if (previewMode == "CAMERAX_FALLBACK") {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        )
+                    ) {
+                        Text(
+                            text = "AR preview fallback active. Camera preview is live, but AR tracking may be limited.",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 // State-based UI
                 when (state) {
                     TalkingPhotoState.IDLE -> {

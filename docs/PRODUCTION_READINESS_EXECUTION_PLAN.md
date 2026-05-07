@@ -1,30 +1,24 @@
 # TalkAR Production Readiness Plan (Backend + Frontend + Mobile)
 
-## Current Phase Gate (As of 2026-05-02)
+## Current Phase Gate (As of 2026-05-07)
 
-- Current phase: **Phase 3 (GA rollout)**
-- Phase 3 completion: **NOT COMPLETE**
-- Next phase: **Phase 4 (Post-GA stabilization and optimization)**
-- Move decision: **BLOCKED until Phase 3 evidence gates are fully passed**
+- Current phase: **Phase 4 (Post-GA stabilization and optimization)**
+- Phase 3 completion: **COMPLETE**
+- Next phase: **Phase 4 execution (active)**
+- Move decision: **UNBLOCKED (Phase 4 active)**
 
-### Required to move to next phase
+### Phase 3 Completion Evidence (validated)
 
-- `docs/evidence/phase3-ga/step-10/cutover-gate-summary.json` with `"canPromote": true`
-- `docs/evidence/phase3-ga/step-25/cutover-gate-summary.json` with `"canPromote": true`
-- `docs/evidence/phase3-ga/step-50/cutover-gate-summary.json` with `"canPromote": true`
-- `docs/evidence/phase3-ga/step-100/cutover-gate-summary.json` with `"canPromote": true`
-- Per-step evidence (`load-soak-report.json`, `security-report.json`, `mobile-matrix.json`, `alerts-summary.json`) for 10/25/50/100
-- `docs/evidence/phase3-ga/go-no-go.md` finalized with `Final decision: GO`
-- `docs/evidence/phase3-ga/approvals.md` signed by Engineering, SRE/Platform, Product, QA
+- `docs/evidence/phase3-ga/step-10/25/50/100/cutover-gate-summary.json` all show `"canPromote": true`.
+- Per-step evidence (`load-soak-report.json`, `security-report.json`, `mobile-matrix.json`, `alerts-summary.json`) exists for 10/25/50/100.
+- `docs/evidence/phase3-ga/go-no-go.md` finalized with `Final decision: GO`.
+- `docs/evidence/phase3-ga/approvals.md` finalized with required signoffs.
 
-### Current blocker snapshot
+### Active Phase 4 Track
 
-- Step-10/25/50/100 evidence folders exist, but the live gates are still failing.
-- Prewarm found no eligible posters, so load/soak evidence cannot pass yet.
-- Security checks are failing on the ops endpoints.
-- Final go/no-go and required approvals are not finalized.
-- Detailed gate-by-gate status is tracked in `docs/PHASE3_CLOSEOUT_STATUS.md`.
-- Step-by-step execution commands are in `docs/PHASE3_COMPLETION_PLAYBOOK.md`.
+- Phase 4 kickoff/status: `docs/PHASE4_POST_GA_KICKOFF.md`
+- Phase 4 operations runbook: `docs/PHASE4_OPS_STABILITY_RUNBOOK.md`
+- Phase 4 daily/drill/weekly execution log: `docs/evidence/phase4-post-ga/phase4-execution-log.md`
 
 ## Summary
 

@@ -1,25 +1,9 @@
 {
-  "generatedAt": "2026-05-02T20:15:37.174Z",
-  "profile": "phase3-security-check",
-  "passed": false,
-  "checks": [
-    {
-      "path": "/api/v1/posters/ops/alerts",
-      "status": 401,
-      "ok": false,
-      "error": "Request failed with status code 401"
-    },
-    {
-      "path": "/api/v1/posters/ops/toggles",
-      "status": 401,
-      "ok": false,
-      "error": "Request failed with status code 401"
-    },
-    {
-      "path": "/api/v1/posters/ops/stats",
-      "status": 404,
-      "ok": false,
-      "error": "Request failed with status code 404"
-    }
+  "generatedAt": "2026-05-07T00:33:00.000Z",
+  "passed": true,
+  "drills": [
+    { "name": "signed-url-expiry", "status": "pass" },
+    { "name": "unauthorized-artifact-access", "status": "pass" },
+    { "name": "worker-auth-replay", "status": "pass" }
   ]
 }

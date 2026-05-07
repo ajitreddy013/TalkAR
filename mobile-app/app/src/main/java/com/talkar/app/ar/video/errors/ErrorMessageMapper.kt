@@ -62,7 +62,9 @@ object ErrorMessageMapper {
                     "NO_FACE_IN_POSTER" -> "Face Not Detected"
                     "PROVIDER_FAILED" -> "Provider Failed"
                     "NETWORK_UNAVAILABLE" -> "Network Unavailable"
-                    else -> "Generation Failed"
+                    "TEST_FALLBACK_POSTER" -> "Test Poster Only"
+                    "AR_INITIALIZATION_TIMEOUT" -> "Camera Starting"
+                    else -> if (error.message?.startsWith("AR_INITIALIZATION_TIMEOUT") == true) "Camera Starting" else "Generation Failed"
                 },
                 message = if (error.message == "ARTIFACT_NOT_READY") {
                     "Lip-sync artifact is not ready yet for this poster."
@@ -76,13 +78,29 @@ object ErrorMessageMapper {
                     "Video provider failed while preparing the artifact."
                 } else if (error.message == "NETWORK_UNAVAILABLE") {
                     "Network is unavailable while fetching poster artifact."
+                } else if (error.message == "TEST_FALLBACK_POSTER") {
+                    "This is a local test fallback poster, not a backend production poster."
+                } else if (error.message?.contains("AR_INITIALIZATION_TIMEOUT") == true) {
+                    "The AR camera took too long to start. We've switched to a simplified mode."
+                } else if (error.message?.contains("Unable to connect") == true || error.message?.contains("timeout") == true) {
+                    "Unable to connect to the TalkAR backend (${com.talkar.app.data.config.ApiConfig.BASE_URL}). Please check your network."
+                } else if (error.message?.contains("Camera is busy") == true) {
+                    "Camera is currently being used by another application. Please close other camera apps and try again."
+                } else if (error.message?.contains("hardware is unresponsive") == true) {
+                    "Your device's AR hardware is not responding. Using basic camera mode instead."
+                } else if (error.message?.contains("No poster detected") == true) {
+                    "We couldn't find the poster. Please make sure you are pointing the camera at a clear image of the poster."
                 } else {
-                    "Failed to generate the lip-sync video."
+                    "Failed to generate the lip-sync video. (${error.message})"
                 },
                 action = if (error.message == "ARTIFACT_NOT_READY") {
                     "Wait a moment and retry scan."
                 } else if (error.message == "TRACKING_UNSTABLE") {
                     "Re-align the poster, improve lighting, and keep camera steady."
+                } else if (error.message == "TEST_FALLBACK_POSTER") {
+                    "Use a backend poster from the active catalog for real lip-sync validation."
+                } else if (error.message?.contains("AR_INITIALIZATION_TIMEOUT") == true) {
+                    "Please wait a moment, or try moving to a well-lit area."
                 } else {
                     "Please try again. If the problem persists, try a different poster."
                 },

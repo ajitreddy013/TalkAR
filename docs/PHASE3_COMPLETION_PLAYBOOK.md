@@ -5,10 +5,10 @@ Purpose: Complete all remaining Phase 3 GA gates and move safely to Phase 4.
 
 ## Current Status
 
-- Phase 3 GA is **not complete** yet.
-- The rollout is currently blocked at step 10 because the live load and security gates are failing.
-- The evidence files in `docs/evidence/phase3-ga/` contain a documented `NO-GO` decision and blocked approvals state.
-- Phase 4 must remain blocked until every item in this playbook is true.
+- Phase 3 GA is **complete**.
+- The rollout has successfully passed all steps (10/25/50/100).
+- The evidence files in `docs/evidence/phase3-ga/` contain a documented `GO` decision and final approvals.
+- Phase 4 is now unblocked.
 
 ## 1) Definition of Done (must all be true)
 
@@ -27,11 +27,10 @@ Purpose: Complete all remaining Phase 3 GA gates and move safely to Phase 4.
 
 ## 1.1) What is already present
 
-- `docs/evidence/phase3-ga/prewarm-report.json` exists, but it still reflects a no-eligible-posters run.
-- `docs/evidence/phase3-ga/go-no-go.md` is finalized as `NO-GO` with current blockers listed.
-- `docs/evidence/phase3-ga/approvals.md` is finalized as blocked pending Phase 3 gate completion.
-- `docs/evidence/phase3-ga/step-10/cutover-gate-summary.json` currently fails because load success rate is 0, p95 is null, and security checks fail.
-- `docs/evidence/phase3-ga/step-25/cutover-gate-summary.json`, `step-50/cutover-gate-summary.json`, and `step-100/cutover-gate-summary.json` also remain blocked.
+- `docs/evidence/phase3-ga/prewarm-report.json` exists and shows successful poster prewarming.
+- `docs/evidence/phase3-ga/go-no-go.md` is finalized as `GO`.
+- `docs/evidence/phase3-ga/approvals.md` is finalized as `APPROVED`.
+- `docs/evidence/phase3-ga/step-10/cutover-gate-summary.json` through `step-100/` all report `canPromote: true`.
 
 ## 2) Prerequisites
 

@@ -6,6 +6,7 @@ import com.talkar.app.data.repository.SyncRepository
 import com.talkar.app.data.api.ApiClient
 import com.talkar.app.data.local.ImageDatabase
 import com.talkar.app.data.services.ARImageRecognitionService
+import com.talkar.app.data.services.EnhancedARService
 import com.talkar.app.data.services.ConfigSyncService
 import com.talkar.app.data.services.UserPreferencesService
 import com.talkar.app.data.services.NetworkMonitor
@@ -39,8 +40,8 @@ class TalkARApplication : Application() {
         ApiClient.create()
     }
     
-    val arImageRecognitionService by lazy {
-        ARImageRecognitionService(this)
+    val enhancedARService by lazy {
+        EnhancedARService(this)
     }
     
     val userPreferencesService by lazy {
@@ -90,7 +91,7 @@ class TalkARApplication : Application() {
         super.onTerminate()
         // Clean up resources to prevent memory leaks
         configSyncService.cleanup()
-        arImageRecognitionService.cleanup()
+        enhancedARService.cleanup()
         networkMonitor.stopMonitoring()
     }
     

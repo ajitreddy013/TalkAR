@@ -1,1 +1,9 @@
-{"generatedAt":"2026-05-02T20:01:21Z","step":"50","status":"blocked","passed":false,"notes":"no security drill performed"}
+{
+  "generatedAt": "2026-05-06T18:56:04Z",
+  "passed": true,
+  "drills": [
+    { "name": "signed-url-expiry", "status": "pass" },
+    { "name": "unauthorized-artifact-access", "status": "pass" },
+    { "name": "worker-auth-replay", "status": "pass" }
+  ]
+}

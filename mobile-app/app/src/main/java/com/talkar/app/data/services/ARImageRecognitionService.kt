@@ -945,33 +945,30 @@ class ARImageRecognitionService(private val context: Context) {
     }
     
     /**
-     * Start frame processing loop on background thread
+     * Set the texture ID for the camera feed. Called by the renderer.
      */
-    private fun startFrameProcessing() {
-        coroutineScope.launch {
-            Log.d(tag, "Starting frame processing loop on background thread")
-            
-            while (_isTracking.value) {
-                try {
-                    session?.let { session ->
-                        val frame = session.update()
-                        processFrame(frame)
-                    }
-                    
-                    // Small delay to prevent overwhelming the system
-                    delay(33) // ~30 FPS
-                    
-                } catch (e: Exception) {
-                    Log.e(tag, "Error in frame processing loop", e)
-                    delay(100) // Wait before retrying
-                }
-            }
-            
-            Log.d(tag, "Frame processing loop ended")
+    fun setCameraTextureName(textureId: Int) {
+        try {
+            session?.setCameraTextureName(textureId)
+            Log.d(tag, "Camera texture name set: $textureId")
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to set camera texture name", e)
         }
     }
-    
-    
+
+    /**
+     * Set the display geometry for ARCore. Called by the renderer when surface changes.
+     */
+    fun setDisplayGeometry(rotation: Int, width: Int, height: Int) {
+        try {
+            session?.setDisplayGeometry(rotation, width, height)
+            Log.d(tag, "Display geometry set: $width x $height, rotation: $rotation")
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to set display geometry", e)
+        }
+    }
+
+
     /**
      * Clean up all resources including coroutines to prevent memory leaks
      */

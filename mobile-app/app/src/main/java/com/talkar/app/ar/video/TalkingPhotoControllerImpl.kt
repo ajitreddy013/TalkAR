@@ -46,6 +46,7 @@ class TalkingPhotoControllerImpl(
         private const val ARTIFACT_INITIAL_RETRY_MS = 1000L
         private const val ARTIFACT_MAX_RETRY_MS = 6000L
         private const val ARTIFACT_TOTAL_TIMEOUT_MS = 45000L
+        private const val MIN_CONFIDENCE_THRESHOLD = 0.65f
     }
     
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -58,7 +59,7 @@ class TalkingPhotoControllerImpl(
     private var pausedPosition: Long = 0L
     private var resourceReleaseJob: Job? = null
     
-    override suspend fun initialize(anchor: Anchor, posterId: String): Result<Unit> {
+    override suspend fun initialize(anchor: Anchor?, posterId: String): Result<Unit> {
         return withContext(Dispatchers.Main) {
             try {
                 Log.d(TAG, "Initializing talking photo for poster: $posterId")
@@ -97,7 +98,14 @@ class TalkingPhotoControllerImpl(
 
                     val artifactResult = backendFetcher.getTalkingPhotoArtifact(posterId)
                     if (artifactResult.isFailure) {
-                        lastError = "NETWORK_UNAVAILABLE"
+                        val code = artifactResult.exceptionOrNull()?.message
+                        lastError = when (code) {
+                            "ARTIFACT_NOT_READY" -> "ARTIFACT_NOT_READY"
+                            "NO_DEFAULT_SCRIPT" -> "NO_DEFAULT_SCRIPT"
+                            "NO_FACE_IN_POSTER" -> "NO_FACE_IN_POSTER"
+                            "PROVIDER_FAILED" -> "PROVIDER_FAILED"
+                            else -> "NETWORK_UNAVAILABLE"
+                        }
                     } else {
                         val candidate = artifactResult.getOrThrow()
                         if (candidate.runtimeMode == "ready_only" && candidate.status != "ready") {
@@ -124,7 +132,11 @@ class TalkingPhotoControllerImpl(
                 val resolvedArtifact = artifact ?: throw Exception(lastError ?: "ARTIFACT_NOT_READY")
 
                 val confidence = resolvedArtifact.confidence ?: 0f
-                if (confidence < 0.80f) {
+                if (confidence < MIN_CONFIDENCE_THRESHOLD) {
+                    Log.w(
+                        TAG,
+                        "Low confidence for posterId=$posterId confidence=$confidence threshold=$MIN_CONFIDENCE_THRESHOLD"
+                    )
                     throw Exception("TRACKING_UNSTABLE")
                 }
 
@@ -184,6 +196,9 @@ class TalkingPhotoControllerImpl(
                 val error = when (e.message) {
                     "ARTIFACT_NOT_READY" -> TalkingPhotoError.GenerationFailed("ARTIFACT_NOT_READY")
                     "TRACKING_UNSTABLE" -> TalkingPhotoError.GenerationFailed("TRACKING_UNSTABLE")
+                    "NO_DEFAULT_SCRIPT" -> TalkingPhotoError.GenerationFailed("NO_DEFAULT_SCRIPT")
+                    "NO_FACE_IN_POSTER" -> TalkingPhotoError.GenerationFailed("NO_FACE_IN_POSTER")
+                    "PROVIDER_FAILED" -> TalkingPhotoError.GenerationFailed("PROVIDER_FAILED")
                     "NETWORK_UNAVAILABLE" -> TalkingPhotoError.BackendUnavailable("NETWORK_UNAVAILABLE")
                     else -> TalkingPhotoError.GenerationFailed(e.message ?: "Unknown error")
                 }

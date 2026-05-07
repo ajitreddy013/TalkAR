@@ -23,7 +23,13 @@ fun AdContentOverlay(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (!isVisible) return
+    var isVideoPlaying by remember { mutableStateOf(false) }
+    
+    if (!isVisible) {
+        // Reset state when hidden
+        isVideoPlaying = false
+        return
+    }
     
     Box(
         modifier = modifier
@@ -177,50 +183,19 @@ fun AdContentOverlay(
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Media controls
+                    // Action buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        // Audio button
-                        if (adContent.audioUrl != null) {
-                            Button(
-                                onClick = { 
-                                    // TODO: Implement audio playback
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondary
-                                )
-                            ) {
-                                Text("🔊 Play Audio")
-                            }
+                        Button(
+                            onClick = onDismiss,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Close")
                         }
-                        
-                        // Video button
-                        if (adContent.videoUrl != null) {
-                            Button(
-                                onClick = { 
-                                    // TODO: Implement video playback
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary
-                                )
-                            ) {
-                                Text("🎬 Play Video")
-                            }
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    // Close button
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Text("Close")
                     }
                 }
                 // No content state

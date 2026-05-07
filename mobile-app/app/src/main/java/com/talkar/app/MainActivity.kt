@@ -120,7 +120,7 @@ class MainActivity : ComponentActivity() {
                     }
                     
                     // TalkAR Screen - ARCore Augmented Images
-                    if (hasCameraPermission && hasAudioPermission) {
+                    if (hasCameraPermission) {
                         TalkARScreen()
                     } else {
                         // Show permission request UI
@@ -141,7 +141,7 @@ class MainActivity : ComponentActivity() {
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
                                     Text(
-                                        text = "TalkAR needs camera and microphone access for AR features and voice interaction",
+                                        text = "TalkAR needs camera access for AR preview and scanning. Microphone access enables voice interaction.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         textAlign = TextAlign.Center
                                     )

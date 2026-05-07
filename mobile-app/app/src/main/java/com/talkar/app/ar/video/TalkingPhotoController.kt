@@ -21,7 +21,7 @@ interface TalkingPhotoController {
      * @param posterId Unique identifier for the poster
      * @return Result indicating success or failure
      */
-    suspend fun initialize(anchor: Anchor, posterId: String): Result<Unit>
+    suspend fun initialize(anchor: Anchor?, posterId: String): Result<Unit>
     
     /**
      * Updates overlay position based on latest tracking data.

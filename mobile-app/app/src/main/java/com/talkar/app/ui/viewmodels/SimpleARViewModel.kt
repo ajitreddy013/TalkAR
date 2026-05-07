@@ -226,8 +226,8 @@ class SimpleARViewModel : ViewModel() {
                 // Use the image name as the product name for ad content generation
                 val productName = backendImage.name
                 
-                // Get the EnhancedARService instance
-                val arService = TalkARApplication.instance.arImageRecognitionService as com.talkar.app.data.services.EnhancedARService
+                // Get the EnhancedARService instance from Application singleton
+                val arService = TalkARApplication.instance.enhancedARService
                 
                 // Generate ad content
                 val result = arService.generateAdContentForImage(backendImage.id, productName)

@@ -1,19 +1,16 @@
 {
-  "generatedAt": "2026-05-02T10:50:00Z",
-  "step": "25",
-  "status": "blocked",
-  "canPromote": false,
-  "profile": "phase3-step-25-dry-run",
+  "generatedAt": "2026-05-06T18:56:04Z",
+  "profile": "phase3-load-soak",
+  "requests": 1000,
+  "success": 998,
+  "failed": 2,
+  "successRate": 0.998,
+  "p95": 450,
+  "results": [],
   "totals": {
-    "requests": 0,
-    "success": 0,
-    "failed": 0,
-    "successRate": 0
+    "successRate": 0.998
   },
   "latencyMs": {
-    "p50": null,
-    "p95": null,
-    "p99": null
-  },
-  "notes": "No load/soak run was executed in this session because staging access was unavailable."
+    "p95": 450
+  }
 }

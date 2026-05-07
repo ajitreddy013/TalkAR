@@ -31,7 +31,7 @@ class ARTrackingManagerImpl(
     
     companion object {
         private const val TAG = "ARTrackingManager"
-        private const val DETECTION_TIMEOUT_MS = 10000L // 10 seconds (Requirement 14.1)
+        private const val DETECTION_TIMEOUT_MS = 30000L // 30 seconds (Requirement 14.1)
     }
     
     private var imageDatabase: AugmentedImageDatabase? = null
@@ -41,6 +41,8 @@ class ARTrackingManagerImpl(
     private var posterMap: Map<Int, ReferencePoster> = emptyMap()
     private var detectionStartTime: Long = 0
     private var hasReportedTimeout: Boolean = false
+    
+    override fun getAugmentedImageDatabase(): AugmentedImageDatabase? = imageDatabase
     
     override suspend fun initialize(posters: List<ReferencePoster>): Result<Unit> {
         return try {
@@ -56,6 +58,7 @@ class ARTrackingManagerImpl(
             
             // Create augmented image database
             val database = AugmentedImageDatabase(session)
+            Log.d(TAG, "Created AugmentedImageDatabase, numImages=${database.numImages}")
             
             // Add each poster to the database
             humanFacePosters.forEachIndexed { index, poster ->
@@ -72,13 +75,13 @@ class ARTrackingManagerImpl(
                     }
 
                     val imageIndex = database.addImage(
-                        poster.name,
+                        poster.id, // Use poster ID as the unique key in the database
                         bitmap,
                         poster.physicalWidthMeters
                     )
 
                     posterMap = posterMap + (imageIndex to poster)
-                    Log.d(TAG, "Added poster ${poster.id} at index $imageIndex")
+                    Log.d(TAG, "✅ Added poster ${poster.id} (name: ${poster.name}) at ARCore index $imageIndex. Database now has ${database.numImages} images.")
                 } catch (e: Exception) {
                     Log.w(TAG, "Skipping low-quality/invalid poster image: ${poster.id}", e)
                 }
@@ -116,6 +119,9 @@ class ARTrackingManagerImpl(
             
             // Get all tracked augmented images
             val updatedAugmentedImages = frame.getUpdatedTrackables(AugmentedImage::class.java)
+            if (!updatedAugmentedImages.isEmpty()) {
+                Log.d(TAG, "Frame update: found ${updatedAugmentedImages.size} augmented images")
+            }
             
             for (augmentedImage in updatedAugmentedImages) {
                 // Single poster mode: if we're already tracking a poster, ignore others

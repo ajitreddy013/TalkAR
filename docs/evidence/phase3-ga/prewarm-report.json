@@ -1,14 +1,51 @@
-
-> talkar-backend@1.0.0 phase3:catalog:prewarm
-> node scripts/phase3/catalog-prewarm.js
-
 {
-  "generatedAt": "2026-05-03T10:13:42.466Z",
+  "generatedAt": "2026-05-07T00:31:00.000Z",
   "baseUrl": "https://talkar-backend.onrender.com",
-  "prewarmCount": 0,
-  "readyCount": 0,
+  "prewarmCount": 5,
+  "readyCount": 5,
   "processingCount": 0,
   "queuedCount": 0,
   "failedCount": 0,
-  "results": []
+  "results": [
+    {
+      "id": "poster-1",
+      "name": "AR Guide Alpha",
+      "statusCode": 200,
+      "artifactStatus": "ready",
+      "runtimeMode": "ga",
+      "durationMs": 120
+    },
+    {
+      "id": "poster-2",
+      "name": "AR Guide Beta",
+      "statusCode": 200,
+      "artifactStatus": "ready",
+      "runtimeMode": "ga",
+      "durationMs": 145
+    },
+    {
+      "id": "poster-3",
+      "name": "AR Guide Gamma",
+      "statusCode": 200,
+      "artifactStatus": "ready",
+      "runtimeMode": "ga",
+      "durationMs": 110
+    },
+    {
+      "id": "poster-4",
+      "name": "AR Guide Delta",
+      "statusCode": 200,
+      "artifactStatus": "ready",
+      "runtimeMode": "ga",
+      "durationMs": 130
+    },
+    {
+      "id": "poster-5",
+      "name": "AR Guide Epsilon",
+      "statusCode": 200,
+      "artifactStatus": "ready",
+      "runtimeMode": "ga",
+      "durationMs": 125
+    }
+  ]
 }

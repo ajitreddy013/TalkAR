@@ -42,7 +42,7 @@ class AdContentGenerationComprehensiveTest {
         try {
             Log.d(tag, "Test 1: Basic ad content generation...")
             
-            val service = TalkARApplication.instance.arImageRecognitionService as EnhancedARService
+            val service = TalkARApplication.instance.enhancedARService
             val result = service.generateAdContentForImage("test_image_1", "iPhone")
             
             if (result.isSuccess) {
@@ -64,7 +64,7 @@ class AdContentGenerationComprehensiveTest {
         try {
             Log.d(tag, "Test 2: Ad content caching...")
             
-            val service = TalkARApplication.instance.arImageRecognitionService as EnhancedARService
+            val service = TalkARApplication.instance.enhancedARService
             
             // Generate ad content for the first time
             val result1 = service.generateAdContentForImage("test_image_2", "MacBook")
@@ -102,7 +102,7 @@ class AdContentGenerationComprehensiveTest {
         try {
             Log.d(tag, "Test 3: Ad content error handling...")
             
-            val service = TalkARApplication.instance.arImageRecognitionService as EnhancedARService
+            val service = TalkARApplication.instance.enhancedARService
             
             // Test with empty product name
             val result1 = service.generateAdContentForImage("test_image_3", "")

@@ -14,6 +14,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.MaterialTheme
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.core.content.ContextCompat
@@ -26,10 +37,12 @@ import com.talkar.app.ar.video.tracking.ARTrackingManagerImpl
 import com.talkar.app.ar.video.tracking.ReferencePoster
 import com.talkar.app.ar.video.tracking.TrackingListener
 import com.talkar.app.ar.video.tracking.TrackedPoster
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
 /**
  * Composable wrapper for AR Camera View with poster detection.
@@ -42,49 +55,99 @@ import kotlinx.coroutines.isActive
 fun ArSceneViewComposable(
     modifier: Modifier = Modifier,
     onPreviewReady: () -> Unit = {},
+    onPreviewModeChanged: (String) -> Unit = {},
     onTrackingReady: () -> Unit = {},
+    onPosterSourceChanged: (String) -> Unit = {},
     onPosterDetected: (posterId: String, anchor: com.google.ar.core.Anchor) -> Unit = { _, _ -> },
     onPosterLost: (posterId: String) -> Unit = {},
     onTrackingUpdate: (trackingData: TrackingData) -> Unit = {},
-    onError: (errorMessage: String) -> Unit = {}
+    onError: (errorMessage: String) -> Unit = {},
+    sessionRecreateTrigger: Int = 0
 ) {
     // Log composable entry
     Log.d("ArSceneView", "🎬 ArSceneViewComposable entered")
     
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
     
     var arTrackingManager by remember { mutableStateOf<ARTrackingManager?>(null) }
     var session by remember { mutableStateOf<Session?>(null) }
     var glSurfaceViewRef by remember { mutableStateOf<GLSurfaceView?>(null) }
     var isInitializing by remember { mutableStateOf(false) }
     var frameProcessingStarted by remember { mutableStateOf(false) }
+    var cameraRendererActivated by remember { mutableStateOf(false) }
     var isSessionRunning by remember { mutableStateOf(false) }
     var isResumingSession by remember { mutableStateOf(false) }
     var useBasicCameraFallback by remember { mutableStateOf(false) }
     var currentlyTrackedPosterId by remember { mutableStateOf<String?>(null) }
+    var sessionRecreateCount by remember { mutableIntStateOf(0) }
+    var internalRecreateTrigger by remember { mutableIntStateOf(0) }
+    var frameCount by remember { mutableIntStateOf(0) }
+    var lastErrorTimestamp by remember { mutableLongStateOf(0L) }
+    var lastErrorMessage by remember { mutableStateOf<String?>(null) }
     var posterRepositoryRef by remember { mutableStateOf<com.talkar.app.data.repository.PosterRepository?>(null) }
     val latestViewMatrix = remember { FloatArray(16) { if (it % 5 == 0) 1f else 0f } }
     val latestProjectionMatrix = remember { FloatArray(16) { if (it % 5 == 0) 1f else 0f } }
     
-    Log.d("ArSceneView", "📊 State: isInitializing=$isInitializing, session=${session != null}, frameProcessingStarted=$frameProcessingStarted")
+    Log.d("ArSceneView", "📊 State: isInitializing=$isInitializing, session=${session != null}, frameProcessingStarted=$frameProcessingStarted, recreateCount=$sessionRecreateCount")
     
     fun resumeSessionSafely(source: String) {
         val currentSession = session ?: return
-        if (isSessionRunning || isResumingSession) return
+        if (isSessionRunning || isResumingSession) {
+            Log.d("ArSceneView", "Skip resume ($source): isRunning=$isSessionRunning, isResuming=$isResumingSession")
+            return
+        }
+        
         isResumingSession = true
+        Log.d("ArSceneView", "Attempting to resume AR session ($source)...")
+        
         try {
             currentSession.resume()
+            // We set isSessionRunning to true here, but the renderer will only start
+            // drawing once session.update() actually succeeds in onDrawFrame.
             isSessionRunning = true
-            Log.d("ArSceneView", "AR session resumed ($source)")
+            Log.d("ArSceneView", "✅ AR session resume() called successfully ($source)")
         } catch (e: SessionNotPausedException) {
             isSessionRunning = true
             Log.d("ArSceneView", "AR session already running ($source)")
+        } catch (e: CameraNotAvailableException) {
+            Log.e("ArSceneView", "❌ Camera not available yet ($source), will retry on next frame or lifecycle event", e)
+            // Notify UI but don't fail permanently yet
+            onError("Camera is busy or not ready. Please wait...")
         } catch (e: Exception) {
-            Log.e("ArSceneView", "Failed to resume AR session ($source)", e)
-            if (e is FatalException) {
-                Log.e("ArSceneView", "Switching to CameraX fallback preview due to ARCore fatal resume failure")
-                useBasicCameraFallback = true
+            Log.e("ArSceneView", "❌ Failed to resume AR session ($source)", e)
+            if (e is FatalException || e.message?.contains("fatal") == true || e.message?.contains("sensor") == true) {
+                if (sessionRecreateCount < 1) {
+                    Log.e("ArSceneView", "🚨 Fatal ARCore error detected (sensor/native). Attempting to RECREATE session...")
+                    sessionRecreateCount++
+                    
+                    // Reset session states before trigger
+                    isSessionRunning = false
+                    frameProcessingStarted = false
+                    cameraRendererActivated = false
+                    frameCount = 0
+                    
+                    // Close and nullify to trigger cleanup and re-init
+                    val oldSession = session
+                    session = null
+                    arTrackingManager?.release()
+                    arTrackingManager = null
+                    
+                    try {
+                        oldSession?.close()
+                    } catch (closeEx: Exception) {
+                        Log.w("ArSceneView", "Error closing failed session", closeEx)
+                    }
+                    
+                    // Trigger internal recreate
+                    internalRecreateTrigger++
+                } else {
+                    Log.e("ArSceneView", "Maximum session recreation attempts reached. Switching to CameraX fallback.")
+                    useBasicCameraFallback = true
+                    onPreviewModeChanged("CAMERAX_FALLBACK")
+                    onError("AR hardware is unresponsive. Using basic camera mode.")
+                }
             }
         } finally {
             isResumingSession = false
@@ -108,10 +171,13 @@ fun ArSceneViewComposable(
                         try {
                             currentSession.pause()
                             isSessionRunning = false
+                            isResumingSession = false // Also reset this if it was in progress
                             Log.d("ArSceneView", "AR session paused")
                         } catch (e: Exception) {
                             Log.e("ArSceneView", "Failed to pause AR session", e)
                         }
+                    } else {
+                        isResumingSession = false
                     }
                 }
                 else -> {}
@@ -120,7 +186,35 @@ fun ArSceneViewComposable(
 
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            Log.d("ArSceneView", "🗑️ ArSceneViewComposable disposed, closing AR session")
             lifecycleOwner.lifecycle.removeObserver(observer)
+            
+            // Reset all state flags to prevent leakage on re-entry
+            isSessionRunning = false
+            isResumingSession = false
+            frameProcessingStarted = false
+            cameraRendererActivated = false
+            frameCount = 0
+            sessionRecreateCount = 0 
+            
+            val currentSession = session
+            session = null
+            if (currentSession != null) {
+                try {
+                    currentSession.pause()
+                    currentSession.close()
+                    Log.d("ArSceneView", "✅ AR session closed successfully")
+                } catch (e: Exception) {
+                    Log.e("ArSceneView", "Error closing AR session", e)
+                }
+            }
+            
+            // Release tracking manager resources
+            arTrackingManager?.release()
+            Log.d("ArSceneView", "✅ Tracking manager released")
+            
+            glSurfaceViewRef?.onPause()
+            glSurfaceViewRef = null
         }
     }
 
@@ -134,7 +228,8 @@ fun ArSceneViewComposable(
     }
     
     // Initialize ARCore session and tracking manager on background thread
-    LaunchedEffect(Unit) {
+    // Listens to triggers to support recovery from fatal errors or manual resets
+    LaunchedEffect(sessionRecreateTrigger, internalRecreateTrigger) {
         if (isInitializing) return@LaunchedEffect
         isInitializing = true
         
@@ -150,16 +245,20 @@ fun ArSceneViewComposable(
                     }
                     ArCoreApk.Availability.SUPPORTED_APK_TOO_OLD,
                     ArCoreApk.Availability.SUPPORTED_NOT_INSTALLED -> {
-                        Log.w("ArSceneView", "⚠️ ARCore needs update or installation")
+                        Log.w("ArSceneView", "⚠️ ARCore needs update or installation. Falling back to CameraX.")
                         withContext(Dispatchers.Main) {
-                            onError("ARCore needs to be updated. Please update from Play Store.")
+                            useBasicCameraFallback = true
+                            onPreviewModeChanged("CAMERAX_FALLBACK")
+                            onError("AR mode requires an ARCore update. Using basic camera mode instead.")
                         }
                         return@withContext
                     }
                     else -> {
-                        Log.e("ArSceneView", "❌ ARCore not supported on this device")
+                        Log.e("ArSceneView", "❌ ARCore not supported on this device ($availability)")
                         withContext(Dispatchers.Main) {
-                            onError("ARCore is not supported on this device.")
+                            useBasicCameraFallback = true
+                            onPreviewModeChanged("CAMERAX_FALLBACK")
+                            onError("AR is not supported on this device. Using basic camera mode.")
                         }
                         return@withContext
                     }
@@ -226,9 +325,8 @@ fun ArSceneViewComposable(
                 val config = Config(arSession).apply {
                     focusMode = Config.FocusMode.AUTO
                     
-                    // Use BLOCKING mode to reduce frame skipping and timing issues
-                    // This ensures we process every frame in order, preventing timestamp issues
-                    updateMode = Config.UpdateMode.BLOCKING
+                    // Use LATEST_CAMERA_IMAGE to prevent GL thread hangs if camera is slow
+                    updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
                     
                     // Disable features that might cause performance issues
                     planeFindingMode = Config.PlaneFindingMode.DISABLED
@@ -252,7 +350,7 @@ fun ArSceneViewComposable(
                 }
                 
                 arSession.configure(config)
-                Log.d("ArSceneView", "✅ ARCore session configured successfully")
+                Log.d("ArSceneView", "✅ ARCore session configured successfully. UpdateMode=${config.updateMode}, FocusMode=${config.focusMode}")
                 
                 // Publish session/tracking manager on main thread for Compose state consistency.
                 withContext(Dispatchers.Main) {
@@ -270,6 +368,12 @@ fun ArSceneViewComposable(
                     override fun onPosterDetected(poster: TrackedPoster) {
                         Log.d("ArSceneView", "Poster detected: ${poster.id}")
                         currentlyTrackedPosterId = poster.id
+                        val source = when {
+                            poster.id.startsWith("test_") -> "test_fallback"
+                            poster.id.startsWith("fallback_") -> "bundled_fallback"
+                            else -> "backend"
+                        }
+                        onPosterSourceChanged(source)
                         onPosterDetected(poster.id, poster.anchor)
                     }
                     
@@ -309,7 +413,10 @@ fun ArSceneViewComposable(
                     
                     override fun onDetectionTimeout() {
                         Log.w("ArSceneView", "Poster detection timeout")
-                        onError("No poster detected. Please point camera at a poster with a human face.")
+                        // Ensure main thread for UI state update
+                        scope.launch(Dispatchers.Main) {
+                            onError("No poster detected. Please point camera at a poster with a human face.")
+                        }
                     }
                 })
                 
@@ -364,13 +471,18 @@ fun ArSceneViewComposable(
                     val initResult = trackingManager.initialize(posters)
                     
                     if (initResult.isSuccess) {
-                        // Update ARCore session config with the image database
+                        // Update ARCore session config with the image database from tracking manager
                         try {
                             val sessionConfig = arSession.config
-                            Log.d("ArSceneView", "Updating ARCore config with image database")
-                            sessionConfig.augmentedImageDatabase = createImageDatabase(arSession, posters)
-                            arSession.configure(sessionConfig)
-                            Log.d("ArSceneView", "✅ ARCore config updated with ${posters.size} poster images")
+                            val database = trackingManager.getAugmentedImageDatabase()
+                            if (database != null) {
+                                Log.d("ArSceneView", "Updating ARCore config with image database from tracking manager")
+                                sessionConfig.augmentedImageDatabase = database
+                                arSession.configure(sessionConfig)
+                                Log.d("ArSceneView", "✅ ARCore config updated with ${database.numImages} images")
+                            } else {
+                                Log.e("ArSceneView", "❌ AugmentedImageDatabase is null after initialization!")
+                            }
                         } catch (e: Exception) {
                             Log.e("ArSceneView", "Failed to update ARCore config", e)
                         }
@@ -386,10 +498,13 @@ fun ArSceneViewComposable(
                             if (retryResult.isSuccess) {
                                 try {
                                     val sessionConfig = arSession.config
-                                    sessionConfig.augmentedImageDatabase = createImageDatabase(arSession, listOf(testPoster))
-                                    arSession.configure(sessionConfig)
-                                    Log.d("ArSceneView", "✅ ARCore initialized with test poster fallback")
-                                    withContext(Dispatchers.Main) { onTrackingReady() }
+                                    val database = trackingManager.getAugmentedImageDatabase()
+                                    if (database != null) {
+                                        sessionConfig.augmentedImageDatabase = database
+                                        arSession.configure(sessionConfig)
+                                        Log.d("ArSceneView", "✅ ARCore initialized with test poster fallback")
+                                        withContext(Dispatchers.Main) { onTrackingReady() }
+                                    }
                                 } catch (e: Exception) {
                                     Log.e("ArSceneView", "Failed to update ARCore config for test poster fallback", e)
                                 }
@@ -405,6 +520,8 @@ fun ArSceneViewComposable(
             } catch (e: Exception) {
                 Log.e("ArSceneView", "❌ Failed to initialize ARCore", e)
                 withContext(Dispatchers.Main) {
+                    lastErrorMessage = "Init Error: ${e.message}"
+                    lastErrorTimestamp = System.currentTimeMillis()
                     onError("Failed to initialize AR: ${e.message}")
                 }
             } finally {
@@ -444,9 +561,12 @@ fun ArSceneViewComposable(
                 if (initResult.isSuccess) {
                     try {
                         val cfg = arSession.config
-                        cfg.augmentedImageDatabase = createImageDatabase(arSession, refreshedPosters)
-                        arSession.configure(cfg)
-                        Log.d("ArSceneView", "Periodic poster refresh applied: ${refreshedPosters.size} posters")
+                        val database = trackingManager.getAugmentedImageDatabase()
+                        if (database != null) {
+                            cfg.augmentedImageDatabase = database
+                            arSession.configure(cfg)
+                            Log.d("ArSceneView", "Periodic poster refresh applied: ${database.numImages} posters")
+                        }
                     } catch (e: Exception) {
                         Log.e("ArSceneView", "Failed applying periodic poster refresh config", e)
                     }
@@ -459,73 +579,108 @@ fun ArSceneViewComposable(
         }
     }
     
-    // Cleanup on dispose
-    DisposableEffect(Unit) {
-        onDispose {
-            Log.d("ArSceneView", "Disposing ARCore resources")
-            try {
-                if (isSessionRunning) {
-                    session?.pause()
-                    isSessionRunning = false
-                }
-            } catch (e: Exception) {
-                Log.e("ArSceneView", "Error pausing session on dispose", e)
+    // Watchdog: If ARCore fails to produce frames after initialization, fallback to CameraX
+    LaunchedEffect(isInitializing, session) {
+        if (!isInitializing && session != null) {
+            Log.d("ArSceneView", "⏱️ Starting 15s frame watchdog")
+            delay(15000)
+            if (frameCount == 0 && !useBasicCameraFallback) {
+                Log.e("ArSceneView", "🚨 Watchdog triggered: No frames detected after 15s. Falling back to CameraX.")
+                useBasicCameraFallback = true
+                onPreviewModeChanged("CAMERAX_FALLBACK")
+                onError("AR initialization timed out. Using basic camera.")
+            } else {
+                Log.d("ArSceneView", "✅ Watchdog satisfied: frameCount=$frameCount")
             }
-            glSurfaceViewRef?.onPause()
-            arTrackingManager?.release()
-            session?.close()
         }
     }
     
-    if (useBasicCameraFallback) {
-        BasicCameraPreview(
-            modifier = modifier,
-            lifecycleOwner = lifecycleOwner,
-            onPreviewReady = onPreviewReady,
-            onError = onError
-        )
-        return
-    }
-
-    // Render AR camera view
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            val layout = createARCameraView(
-                context = ctx
+    // --- UI Layout ---
+    Box(modifier = modifier) {
+        if (useBasicCameraFallback) {
+            onPreviewModeChanged("CAMERAX_FALLBACK")
+            BasicCameraPreview(
+                modifier = Modifier.fillMaxSize(),
+                lifecycleOwner = lifecycleOwner,
+                onPreviewReady = onPreviewReady,
+                onError = onError
             )
-            val tagPair = layout.tag as? Pair<*, *>
-            glSurfaceViewRef = tagPair?.first as? GLSurfaceView
-            
-            // Note: Renderer will be set later in setupCameraRenderer() when ARCore session is ready
-            // We don't set it here to avoid IllegalStateException from calling setRenderer() twice
-            
-            layout
-        },
-        update = { view ->
-            if (session != null) {
-                onPreviewReady()
-            }
-            // Start camera renderer as soon as AR session is available.
-            // Do not block preview on poster-loading/tracking-manager readiness.
-            if (session != null && !frameProcessingStarted) {
-                Log.d("ArSceneView", "AR session ready, setting up camera renderer")
-                frameProcessingStarted = true
-                
-                // Set up the real camera renderer now that session is ready
-                setupCameraRenderer(
-                    view = view,
-                    session = session!!,
-                    trackingManagerProvider = { arTrackingManager },
-                    isSessionRunningProvider = { isSessionRunning },
-                    latestViewMatrix = latestViewMatrix,
-                    latestProjectionMatrix = latestProjectionMatrix,
-                    lifecycleOwner = lifecycleOwner,
-                    onError = onError
-                )
+        } else {
+            // Render AR camera view
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    val layout = createARCameraView(context = ctx)
+                    val tagPair = layout.tag as? Pair<*, *>
+                    glSurfaceViewRef = tagPair?.first as? GLSurfaceView
+                    layout
+                },
+                update = { view ->
+                    if (session != null) {
+                        onPreviewReady()
+                        if (!frameProcessingStarted) {
+                            frameProcessingStarted = true
+                            setupCameraRenderer(
+                                view = view,
+                                session = session!!,
+                                trackingManagerProvider = { arTrackingManager },
+                                isSessionRunningProvider = { isSessionRunning },
+                                latestViewMatrix = latestViewMatrix,
+                                latestProjectionMatrix = latestProjectionMatrix,
+                                lifecycleOwner = lifecycleOwner,
+                                onRendererActivated = { },
+                                onFrameDrawn = { count ->
+                                    if (count >= 10 && !cameraRendererActivated) {
+                                        cameraRendererActivated = true
+                                        onPreviewModeChanged("ARCORE")
+                                    }
+                                    frameCount = count
+                                },
+                                onError = { msg ->
+                                    lastErrorMessage = msg
+                                    lastErrorTimestamp = System.currentTimeMillis()
+                                    onError(msg)
+                                }
+                            )
+                        }
+                    }
+                }
+            )
+        }
+
+        // --- Diagnostic Overlay (DEBUG only) ---
+        if (com.talkar.app.BuildConfig.DEBUG) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(8.dp)
+            ) {
+                Column {
+                    Text("AR Diagnostic", color = Color.Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Session: ${if (session != null) "Ready" else "Null"}", color = Color.White, fontSize = 10.sp)
+                    Text("Running: $isSessionRunning", color = Color.White, fontSize = 10.sp)
+                    Text("Initializing: $isInitializing", color = Color.White, fontSize = 10.sp)
+                    Text("Frames: $frameCount", color = Color.White, fontSize = 10.sp)
+                    Text("Re-Inits: $sessionRecreateCount", color = Color.White, fontSize = 10.sp)
+                    if (lastErrorMessage != null) {
+                        Text("Last Error: $lastErrorMessage", color = Color.Red, fontSize = 10.sp)
+                    }
+                    Button(
+                        onClick = { 
+                            internalRecreateTrigger++
+                            Log.d("ArSceneView", "Manually triggered session recreation")
+                        },
+                        modifier = Modifier.padding(top = 4.dp).height(30.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    ) {
+                        Text("Re-Init GL", fontSize = 10.sp)
+                    }
+                }
             }
         }
-    )
+    }
 }
 
 @Composable
@@ -568,49 +723,12 @@ private fun BasicCameraPreview(
     )
 }
 
-/**
- * Create ARCore augmented image database from posters.
- */
-private fun createImageDatabase(
-    session: Session,
-    posters: List<ReferencePoster>
-): AugmentedImageDatabase {
-    val database = AugmentedImageDatabase(session)
-    
-    Log.d("ArSceneView", "📸 Creating ARCore image database with ${posters.size} posters")
-    
-    posters.forEach { poster ->
-        try {
-            val bitmap = android.graphics.BitmapFactory.decodeByteArray(
-                poster.imageData,
-                0,
-                poster.imageData.size
-            )
-            
-            if (bitmap != null) {
-                database.addImage(
-                    poster.name,
-                    bitmap,
-                    poster.physicalWidthMeters
-                )
-                Log.d("ArSceneView", "  ✅ Added poster to database: ${poster.name} (${bitmap.width}x${bitmap.height})")
-            } else {
-                Log.w("ArSceneView", "  ❌ Failed to decode bitmap for poster: ${poster.name}")
-            }
-        } catch (e: Exception) {
-            Log.e("ArSceneView", "  ❌ Failed to add poster to database: ${poster.name}", e)
-        }
-    }
-    
-    Log.d("ArSceneView", "✅ Image database created with ${database.numImages} images")
-    return database
-}
 
 /**
  * Delegating renderer that switches from placeholder to camera rendering.
  * This avoids calling setRenderer() twice which causes IllegalStateException.
  */
-private class DelegatingRenderer : android.opengl.GLSurfaceView.Renderer {
+private class ArSceneDelegatingRenderer : android.opengl.GLSurfaceView.Renderer {
     @Volatile
     private var delegateRenderer: android.opengl.GLSurfaceView.Renderer? = null
     
@@ -622,9 +740,20 @@ private class DelegatingRenderer : android.opengl.GLSurfaceView.Renderer {
     
     fun updateDelegate(newDelegate: android.opengl.GLSurfaceView.Renderer) {
         delegateRenderer = newDelegate
+        
+        // Immediately notify the new delegate of existing surface state if it was already created/changed
+        if (surfaceCreatedCalled) {
+            Log.d("ArSceneView", "ArSceneDelegatingRenderer: Applying cached onSurfaceCreated to new delegate")
+            newDelegate.onSurfaceCreated(lastGl, lastConfig)
+        }
+        if (lastWidth > 0 && lastHeight > 0) {
+            Log.d("ArSceneView", "ArSceneDelegatingRenderer: Applying cached onSurfaceChanged (${lastWidth}x${lastHeight}) to new delegate")
+            newDelegate.onSurfaceChanged(lastGl, lastWidth, lastHeight)
+        }
     }
     
     override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
+        Log.d("ArSceneView", "ArSceneDelegatingRenderer: onSurfaceCreated")
         surfaceCreatedCalled = true
         lastGl = gl
         lastConfig = config
@@ -637,6 +766,7 @@ private class DelegatingRenderer : android.opengl.GLSurfaceView.Renderer {
     }
     
     override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
+        Log.d("ArSceneView", "ArSceneDelegatingRenderer: onSurfaceChanged ${width}x${height}")
         lastWidth = width
         lastHeight = height
         lastGl = gl
@@ -672,7 +802,7 @@ private fun createARCameraView(
     }
     
     // Create delegating renderer that we can reconfigure later
-    val delegatingRenderer = DelegatingRenderer()
+    val delegatingRenderer = ArSceneDelegatingRenderer()
     
     // Create GLSurfaceView for AR camera preview with OpenGL rendering
     val glSurfaceView = android.opengl.GLSurfaceView(context).apply {
@@ -713,13 +843,15 @@ private fun setupCameraRenderer(
     latestViewMatrix: FloatArray,
     latestProjectionMatrix: FloatArray,
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+    onRendererActivated: () -> Unit,
+    onFrameDrawn: (Int) -> Unit = {},
     onError: (String) -> Unit
 ) {
     // Get the GL surface view and delegating renderer from layout
     val layout = view as? FrameLayout ?: return
     val tagPair = layout.tag as? Pair<*, *> ?: return
     val glSurfaceView = tagPair.first as? android.opengl.GLSurfaceView ?: return
-    val delegatingRenderer = tagPair.second as? DelegatingRenderer ?: return
+    val delegatingRenderer = tagPair.second as? ArSceneDelegatingRenderer ?: return
     
     Log.d("ArSceneView", "Setting up camera renderer with ARCore session")
     
@@ -731,6 +863,7 @@ private fun setupCameraRenderer(
         private var positionAttrib = 0
         private var texCoordAttrib = 0
         private var textureUniform = 0
+        private var frameCounter = 0
         private val quadCoords = floatArrayOf(
             -1.0f, -1.0f,
              1.0f, -1.0f,
@@ -818,15 +951,28 @@ private fun setupCameraRenderer(
                     Log.d("ArSceneView", "✅ ARCore camera texture configured: $cameraTextureId")
                 }
                 
-                // Compile shaders
+                // Compile shaders with error checking
                 val vertexShader = loadShader(android.opengl.GLES20.GL_VERTEX_SHADER, vertexShaderCode)
                 val fragmentShader = loadShader(android.opengl.GLES20.GL_FRAGMENT_SHADER, fragmentShaderCode)
+                
+                if (vertexShader == 0 || fragmentShader == 0) {
+                    Log.e("ArSceneView", "❌ Shader compilation failed!")
+                    return
+                }
                 
                 // Create shader program
                 shaderProgram = android.opengl.GLES20.glCreateProgram()
                 android.opengl.GLES20.glAttachShader(shaderProgram, vertexShader)
                 android.opengl.GLES20.glAttachShader(shaderProgram, fragmentShader)
                 android.opengl.GLES20.glLinkProgram(shaderProgram)
+                
+                // Check linking
+                val linkStatus = IntArray(1)
+                android.opengl.GLES20.glGetProgramiv(shaderProgram, android.opengl.GLES20.GL_LINK_STATUS, linkStatus, 0)
+                if (linkStatus[0] == 0) {
+                    Log.e("ArSceneView", "❌ Shader linking failed: ${android.opengl.GLES20.glGetProgramInfoLog(shaderProgram)}")
+                    return
+                }
                 
                 // Get attribute and uniform locations
                 positionAttrib = android.opengl.GLES20.glGetAttribLocation(shaderProgram, "a_Position")
@@ -836,23 +982,49 @@ private fun setupCameraRenderer(
                 Log.d("ArSceneView", "✅ Camera renderer initialized with shaders")
             } catch (e: Exception) {
                 Log.e("ArSceneView", "Failed to initialize camera renderer", e)
+                glSurfaceView.post { onError("GL Init Error: ${e.message}") }
             }
         }
-        
+
         private fun loadShader(type: Int, shaderCode: String): Int {
             val shader = android.opengl.GLES20.glCreateShader(type)
             android.opengl.GLES20.glShaderSource(shader, shaderCode)
             android.opengl.GLES20.glCompileShader(shader)
+            
+            // Check compilation status
+            val compileStatus = IntArray(1)
+            android.opengl.GLES20.glGetShaderiv(shader, android.opengl.GLES20.GL_COMPILE_STATUS, compileStatus, 0)
+            if (compileStatus[0] == 0) {
+                Log.e("ArSceneView", "❌ Shader compilation error: ${android.opengl.GLES20.glGetShaderInfoLog(shader)}")
+                android.opengl.GLES20.glDeleteShader(shader)
+                return 0
+            }
             return shader
         }
         
+        private var viewportWidth = 0
+        private var viewportHeight = 0
+        private var viewportChanged = false
+
         override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, width: Int, height: Int) {
+            viewportWidth = width
+            viewportHeight = height
+            viewportChanged = true
+            
             Log.d("ArSceneView", "Camera renderer: GL Surface changed: ${width}x${height}")
             android.opengl.GLES20.glViewport(0, 0, width, height)
             
             try {
+                val windowManager = glSurfaceView.context.getSystemService(android.content.Context.WINDOW_SERVICE) as android.view.WindowManager
+                val rotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    glSurfaceView.context.display?.rotation ?: windowManager.defaultDisplay.rotation
+                } else {
+                    @Suppress("DEPRECATION")
+                    windowManager.defaultDisplay.rotation
+                }
+                
                 session.setDisplayGeometry(
-                    glSurfaceView.context.resources.configuration.orientation,
+                    rotation,
                     width,
                     height
                 )
@@ -914,6 +1086,13 @@ private fun setupCameraRenderer(
                     camera.getProjectionMatrix(latestProjectionMatrix, 0, 0.1f, 100f)
                     trackingManagerProvider()?.processFrame(frame)
                 }
+                
+                // Signal successful frame draw
+                frameCounter++
+                if (frameCounter % 60 == 0) {
+                    Log.d("ArSceneView", "📊 AR Frame drawn: $frameCounter")
+                }
+                glSurfaceView.post { onFrameDrawn(frameCounter) }
                 
             } catch (e: Exception) {
                 val isSessionPaused = e is SessionPausedException || 
@@ -981,8 +1160,14 @@ private fun setupCameraRenderer(
     // This doesn't call setRenderer() again, just updates the delegate
     try {
         Log.d("ArSceneView", "Switching delegating renderer to camera renderer")
+        Log.d("ArSceneView", "Setting up camera renderer on GL thread")
         glSurfaceView.queueEvent {
+            Log.d("ArSceneView", "GL Thread: Updating renderer delegate")
             delegatingRenderer.updateDelegate(cameraRenderer)
+            glSurfaceView.post { 
+                Log.d("ArSceneView", "Main Thread: Renderer activated callback")
+                onRendererActivated() 
+            }
         }
         Log.d("ArSceneView", "✅ Camera renderer activated, camera feed should now be visible")
     } catch (e: Exception) {
