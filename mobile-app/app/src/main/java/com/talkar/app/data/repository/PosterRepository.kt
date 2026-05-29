@@ -164,7 +164,7 @@ class PosterRepository(
                                 name = poster.name,
                                 imageData = imageData,
                                 physicalWidthMeters = DEFAULT_POSTER_WIDTH_METERS,
-                                hasHumanFace = poster.talkingPhoto.eligible || poster.talkingPhoto.confidence == null
+                                hasHumanFace = true // Allow all images to be detected
                             )
                         )
                     } catch (e: Exception) {

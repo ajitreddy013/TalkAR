@@ -164,7 +164,7 @@ class TalkingPhotoViewModel(
      * 
      * Requirement: 1.1, 2.1
      */
-    fun onPosterDetected(posterId: String, anchor: Anchor) {
+    fun onPosterDetected(posterId: String, anchor: Anchor?) {
         if (currentPosterId != null) {
             // Already tracking a poster (single poster mode)
             return

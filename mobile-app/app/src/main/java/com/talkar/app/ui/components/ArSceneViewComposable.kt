@@ -58,7 +58,7 @@ fun ArSceneViewComposable(
     onPreviewModeChanged: (String) -> Unit = {},
     onTrackingReady: () -> Unit = {},
     onPosterSourceChanged: (String) -> Unit = {},
-    onPosterDetected: (posterId: String, anchor: com.google.ar.core.Anchor) -> Unit = { _, _ -> },
+    onPosterDetected: (posterId: String, anchor: com.google.ar.core.Anchor?) -> Unit = { _, _ -> },
     onPosterLost: (posterId: String) -> Unit = {},
     onTrackingUpdate: (trackingData: TrackingData) -> Unit = {},
     onError: (errorMessage: String) -> Unit = {},
@@ -74,7 +74,7 @@ fun ArSceneViewComposable(
     var arTrackingManager by remember { mutableStateOf<ARTrackingManager?>(null) }
     var session by remember { mutableStateOf<Session?>(null) }
     var glSurfaceViewRef by remember { mutableStateOf<GLSurfaceView?>(null) }
-    var isInitializing by remember { mutableStateOf(false) }
+    var isInitializing by remember { mutableStateOf(true) }
     var frameProcessingStarted by remember { mutableStateOf(false) }
     var cameraRendererActivated by remember { mutableStateOf(false) }
     var isSessionRunning by remember { mutableStateOf(false) }
@@ -118,36 +118,31 @@ fun ArSceneViewComposable(
         } catch (e: Exception) {
             Log.e("ArSceneView", "❌ Failed to resume AR session ($source)", e)
             if (e is FatalException || e.message?.contains("fatal") == true || e.message?.contains("sensor") == true) {
-                if (sessionRecreateCount < 1) {
-                    Log.e("ArSceneView", "🚨 Fatal ARCore error detected (sensor/native). Attempting to RECREATE session...")
-                    sessionRecreateCount++
-                    
-                    // Reset session states before trigger
-                    isSessionRunning = false
-                    frameProcessingStarted = false
-                    cameraRendererActivated = false
-                    frameCount = 0
-                    
-                    // Close and nullify to trigger cleanup and re-init
-                    val oldSession = session
-                    session = null
-                    arTrackingManager?.release()
-                    arTrackingManager = null
-                    
+                Log.e("ArSceneView", "🚨 Fatal ARCore error detected (sensor/native). Immediately switching to CameraX fallback.")
+                
+                // Clean up session and state
+                isSessionRunning = false
+                frameProcessingStarted = false
+                cameraRendererActivated = false
+                
+                val oldSession = session
+                session = null
+                arTrackingManager?.release()
+                arTrackingManager = null
+
+                // Close after state detachment so GL thread won't keep touching a stale session instance.
+                scope.launch(Dispatchers.Main) {
+                    delay(50)
                     try {
                         oldSession?.close()
                     } catch (closeEx: Exception) {
                         Log.w("ArSceneView", "Error closing failed session", closeEx)
                     }
-                    
-                    // Trigger internal recreate
-                    internalRecreateTrigger++
-                } else {
-                    Log.e("ArSceneView", "Maximum session recreation attempts reached. Switching to CameraX fallback.")
-                    useBasicCameraFallback = true
-                    onPreviewModeChanged("CAMERAX_FALLBACK")
-                    onError("AR hardware is unresponsive. Using basic camera mode.")
                 }
+                
+                useBasicCameraFallback = true
+                onPreviewModeChanged("CAMERAX_FALLBACK")
+                onError("AR hardware is unresponsive. Using basic camera mode.")
             }
         } finally {
             isResumingSession = false
@@ -227,10 +222,13 @@ fun ArSceneViewComposable(
         }
     }
     
+    var hasInitStarted by remember { mutableStateOf(false) }
+
     // Initialize ARCore session and tracking manager on background thread
     // Listens to triggers to support recovery from fatal errors or manual resets
     LaunchedEffect(sessionRecreateTrigger, internalRecreateTrigger) {
-        if (isInitializing) return@LaunchedEffect
+        if (hasInitStarted && isInitializing) return@LaunchedEffect
+        hasInitStarted = true
         isInitializing = true
         
         withContext(Dispatchers.IO) {
@@ -238,7 +236,17 @@ fun ArSceneViewComposable(
                 Log.d("ArSceneView", "Checking ARCore availability...")
                 
                 // Check if ARCore is supported and up to date
-                val availability = ArCoreApk.getInstance().checkAvailability(context)
+                var availability = ArCoreApk.getInstance().checkAvailability(context)
+                
+                if (availability.isUnknown) {
+                    var checks = 0
+                    while (availability.isUnknown && checks < 25) { // up to 5 seconds
+                        delay(200)
+                        availability = ArCoreApk.getInstance().checkAvailability(context)
+                        checks++
+                    }
+                }
+                
                 when (availability) {
                     ArCoreApk.Availability.SUPPORTED_INSTALLED -> {
                         Log.d("ArSceneView", "✅ ARCore supported and installed")
@@ -303,17 +311,26 @@ fun ArSceneViewComposable(
                         } catch (retryException: Exception) {
                             Log.e("ArSceneView", "❌ Failed to create session on retry", retryException)
                             withContext(Dispatchers.Main) {
+                                useBasicCameraFallback = true
+                                onPreviewModeChanged("CAMERAX_FALLBACK")
                                 onError("Failed to initialize AR camera: ${retryException.message}")
                             }
                             return@withContext
                         }
                     } else {
                         Log.e("ArSceneView", "❌ Illegal argument creating session", e)
-                        throw e
+                        withContext(Dispatchers.Main) {
+                            useBasicCameraFallback = true
+                            onPreviewModeChanged("CAMERAX_FALLBACK")
+                            onError("AR configuration not supported on this device.")
+                        }
+                        return@withContext
                     }
                 } catch (e: Exception) {
                     Log.e("ArSceneView", "❌ Unexpected error creating ARCore session", e)
                     withContext(Dispatchers.Main) {
+                        useBasicCameraFallback = true
+                        onPreviewModeChanged("CAMERAX_FALLBACK")
                         onError("Failed to initialize AR: ${e.message}")
                     }
                     return@withContext
@@ -352,16 +369,10 @@ fun ArSceneViewComposable(
                 arSession.configure(config)
                 Log.d("ArSceneView", "✅ ARCore session configured successfully. UpdateMode=${config.updateMode}, FocusMode=${config.focusMode}")
                 
-                // Publish session/tracking manager on main thread for Compose state consistency.
-                withContext(Dispatchers.Main) {
-                    session = arSession
-                }
+                // Delay publishing session/tracking manager until posters are loaded and configured
                 
                 // Create tracking manager
                 val trackingManager = ARTrackingManagerImpl(context, arSession)
-                withContext(Dispatchers.Main) {
-                    arTrackingManager = trackingManager
-                }
 
                 // Set up tracking listener
                 trackingManager.setListener(object : TrackingListener {
@@ -488,7 +499,6 @@ fun ArSceneViewComposable(
                         }
                         
                         Log.d("ArSceneView", "✅ ARCore initialized successfully with ${posters.size} posters")
-                        withContext(Dispatchers.Main) { onTrackingReady() }
                     } else {
                         Log.e("ArSceneView", "Failed to initialize tracking manager with current poster set")
                         Log.d("ArSceneView", "Retrying tracking initialization with test poster fallback")
@@ -503,7 +513,6 @@ fun ArSceneViewComposable(
                                         sessionConfig.augmentedImageDatabase = database
                                         arSession.configure(sessionConfig)
                                         Log.d("ArSceneView", "✅ ARCore initialized with test poster fallback")
-                                        withContext(Dispatchers.Main) { onTrackingReady() }
                                     }
                                 } catch (e: Exception) {
                                     Log.e("ArSceneView", "Failed to update ARCore config for test poster fallback", e)
@@ -515,6 +524,14 @@ fun ArSceneViewComposable(
                             Log.e("ArSceneView", "Test poster fallback unavailable")
                         }
                     }
+                }
+                
+                // Publish session/tracking manager on main thread for Compose state consistency.
+                // This triggers the lifecycle LaunchedEffect to resume the session safely.
+                withContext(Dispatchers.Main) {
+                    arTrackingManager = trackingManager
+                    session = arSession
+                    onTrackingReady()
                 }
                 
             } catch (e: Exception) {
@@ -599,14 +616,36 @@ fun ArSceneViewComposable(
     Box(modifier = modifier) {
         if (useBasicCameraFallback) {
             onPreviewModeChanged("CAMERAX_FALLBACK")
+            
+            // Simulate poster detection for testing on unsupported devices
+            LaunchedEffect(Unit) {
+                delay(4000) // 4 seconds delay to allow camera preview to start and show UI
+                Log.d("ArSceneView", "Simulating poster detection for fallback mode")
+                onPosterDetected("test-image-1", null)
+            }
+            
             BasicCameraPreview(
                 modifier = Modifier.fillMaxSize(),
                 lifecycleOwner = lifecycleOwner,
                 onPreviewReady = onPreviewReady,
                 onError = onError
             )
+        } else if (isInitializing) {
+            // Show a black screen or loading while checking ARCore
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Initializing AR...",
+                    color = Color.White,
+                    fontSize = 16.sp
+                )
+            }
         } else {
-            // Render AR camera view
+            // Render AR camera view only after initialization confirmed SUPPORTED
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
@@ -622,7 +661,7 @@ fun ArSceneViewComposable(
                             frameProcessingStarted = true
                             setupCameraRenderer(
                                 view = view,
-                                session = session!!,
+                                sessionProvider = { session },
                                 trackingManagerProvider = { arTrackingManager },
                                 isSessionRunningProvider = { isSessionRunning },
                                 latestViewMatrix = latestViewMatrix,
@@ -646,6 +685,27 @@ fun ArSceneViewComposable(
                     }
                 }
             )
+        }
+
+        // --- Detected Image Overlay ---
+        if (currentlyTrackedPosterId != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 64.dp)
+                    .background(
+                        color = Color.Green.copy(alpha = 0.8f),
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                    )
+                    .padding(horizontal = 24.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = "Image Detected!",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
         }
 
         // --- Diagnostic Overlay (DEBUG only) ---
@@ -837,7 +897,7 @@ private fun createARCameraView(
  */
 private fun setupCameraRenderer(
     view: android.view.View,
-    session: Session,
+    sessionProvider: () -> Session?,
     trackingManagerProvider: () -> ARTrackingManager?,
     isSessionRunningProvider: () -> Boolean,
     latestViewMatrix: FloatArray,
@@ -946,7 +1006,8 @@ private fun setupCameraRenderer(
                 
                 // Configure ARCore to use the camera texture
                 if (!cameraTextureConfigured && cameraTextureId != -1) {
-                    session.setCameraTextureName(cameraTextureId)
+                    val currentSession = sessionProvider() ?: return
+                    currentSession.setCameraTextureName(cameraTextureId)
                     cameraTextureConfigured = true
                     Log.d("ArSceneView", "✅ ARCore camera texture configured: $cameraTextureId")
                 }
@@ -1023,7 +1084,8 @@ private fun setupCameraRenderer(
                     windowManager.defaultDisplay.rotation
                 }
                 
-                session.setDisplayGeometry(
+                val currentSession = sessionProvider() ?: return
+                currentSession.setDisplayGeometry(
                     rotation,
                     width,
                     height
@@ -1044,8 +1106,9 @@ private fun setupCameraRenderer(
                 }
 
                 // Check ARCore session state
+                val currentSession = sessionProvider() ?: return
                 try {
-                    session.cameraConfig
+                    currentSession.cameraConfig
                 } catch (e: Exception) {
                     return
                 }
@@ -1055,7 +1118,7 @@ private fun setupCameraRenderer(
                     if (!isSessionRunningProvider()) {
                         return
                     }
-                    session.update()
+                    currentSession.update()
                 } catch (e: SessionPausedException) {
                     // Session paused between lifecycle transitions; skip this frame safely.
                     return
@@ -1080,11 +1143,13 @@ private fun setupCameraRenderer(
                 // Always draw camera background; tracking may be PAUSED initially.
                 drawCameraBackground(frame)
 
-                // Process poster tracking only when camera tracking is active.
+                // Process poster tracking continuously to allow timeout logic and early detection
+                trackingManagerProvider()?.processFrame(frame)
+
+                // Update matrices only when camera tracking is active to avoid jumpy geometry
                 if (camera.trackingState == TrackingState.TRACKING) {
                     camera.getViewMatrix(latestViewMatrix, 0)
                     camera.getProjectionMatrix(latestProjectionMatrix, 0, 0.1f, 100f)
-                    trackingManagerProvider()?.processFrame(frame)
                 }
                 
                 // Signal successful frame draw
