@@ -23,6 +23,17 @@ android {
         ndk {
             abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
         }
+
+        def localPropertiesFile = rootProject.file("local.properties")
+        def localProperties = new Properties()
+        if (localPropertiesFile.exists()) {
+            localPropertiesFile.withInputStream { stream ->
+                localProperties.load(stream)
+            }
+        }
+        manifestPlaceholders = [
+            ARCORE_API_KEY: localProperties.getProperty("ARCORE_API_KEY", "")
+        ]
     }
     
     packaging {
