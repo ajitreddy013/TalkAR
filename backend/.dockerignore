@@ -1,0 +1,57 @@
+node_modules
+dist
+build
+coverage
+.nyc_output
+
+# Env files (injected at runtime)
+.env
+.env.*
+!.env.example
+
+# Logs and temp files
+logs/
+*.log
+temp/
+tmp/
+audio/
+uploads/
+
+# Test artifacts
+tests/
+*.test.ts
+junit.xml
+
+# Database files (not needed in image)
+*.db
+*.sqlite
+*.sqlite3
+
+# Dev tools
+.aider*
+.eslintcache
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+.dockerignore
+
+# Credentials
+*.pem
+*.key
+*.crt
+*.p12
+
+# Media test files
+*.jpeg
+*.jpg
+*.png
+test-images/

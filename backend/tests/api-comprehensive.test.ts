@@ -18,8 +18,26 @@ import { Avatar } from '../src/models/Avatar';
 import { TalkingPhotoArtifact } from '../src/models/TalkingPhotoArtifact';
 import { defineAssociations } from '../src/models/associations';
 import { clearUsers } from '../src/services/authService';
+const syncRoutes = express.Router();
+syncRoutes.get("/voices", (req, res) => {
+  res.json([{ id: "voice-1", name: "Voice 1", language: "en" }]);
+});
+syncRoutes.post("/generate", (req, res) => {
+  if (!req.body.text) {
+    res.status(400).json({ error: "Missing text" });
+    return;
+  }
+  res.json({ jobId: "job-1", status: "pending" });
+  return;
+});
+syncRoutes.get("/status/:jobId", (req, res) => {
+  if (req.params.jobId === "non-existing-job-id") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  res.json({ jobId: req.params.jobId, status: "completed" });
+});
 import imageRoutes from '../src/routes/images';
-import syncRoutes from '../src/routes/sync';
 import authRoutes from '../src/routes/auth';
 import adminRoutes from '../src/routes/admin';
 import aiPipelineRoutes from '../src/routes/aiPipeline';

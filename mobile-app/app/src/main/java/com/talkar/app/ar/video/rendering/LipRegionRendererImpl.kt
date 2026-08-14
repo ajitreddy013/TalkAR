@@ -145,50 +145,61 @@ class LipRegionRendererImpl : LipRegionRenderer {
         ensureGlInitialized()
         if (!glInitialized || shaderProgram == 0 || oesTextureId == 0) return
 
-        // Keep SurfaceTexture in sync with decoder output frames.
         try {
             surfaceTexture?.updateTexImage()
         } catch (e: Exception) {
-            // Ignore transient texture update errors; frame loop should continue.
+            // Ignore transient texture update errors.
         }
 
-        // Compute transformed lip region bounds (clip-space projected approximation).
-        val left = coords.lipX
-        val top = coords.lipY
-        val right = coords.lipX + coords.lipWidth
-        val bottom = coords.lipY + coords.lipHeight
+        // Project the 4 lip corners through the MVP matrix.
+        // transformPoint() returns true NDC (±1) after perspective divide — use directly.
+        val lx0 = coords.lipX;                    val lz0 = coords.lipY
+        val lx1 = coords.lipX + coords.lipWidth;  val lz1 = coords.lipY + coords.lipHeight
+        val tl = transformPoint(matrix.values, lx0, lz0)
+        val tr = transformPoint(matrix.values, lx1, lz0)
+        val bl = transformPoint(matrix.values, lx0, lz1)
+        val br = transformPoint(matrix.values, lx1, lz1)
 
-        val tl = transformPoint(matrix.values, left, top)
-        val tr = transformPoint(matrix.values, right, top)
-        val br = transformPoint(matrix.values, right, bottom)
-        val bl = transformPoint(matrix.values, left, bottom)
+        // Bounding box in NDC space — guard against degenerate projection
+        val targetLeft   = min(min(tl.first,  tr.first),  min(bl.first,  br.first))
+        val targetRight  = max(max(tl.first,  tr.first),  max(bl.first,  br.first))
+        val targetTop    = max(max(tl.second, tr.second), max(bl.second, br.second))
+        val targetBottom = min(min(tl.second, tr.second), min(bl.second, br.second))
 
-        val targetLeft = min(min(tl.first, tr.first), min(br.first, bl.first))
-        val targetTop = min(min(tl.second, tr.second), min(br.second, bl.second))
-        val targetRight = max(max(tl.first, tr.first), max(br.first, bl.first))
-        val targetBottom = max(max(tl.second, tr.second), max(br.second, bl.second))
+        // Reject if projection gives nonsense (out-of-frustum or collapsed)
+        if (targetRight - targetLeft < 0.001f || targetTop - targetBottom < 0.001f) return
 
-        // Temporal smoothing to reduce jitter.
-        val alpha = 0.22f
-        smoothedLeft = smooth(smoothedLeft, targetLeft, alpha)
-        smoothedTop = smooth(smoothedTop, targetTop, alpha)
-        smoothedRight = smooth(smoothedRight, targetRight, alpha)
+        // Temporal smoothing in NDC space
+        val alpha = 0.3f
+        smoothedLeft   = smooth(smoothedLeft,   targetLeft,   alpha)
+        smoothedRight  = smooth(smoothedRight,  targetRight,  alpha)
+        smoothedTop    = smooth(smoothedTop,    targetTop,    alpha)
         smoothedBottom = smooth(smoothedBottom, targetBottom, alpha)
 
-        val leftNdc = (smoothedLeft * 2f) - 1f
-        val rightNdc = (smoothedRight * 2f) - 1f
-        val topNdc = 1f - (smoothedTop * 2f)
-        val bottomNdc = 1f - (smoothedBottom * 2f)
-
+        // Quad vertices in NDC (TL, TR, BL, BR — TRIANGLE_STRIP order)
         val quad = floatArrayOf(
-            leftNdc, topNdc,
-            rightNdc, topNdc,
-            leftNdc, bottomNdc,
-            rightNdc, bottomNdc
+            smoothedLeft,  smoothedTop,
+            smoothedRight, smoothedTop,
+            smoothedLeft,  smoothedBottom,
+            smoothedRight, smoothedBottom
         )
         vertexBuffer?.position(0)
         vertexBuffer?.put(quad)
         vertexBuffer?.position(0)
+
+        // Texture UV — crop to the lip region within the full video frame.
+        // Wav2Lip video has same pixel layout as the poster; lip coords map directly to UV.
+        val u0 = coords.lipX;                    val v0 = coords.lipY
+        val u1 = coords.lipX + coords.lipWidth;  val v1 = coords.lipY + coords.lipHeight
+        val lipTexCoords = floatArrayOf(
+            u0, v0,
+            u1, v0,
+            u0, v1,
+            u1, v1
+        )
+        texCoordBuffer?.position(0)
+        texCoordBuffer?.put(lipTexCoords)
+        texCoordBuffer?.position(0)
 
         GLES20.glUseProgram(shaderProgram)
         GLES20.glEnable(GLES20.GL_BLEND)
@@ -197,14 +208,11 @@ class LipRegionRendererImpl : LipRegionRenderer {
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
         GLES20.glUniform1i(textureHandle, 0)
-
-        // Stronger alpha at center, feathered edges in fragment shader.
-        GLES20.glUniform1f(alphaHandle, 0.92f)
+        GLES20.glUniform1f(alphaHandle, 0.95f)
 
         GLES20.glEnableVertexAttribArray(positionHandle)
         GLES20.glVertexAttribPointer(positionHandle, 2, GLES20.GL_FLOAT, false, 0, vertexBuffer)
         GLES20.glEnableVertexAttribArray(texCoordHandle)
-        texCoordBuffer?.position(0)
         GLES20.glVertexAttribPointer(texCoordHandle, 2, GLES20.GL_FLOAT, false, 0, texCoordBuffer)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 

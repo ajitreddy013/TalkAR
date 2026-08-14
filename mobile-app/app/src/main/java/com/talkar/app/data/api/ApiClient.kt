@@ -87,17 +87,16 @@ interface ApiService {
         @Part("posterId") posterId: RequestBody? = null
     ): Response<ConversationalQueryResponse>
     
-    @POST("sync/generate")
-    suspend fun generateSyncVideo(@Body request: SyncRequest): Response<SyncResponse>
-    
-    @GET("sync/status/{jobId}")
-    suspend fun getSyncStatus(@Path("jobId") jobId: String): Response<SyncResponse>
-    
-    @GET("sync/talking-head/{imageId}")
-    suspend fun getTalkingHeadVideo(@Path("imageId") imageId: String, @Query("language") language: String?): Response<TalkingHeadVideo>
+
 
     @GET("posters/{id}/talking-photo")
     suspend fun getTalkingPhotoArtifact(@Path("id") imageId: String): Response<TalkingPhotoArtifactResponse>
+
+    @POST("posters/{id}/talking-photo/retry")
+    suspend fun retryTalkingPhotoArtifact(
+        @Path("id") imageId: String,
+        @Body request: TalkingPhotoRetryRequest
+    ): Response<TalkingPhotoRetryResponse>
 
     @GET("posters/index")
     suspend fun getPosterIndex(): Response<PosterIndexResponse>
@@ -268,6 +267,21 @@ data class TalkingHeadRequest(
     val imageId: String,
     val text: String,
     val voiceId: String? = null
+)
+
+data class TalkingPhotoRetryRequest(
+    val source: String = "mobile_runtime",
+    val reason: String = "artifact_not_ready"
+)
+
+data class TalkingPhotoRetryResponse(
+    val success: Boolean,
+    val queued: Boolean,
+    val deduplicated: Boolean? = null,
+    val version: Int? = null,
+    val message: String? = null,
+    val runtimeMode: String? = null,
+    val errorCode: String? = null
 )
 
 // AI Pipeline data models

@@ -7,7 +7,7 @@ import android.util.Log
 import com.talkar.app.data.models.BackendImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import android.net.Uri
+import com.talkar.app.ar.video.tracking.ReferencePoster
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.io.IOException
@@ -20,30 +20,32 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.cancel
 
-
 /**
  * Service for matching camera frames against backend reference images
- * Uses simple template matching without heavy ML libraries
+ * Uses robust hybrid matching: 8x8 Average RGB Color Grid + 8x8 Block-level dHash
  */
 class ImageMatcherService(private val context: Context) {
     
     companion object {
         private const val TAG = "ImageMatcherService"
-        private const val MATCH_THRESHOLD = 0.50 // Threshold with dual verification
+        private const val STRONG_MATCH_THRESHOLD = 0.74f
+        private const val STABLE_MATCH_THRESHOLD = 0.60f
+        private const val STABLE_MATCH_COUNT = 2
+        private const val STABLE_MATCH_WINDOW_MS = 5000L
         private const val DEBOUNCE_MS = 1000L // Fast frame analysis check
         private const val COOLDOWN_MS = 8000L // 8s cooldown for same product
-        private const val MAX_DIMENSION = 512 // Downscale images for faster comparison
+        private const val GRID_SIZE = 8 // 8x8 grid size
     }
     
     data class ImageTemplate(
         val id: String,
         val name: String,
         val description: String?,
-        val bitmap: Bitmap,
+        val colorGrid: FloatArray, // 8x8x3 = 192 floats
+        val blockHash: BooleanArray, // 8x8x2 = 128 bits
         val dialogues: List<Any>?
     )
     
-    private val activeReaders = java.util.concurrent.atomic.AtomicInteger(0)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var preloadJob: kotlinx.coroutines.Job? = null
 
@@ -64,7 +66,6 @@ class ImageMatcherService(private val context: Context) {
     )
     
     private val templates = mutableListOf<ImageTemplate>()
-    private var toRecycle = mutableListOf<ImageTemplate>()
     private val mutex = Mutex()
     
     @Volatile
@@ -72,6 +73,15 @@ class ImageMatcherService(private val context: Context) {
     
     @Volatile
     private var lastDetectedImageId: String? = null
+
+    @Volatile
+    private var candidateImageId: String? = null
+
+    @Volatile
+    private var candidateCount: Int = 0
+
+    @Volatile
+    private var candidateFirstSeenTime: Long = 0
     
     @Volatile
     var isUsingFallback: Boolean = false
@@ -82,8 +92,6 @@ class ImageMatcherService(private val context: Context) {
      */
     suspend fun loadTemplatesFromBackend(): Result<Int> = withContext(Dispatchers.IO) {
         try {
-            // If we already have local templates, we're good to go immediately
-            // But still try to fetch fresh ones from backend
             Log.d(TAG, "Attempting to load reference images from backend...")
             val apiService = com.talkar.app.data.api.ApiClient.create()
             
@@ -108,34 +116,27 @@ class ImageMatcherService(private val context: Context) {
             Log.d(TAG, "Fetched ${backendImages.size} images from backend")
             
             mutex.withLock {
-                // Do NOT recycle immediately. Copy to local list then clear main list.
-                // This allows us to recycle safely outside the lock after readers finish.
-                toRecycle = templates.toMutableList()
                 templates.clear()
             }
-            
-            // Wait for readers then recycle
-            try {
-                while (activeReaders.get() > 0) {
-                    kotlinx.coroutines.delay(10)
-                }
-                toRecycle.forEach { it.bitmap.recycle() }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error recycling bitmaps", e)
-            }
+            resetCandidate()
             
             // Download and prepare each image
             backendImages.forEach { backendImage ->
                 try {
-                    val bitmap = downloadAndPrepareBitmap(backendImage.imageUrl)
+                    val bitmap = downloadImage(backendImage.imageUrl)
                     if (bitmap != null) {
+                        val colorGrid = generateColorGrid(bitmap)
+                        val blockHash = generateBlockdHash(bitmap)
+                        bitmap.recycle() // Free memory immediately
+                        
                         mutex.withLock {
                             templates.add(
                                 ImageTemplate(
                                     id = backendImage.id,
                                     name = backendImage.name,
                                     description = backendImage.description,
-                                    bitmap = bitmap,
+                                    colorGrid = colorGrid,
+                                    blockHash = blockHash,
                                     dialogues = backendImage.dialogues as? List<Any>
                                 )
                             )
@@ -172,20 +173,9 @@ class ImageMatcherService(private val context: Context) {
             val fallbackImages: List<BackendImage> = Gson().fromJson(jsonString, listType)
             
             mutex.withLock {
-                 // Do NOT recycle immediately. Copy to local list then clear main list.
-                toRecycle = templates.toMutableList()
                 templates.clear()
             }
-            
-            // Wait for readers then recycle
-            try {
-                while (activeReaders.get() > 0) {
-                    kotlinx.coroutines.delay(10)
-                }
-                toRecycle.forEach { it.bitmap.recycle() }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error recycling bitmaps", e)
-            }
+            resetCandidate()
             
             fallbackImages.forEach { item ->
                 try {
@@ -194,8 +184,9 @@ class ImageMatcherService(private val context: Context) {
                     }
                     
                     if (bitmap != null) {
-                        val scaled = scaleBitmap(bitmap, MAX_DIMENSION)
-                        bitmap.recycle()
+                        val colorGrid = generateColorGrid(bitmap)
+                        val blockHash = generateBlockdHash(bitmap)
+                        bitmap.recycle() // Free memory immediately
                         
                         mutex.withLock {
                             templates.add(
@@ -203,7 +194,8 @@ class ImageMatcherService(private val context: Context) {
                                     id = item.id,
                                     name = item.name,
                                     description = item.description,
-                                    bitmap = scaled,
+                                    colorGrid = colorGrid,
+                                    blockHash = blockHash,
                                     dialogues = item.dialogues as? List<Any>
                                 )
                             )
@@ -223,28 +215,63 @@ class ImageMatcherService(private val context: Context) {
             Result.failure(e)
         }
     }
+
+    /**
+     * Load reference posters directly
+     */
+    suspend fun loadTemplates(referencePosters: List<ReferencePoster>) = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Loading ${referencePosters.size} reference posters into matcher...")
+            
+            mutex.withLock {
+                templates.clear()
+            }
+            resetCandidate()
+            
+            referencePosters.forEach { poster ->
+                try {
+                    val bitmap = BitmapFactory.decodeByteArray(poster.imageData, 0, poster.imageData.size)
+                    if (bitmap != null) {
+                        val colorGrid = generateColorGrid(bitmap)
+                        val blockHash = generateBlockdHash(bitmap)
+                        bitmap.recycle() // Free memory immediately
+                        
+                        mutex.withLock {
+                            templates.add(
+                                ImageTemplate(
+                                    id = poster.id,
+                                    name = poster.name,
+                                    description = null,
+                                    colorGrid = colorGrid,
+                                    blockHash = blockHash,
+                                    dialogues = null
+                                )
+                            )
+                        }
+                        Log.d(TAG, "Loaded template from ReferencePoster: ${poster.name} (ID: ${poster.id})")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error decoding ReferencePoster ${poster.name}", e)
+                }
+            }
+            
+            Log.d(TAG, "Successfully loaded ${templates.size} templates into matcher")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load templates from ReferencePosters", e)
+        }
+    }
     
     /**
-     * Download image from URL and prepare for matching
+     * Download image from URL
      */
-    private suspend fun downloadAndPrepareBitmap(imageUrl: String): Bitmap? = withContext(Dispatchers.IO) {
+    private suspend fun downloadImage(imageUrl: String): Bitmap? = withContext(Dispatchers.IO) {
         try {
-            // Construct full URL using ApiConfig helper
             val url = com.talkar.app.data.config.ApiConfig.getFullImageUrl(imageUrl)
-            
             Log.d(TAG, "Downloading image from: $url")
             val inputStream = URL(url).openStream()
             val bitmap = BitmapFactory.decodeStream(inputStream)
             inputStream.close()
-            
-            if (bitmap != null) {
-                // Downscale for faster matching
-                val scaled = scaleBitmap(bitmap, MAX_DIMENSION)
-                bitmap.recycle()
-                scaled
-            } else {
-                null
-            }
+            bitmap
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading image from $imageUrl", e)
             null
@@ -252,7 +279,7 @@ class ImageMatcherService(private val context: Context) {
     }
     
     /**
-     * Match camera frame against all templates
+     * Match camera frame against all templates using multi-scale crops
      */
     suspend fun matchFrame(frameBitmap: Bitmap): MatchResult? = withContext(Dispatchers.Default) {
         if (templates.isEmpty()) {
@@ -266,10 +293,31 @@ class ImageMatcherService(private val context: Context) {
         }
         
         try {
-            activeReaders.incrementAndGet()
+            // 1. Grayscale standard deviation check for low contrast/detail (blank or dark frames)
+            val checkBitmap = Bitmap.createScaledBitmap(frameBitmap, 32, 32, true)
+            val stdDev = calculateGrayscaleStdDev(checkBitmap)
+            checkBitmap.recycle()
             
-            // Prepare frame for matching
-            val scaledFrame = scaleBitmap(frameBitmap, MAX_DIMENSION)
+            if (stdDev < 15.0) {
+                Log.v(TAG, "Skipping frame due to low contrast/detail (stdDev=${String.format("%.2f", stdDev)})")
+                return@withContext null
+            }
+            
+            // 2. Extract 8x8 features for 3 crops: 55%, 75%, 95%
+            val crop55 = cropCenter(frameBitmap, 0.55f, 0.55f)
+            val grid55 = generateColorGrid(crop55)
+            val hash55 = generateBlockdHash(crop55)
+            crop55.recycle()
+            
+            val crop75 = cropCenter(frameBitmap, 0.75f, 0.75f)
+            val grid75 = generateColorGrid(crop75)
+            val hash75 = generateBlockdHash(crop75)
+            crop75.recycle()
+            
+            val crop95 = cropCenter(frameBitmap, 0.95f, 0.95f)
+            val grid95 = generateColorGrid(crop95)
+            val hash95 = generateBlockdHash(crop95)
+            crop95.recycle()
             
             var bestMatch: MatchResult? = null
             var bestScore = 0f
@@ -278,10 +326,29 @@ class ImageMatcherService(private val context: Context) {
             val currentTemplates = mutex.withLock { templates.toList() }
             
             currentTemplates.forEach { template ->
-                val similarity = calculateSimilarity(scaledFrame, template.bitmap)
-                Log.v(TAG, "Comparing frame against ${template.name}: score=${String.format("%.4f", similarity)}")
+                // Crop 55% similarity
+                val colSim55 = calculateGridSimilarity(grid55, template.colorGrid)
+                val hashSim55 = calculateHashSimilarity(hash55, template.blockHash)
+                val sim55 = 0.5f * colSim55 + 0.5f * hashSim55
                 
-                if (similarity > bestScore && similarity >= MATCH_THRESHOLD) {
+                // Crop 75% similarity
+                val colSim75 = calculateGridSimilarity(grid75, template.colorGrid)
+                val hashSim75 = calculateHashSimilarity(hash75, template.blockHash)
+                val sim75 = 0.5f * colSim75 + 0.5f * hashSim75
+                
+                // Crop 95% similarity
+                val colSim95 = calculateGridSimilarity(grid95, template.colorGrid)
+                val hashSim95 = calculateHashSimilarity(hash95, template.blockHash)
+                val sim95 = 0.5f * colSim95 + 0.5f * hashSim95
+                
+                val similarity = Math.max(sim55, Math.max(sim75, sim95))
+                
+                Log.d(TAG, "Comparing frame against ${template.name}: maxScore=${String.format("%.4f", similarity)} " +
+                        "(sim55=${String.format("%.4f", sim55)} [col=${String.format("%.4f", colSim55)}, hash=${String.format("%.4f", hashSim55)}], " +
+                        "sim75=${String.format("%.4f", sim75)} [col=${String.format("%.4f", colSim75)}, hash=${String.format("%.4f", hashSim75)}], " +
+                        "sim95=${String.format("%.4f", sim95)} [col=${String.format("%.4f", colSim95)}, hash=${String.format("%.4f", hashSim95)}])")
+                
+                if (similarity > bestScore) {
                     bestScore = similarity
                     bestMatch = MatchResult(
                         imageId = template.id,
@@ -293,9 +360,18 @@ class ImageMatcherService(private val context: Context) {
                 }
             }
             
-            scaledFrame.recycle()
-            
             if (bestMatch != null) {
+                val isConfirmed = shouldConfirmMatch(bestMatch!!, currentTime)
+                if (!isConfirmed) {
+                    Log.d(
+                        TAG,
+                        "Candidate match pending: ${bestMatch!!.imageName} " +
+                            "(ID: ${bestMatch!!.imageId}) confidence=${String.format("%.2f", bestMatch!!.confidence)} " +
+                            "stableCount=$candidateCount"
+                    )
+                    return@withContext null
+                }
+
                 // Hotfix: Strict Cooldown for the same product to prevent infinite play loops
                 if (bestMatch!!.imageId == lastDetectedImageId && 
                     currentTime - lastDetectionTime < COOLDOWN_MS) {
@@ -306,6 +382,7 @@ class ImageMatcherService(private val context: Context) {
                 // Only return if it's a different image or enough time has passed
                 lastDetectionTime = currentTime
                 lastDetectedImageId = bestMatch!!.imageId
+                resetCandidate()
                 Log.d(TAG, "MATCH CONFIRMED: ${bestMatch!!.imageName} (ID: ${bestMatch!!.imageId}) confidence=${String.format("%.2f", bestMatch!!.confidence)}")
                 return@withContext bestMatch
             }
@@ -314,86 +391,152 @@ class ImageMatcherService(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error matching frame", e)
             null
-        } finally {
-            activeReaders.decrementAndGet()
         }
     }
     
     /**
-     * Generates a difference hash (dHash) for a given bitmap.
-     * dHash is much more robust to lighting changes as it compares adjacent pixel intensities.
+     * Generates an 8x8 Color Grid (R, G, B averages for each of the 64 blocks)
      */
-    private fun generateDifferenceHash(bitmap: Bitmap): BooleanArray {
-        val hashWidth = 32 
-        val hashHeight = 32
-        // We need (width + 1) pixels to get 'width' differences
-        val resized = Bitmap.createScaledBitmap(bitmap, hashWidth + 1, hashHeight, true)
-        val pixels = IntArray((hashWidth + 1) * hashHeight)
-        resized.getPixels(pixels, 0, hashWidth + 1, 0, 0, hashWidth + 1, hashHeight)
+    private fun generateColorGrid(bitmap: Bitmap): FloatArray {
+        val scaled = Bitmap.createScaledBitmap(bitmap, GRID_SIZE, GRID_SIZE, true)
+        val pixels = IntArray(GRID_SIZE * GRID_SIZE)
+        scaled.getPixels(pixels, 0, GRID_SIZE, 0, 0, GRID_SIZE, GRID_SIZE)
+        scaled.recycle()
         
-        val grayPixels = IntArray((hashWidth + 1) * hashHeight)
+        val grid = FloatArray(GRID_SIZE * GRID_SIZE * 3)
         for (i in pixels.indices) {
-            val r = (pixels[i] shr 16) and 0xFF
-            val g = (pixels[i] shr 8) and 0xFF
-            val b = pixels[i] and 0xFF
-            grayPixels[i] = (r * 0.299 + g * 0.587 + b * 0.114).toInt()
+            val color = pixels[i]
+            val r = ((color shr 16) and 0xFF) / 255f
+            val g = ((color shr 8) and 0xFF) / 255f
+            val b = (color and 0xFF) / 255f
+            
+            grid[i * 3] = r
+            grid[i * 3 + 1] = g
+            grid[i * 3 + 2] = b
+        }
+        return grid
+    }
+
+    /**
+     * Calculates similarity (1.0 - average L1 color difference) between two color grids
+     */
+    private fun calculateGridSimilarity(grid1: FloatArray, grid2: FloatArray): Float {
+        var totalDiff = 0f
+        val numBlocks = grid1.size / 3
+        
+        for (i in 0 until numBlocks) {
+            val r1 = grid1[i * 3]
+            val g1 = grid1[i * 3 + 1]
+            val b1 = grid1[i * 3 + 2]
+            
+            val r2 = grid2[i * 3]
+            val g2 = grid2[i * 3 + 1]
+            val b2 = grid2[i * 3 + 2]
+            
+            val diff = (Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2)) / 3f
+            totalDiff += diff
         }
         
-        val hash = BooleanArray(hashWidth * hashHeight)
-        for (y in 0 until hashHeight) {
-            for (x in 0 until hashWidth) {
-                val left = grayPixels[y * (hashWidth + 1) + x]
-                val right = grayPixels[y * (hashWidth + 1) + x + 1]
-                // 1 if left > right, else 0
-                hash[y * hashWidth + x] = left > right
+        val avgDiff = totalDiff / numBlocks
+        return 1f - avgDiff
+    }
+
+    /**
+     * Generates an 8x8 block-level difference hash (dHash, 128 bits total)
+     */
+    private fun generateBlockdHash(bitmap: Bitmap): BooleanArray {
+        val scaled = Bitmap.createScaledBitmap(bitmap, GRID_SIZE + 1, GRID_SIZE + 1, true)
+        val pixels = IntArray((GRID_SIZE + 1) * (GRID_SIZE + 1))
+        scaled.getPixels(pixels, 0, GRID_SIZE + 1, 0, 0, GRID_SIZE + 1, GRID_SIZE + 1)
+        scaled.recycle()
+        
+        val gray = FloatArray(pixels.size)
+        for (i in pixels.indices) {
+            val color = pixels[i]
+            val r = (color shr 16) and 0xFF
+            val g = (color shr 8) and 0xFF
+            val b = color and 0xFF
+            gray[i] = 0.299f * r + 0.587f * g + 0.114f * b
+        }
+        
+        val hash = BooleanArray(GRID_SIZE * GRID_SIZE * 2)
+        var bitIndex = 0
+        
+        // Horizontal differences
+        for (y in 0 until GRID_SIZE) {
+            for (x in 0 until GRID_SIZE) {
+                val left = gray[y * (GRID_SIZE + 1) + x]
+                val right = gray[y * (GRID_SIZE + 1) + x + 1]
+                hash[bitIndex++] = left > right
             }
         }
         
-        resized.recycle()
+        // Vertical differences
+        for (y in 0 until GRID_SIZE) {
+            for (x in 0 until GRID_SIZE) {
+                val top = gray[y * (GRID_SIZE + 1) + x]
+                val bottom = gray[(y + 1) * (GRID_SIZE + 1) + x]
+                hash[bitIndex++] = top > bottom
+            }
+        }
+        
         return hash
     }
 
     /**
-     * Calculate similarity between two bitmaps using average hash comparison (aHash).
-     * Returns value between 0.0 (no match) and 1.0 (perfect match)
+     * Calculates the matching bit percentage between two boolean hashes
      */
-    private fun calculateSimilarity(bitmap1: Bitmap, bitmap2: Bitmap): Float {
-        val hash1 = generateDifferenceHash(bitmap1)
-        val hash2 = generateDifferenceHash(bitmap2)
-        
-        var matchingBits = 0
+    private fun calculateHashSimilarity(hash1: BooleanArray, hash2: BooleanArray): Float {
+        var matches = 0
         for (i in hash1.indices) {
             if (hash1[i] == hash2[i]) {
-                matchingBits++
+                matches++
             }
         }
-        
-        val score = matchingBits.toFloat() / hash1.size.toFloat()
-        Log.v(TAG, "Hash match score: $score vs threshold $MATCH_THRESHOLD")
-        return score
+        return matches.toFloat() / hash1.size.toFloat()
     }
-    
+
     /**
-     * Scale bitmap to maximum dimension while maintaining aspect ratio
+     * Calculates the standard deviation of grayscale pixels to check contrast/detail
      */
-    private fun scaleBitmap(bitmap: Bitmap, maxDimension: Int): Bitmap {
+    private fun calculateGrayscaleStdDev(bitmap: Bitmap): Double {
         val width = bitmap.width
         val height = bitmap.height
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
         
-        if (width <= maxDimension && height <= maxDimension) {
-            return bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, false)
+        var sum = 0.0
+        val grayPixels = DoubleArray(pixels.size)
+        for (i in pixels.indices) {
+            val r = (pixels[i] shr 16) and 0xFF
+            val g = (pixels[i] shr 8) and 0xFF
+            val b = pixels[i] and 0xFF
+            val gray = r * 0.299 + g * 0.587 + b * 0.114
+            grayPixels[i] = gray
+            sum += gray
         }
+        val mean = sum / pixels.size
         
-        val scale = if (width > height) {
-            maxDimension.toFloat() / width.toFloat()
-        } else {
-            maxDimension.toFloat() / height.toFloat()
+        var sumSquares = 0.0
+        for (i in grayPixels.indices) {
+            val diff = grayPixels[i] - mean
+            sumSquares += diff * diff
         }
-        
-        val newWidth = (width * scale).toInt()
-        val newHeight = (height * scale).toInt()
-        
-        return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+        val variance = sumSquares / pixels.size
+        return Math.sqrt(variance)
+    }
+
+    /**
+     * Crops the center region of a bitmap
+     */
+    private fun cropCenter(bitmap: Bitmap, widthPercent: Float, heightPercent: Float): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        val newWidth = (width * widthPercent).toInt()
+        val newHeight = (height * heightPercent).toInt()
+        val x = (width - newWidth) / 2
+        val y = (height - newHeight) / 2
+        return Bitmap.createBitmap(bitmap, x, y, newWidth, newHeight)
     }
     
     /**
@@ -401,18 +544,7 @@ class ImageMatcherService(private val context: Context) {
      */
     suspend fun clearTemplates() {
         mutex.withLock {
-            toRecycle = templates.toMutableList()
             templates.clear()
-        }
-        
-        // Wait for readers then recycle
-        try {
-                while (activeReaders.get() > 0) {
-                kotlinx.coroutines.delay(10)
-            }
-            toRecycle.forEach { it.bitmap.recycle() }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error recycling bitmaps", e)
         }
         Log.d(TAG, "Cleared all templates")
     }
@@ -438,5 +570,32 @@ class ImageMatcherService(private val context: Context) {
             job?.join()
             clearTemplates() 
         }
+    }
+
+    private fun shouldConfirmMatch(match: MatchResult, currentTime: Long): Boolean {
+        if (match.confidence >= STRONG_MATCH_THRESHOLD) {
+            return true
+        }
+
+        if (match.confidence < STABLE_MATCH_THRESHOLD) {
+            resetCandidate()
+            return false
+        }
+
+        if (candidateImageId != match.imageId || currentTime - candidateFirstSeenTime > STABLE_MATCH_WINDOW_MS) {
+            candidateImageId = match.imageId
+            candidateCount = 1
+            candidateFirstSeenTime = currentTime
+        } else {
+            candidateCount += 1
+        }
+
+        return candidateCount >= STABLE_MATCH_COUNT
+    }
+
+    private fun resetCandidate() {
+        candidateImageId = null
+        candidateCount = 0
+        candidateFirstSeenTime = 0
     }
 }

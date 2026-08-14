@@ -13,6 +13,8 @@ import { getSignedArtifactUrl } from "../utils/cdn";
 import { getPosterPreprocessResult } from "../services/posterPreprocessService";
 import { PosterPreprocessResult } from "../models/PosterPreprocessResult";
 import { Op } from "sequelize";
+import https from "https";
+import http from "http";
 import {
   getEffectiveRuntimeFlags,
   getRuntimeAuditTrail,
@@ -58,7 +60,7 @@ async function buildOpsMetricsPayload() {
 
   const providerFailureBreakdown = {
     managed: 0,
-    self_hosted: 0,
+    wav2lip_worker: 0,
     none: 0,
     unknown: 0,
   };
@@ -71,7 +73,7 @@ async function buildOpsMetricsPayload() {
   for (const row of failedArtifacts as any[]) {
     const provider = row.provider;
     if (provider === "managed") providerFailureBreakdown.managed++;
-    else if (provider === "self_hosted") providerFailureBreakdown.self_hosted++;
+    else if (provider === "wav2lip_worker" || provider === "self_hosted") providerFailureBreakdown.wav2lip_worker++;
     else if (provider === "none") providerFailureBreakdown.none++;
     else providerFailureBreakdown.unknown++;
   }
@@ -185,14 +187,14 @@ router.get("/ops/alerts", authenticateAdmin, async (_req, res, next) => {
     });
     const providerFailures = {
       managed: 0,
-      self_hosted: 0,
+      wav2lip_worker: 0,
       none: 0,
       unknown: 0,
     };
     for (const row of recentFailures as any[]) {
       const provider = row.provider;
       if (provider === "managed") providerFailures.managed++;
-      else if (provider === "self_hosted") providerFailures.self_hosted++;
+      else if (provider === "wav2lip_worker" || provider === "self_hosted") providerFailures.wav2lip_worker++;
       else if (provider === "none") providerFailures.none++;
       else providerFailures.unknown++;
     }
@@ -227,13 +229,13 @@ router.get("/ops/alerts", authenticateAdmin, async (_req, res, next) => {
       {
         key: "provider_failure_spike",
         severity:
-          (providerFailures.managed + providerFailures.self_hosted) >= failureSpikeThreshold
+          (providerFailures.managed + providerFailures.wav2lip_worker) >= failureSpikeThreshold
             ? "error"
             : "info",
         active:
-          (providerFailures.managed + providerFailures.self_hosted) >= failureSpikeThreshold,
+          (providerFailures.managed + providerFailures.wav2lip_worker) >= failureSpikeThreshold,
         message: `Recent provider failures=${
-          providerFailures.managed + providerFailures.self_hosted
+          providerFailures.managed + providerFailures.wav2lip_worker
         }, threshold=${failureSpikeThreshold}`,
       },
       {
@@ -340,8 +342,11 @@ router.get("/:id/talking-photo", async (req, res, next) => {
     }
 
     const artifact = await getTalkingPhotoArtifact(imageId);
+    const isStaleSampleArtifact =
+      typeof artifact?.videoUrl === "string" &&
+      artifact.videoUrl.includes("/uploads/mock-talking-head.mp4");
     if (runtime.forceReadyOnly) {
-      if (!artifact || artifact.status !== "ready") {
+      if (!artifact || artifact.status !== "ready" || isStaleSampleArtifact) {
         return res.status(409).json({
           imageId,
           status: "failed",
@@ -362,16 +367,36 @@ router.get("/:id/talking-photo", async (req, res, next) => {
       });
     }
 
+    if (isStaleSampleArtifact) {
+      return res.status(409).json({
+        imageId,
+        status: "failed",
+        runtimeMode: runtime.runtimeMode,
+        errorCode: "ARTIFACT_NOT_READY",
+        errorMessage:
+          "Existing artifact uses the Sync sample video and must be regenerated.",
+      });
+    }
+
     const signedArtifact = artifact.videoUrl
       ? getSignedArtifactUrl(artifact.videoUrl)
       : { url: null, expiresAt: null };
+
+    // For Wav2Lip worker URLs (http://<any-ip>:8088/...), serve via backend proxy
+    // so the mobile app always uses the backend host regardless of stored IP.
+    const isWorkerUrl =
+      typeof signedArtifact.url === "string" &&
+      /^https?:\/\/[^/]+:8088\//.test(signedArtifact.url);
+    const proxyVideoUrl = isWorkerUrl
+      ? `${req.protocol}://${req.get("host")}/api/v1/posters/${imageId}/video`
+      : signedArtifact.url;
 
     return res.json({
       imageId,
       status: artifact.status,
       runtimeMode: runtime.runtimeMode,
       version: artifact.version,
-      videoUrl: signedArtifact.url,
+      videoUrl: proxyVideoUrl,
       videoUrlExpiresAt: signedArtifact.expiresAt,
       lipLandmarks: safeParseJson(artifact.lipLandmarks),
       posterFaceBox: safeParseJson(artifact.posterFaceBox),
@@ -383,6 +408,41 @@ router.get("/:id/talking-photo", async (req, res, next) => {
       errorCode: artifact.errorCode || null,
       errorMessage: artifact.errorMessage || null,
       updatedAt: artifact.updatedAt,
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// Proxy Wav2Lip worker video through backend so the mobile app always uses
+// the backend host, regardless of what IP was stored in the artifact URL.
+router.get("/:id/video", async (req, res, next) => {
+  try {
+    const artifact = await getTalkingPhotoArtifact(req.params.id);
+    if (!artifact?.videoUrl) {
+      return res.status(404).json({ error: "No video available" });
+    }
+
+    // Rewrite stored IP to localhost where the worker is actually running
+    const workerUrl = process.env.WAV2LIP_WORKER_URL || "http://localhost:8088";
+    const workerBase = new URL(workerUrl);
+    const storedUrl = new URL(artifact.videoUrl);
+    storedUrl.hostname = workerBase.hostname;
+    storedUrl.port = workerBase.port || (workerBase.protocol === "https:" ? "443" : "80");
+    const fetchUrl = storedUrl.toString();
+
+    const transport = fetchUrl.startsWith("https") ? https : http;
+    const proxyReq = transport.get(fetchUrl, (proxyRes) => {
+      res.setHeader("Content-Type", proxyRes.headers["content-type"] || "video/mp4");
+      if (proxyRes.headers["content-length"]) {
+        res.setHeader("Content-Length", proxyRes.headers["content-length"]);
+      }
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      proxyRes.pipe(res);
+    });
+    proxyReq.on("error", (err) => {
+      console.error("[video-proxy] error fetching from worker", err.message);
+      if (!res.headersSent) res.status(502).json({ error: "Video unavailable" });
     });
   } catch (error) {
     return next(error);

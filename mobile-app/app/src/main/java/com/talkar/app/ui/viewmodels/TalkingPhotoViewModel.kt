@@ -16,8 +16,6 @@ import com.talkar.app.ar.video.models.TrackingData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -40,7 +38,6 @@ class TalkingPhotoViewModel(
 ) : ViewModel() {
     companion object {
         private const val TAG = "TalkingPhotoViewModel"
-        private const val LOST_TRACKING_RESET_TIMEOUT_MS = 12000L
         private const val FLOW_TAG = "PPFlow"
     }
     
@@ -81,6 +78,30 @@ class TalkingPhotoViewModel(
     
     private val _sessionRecreateTrigger = MutableStateFlow(0)
     val sessionRecreateTrigger: StateFlow<Int> = _sessionRecreateTrigger.asStateFlow()
+
+    /** Lightweight detection-unlock signal — resets poster lock without recreating the session. */
+    private val _softResetTrigger = MutableStateFlow(0)
+    val softResetTrigger: StateFlow<Int> = _softResetTrigger.asStateFlow()
+
+    private val _loadedPosterCount = MutableStateFlow(0)
+    val loadedPosterCount: StateFlow<Int> = _loadedPosterCount.asStateFlow()
+
+    private val _loadedPosterSource = MutableStateFlow("unknown")
+    val loadedPosterSource: StateFlow<String> = _loadedPosterSource.asStateFlow()
+
+    private val _detectedPosterName = MutableStateFlow<String?>(null)
+    val detectedPosterName: StateFlow<String?> = _detectedPosterName.asStateFlow()
+
+    private val _videoPath = MutableStateFlow<String?>(null)
+    val videoPath: StateFlow<String?> = _videoPath.asStateFlow()
+
+    /** Screen-fraction [left, top, right, bottom] of the poster, 0..1. Null when not tracking. */
+    private val _posterScreenBounds = MutableStateFlow<FloatArray?>(null)
+    val posterScreenBounds: StateFlow<FloatArray?> = _posterScreenBounds.asStateFlow()
+
+    /** Directly-projected lip screen bounds [left, top, right, bottom], 0..1. Null when not tracking. */
+    private val _lipScreenBounds = MutableStateFlow<FloatArray?>(null)
+    val lipScreenBounds: StateFlow<FloatArray?> = _lipScreenBounds.asStateFlow()
     
     private var currentPosterId: String? = null
     private var currentAnchor: Anchor? = null
@@ -88,8 +109,9 @@ class TalkingPhotoViewModel(
     private var smoothedTy = 0f
     private var smoothedSx = 1f
     private var smoothedSy = 1f
-    private var lostTrackingResetJob: Job? = null
     private var scanAttemptId: String = "scan-none"
+    private var isPreviewReady = false
+    private var loadedPosterCountValue = 0
     
     init {
         setupCallbacks()
@@ -119,8 +141,8 @@ class TalkingPhotoViewModel(
             }
             
             override fun onVideoReady() {
-                _state.value = TalkingPhotoState.READY
-                // Auto-play when ready
+                _videoPath.value = controller.getVideoPath()
+                _state.value = TalkingPhotoState.PLAYING
                 controller.play()
                 android.util.Log.d(FLOW_TAG, "scanAttempt=$scanAttemptId playback=start posterId=${currentPosterId ?: "none"}")
             }
@@ -136,6 +158,7 @@ class TalkingPhotoViewModel(
             
             override fun onError(error: TalkingPhotoError) {
                 _error.value = error
+                _videoPath.value = null
                 _state.value = TalkingPhotoState.ERROR
                 android.util.Log.e(
                     FLOW_TAG,
@@ -145,16 +168,24 @@ class TalkingPhotoViewModel(
             
             override fun onTrackingLost() {
                 _isTracking.value = false
-                scheduleLostTrackingReset()
+                _posterScreenBounds.value = null
+                _lipScreenBounds.value = null
             }
             
             override fun onTrackingResumed() {
                 _isTracking.value = true
-                cancelLostTrackingReset()
             }
 
             override fun onLipCoordinatesReady(lipCoordinates: LipCoordinates) {
                 _lipCoordinates.value = lipCoordinates
+            }
+
+            override fun onPosterScreenBounds(left: Float, top: Float, right: Float, bottom: Float) {
+                _posterScreenBounds.value = floatArrayOf(left, top, right, bottom)
+            }
+
+            override fun onLipScreenBounds(left: Float, top: Float, right: Float, bottom: Float) {
+                _lipScreenBounds.value = floatArrayOf(left, top, right, bottom)
             }
         })
     }
@@ -164,11 +195,13 @@ class TalkingPhotoViewModel(
      * 
      * Requirement: 1.1, 2.1
      */
-    fun onPosterDetected(posterId: String, anchor: Anchor?) {
+    fun onPosterDetected(posterId: String, posterName: String, anchor: Anchor?) {
         if (currentPosterId != null) {
             // Already tracking a poster (single poster mode)
             return
         }
+
+        val detectedName = posterName.takeIf { it.isNotBlank() } ?: posterId
 
         if (_posterSource.value == "test_fallback" || posterId.startsWith("test_")) {
             _error.value = TalkingPhotoError.GenerationFailed("TEST_FALLBACK_POSTER")
@@ -176,14 +209,21 @@ class TalkingPhotoViewModel(
             android.util.Log.w(FLOW_TAG, "scanAttempt=$scanAttemptId posterId=$posterId source=test_fallback blocked=non_production")
             return
         }
-        
+
+        controller.stop()
+        _videoPath.value = null
+        _lastArtifactStatus.value = "idle"
+        _generationProgress.value = 0f
+        _downloadProgress.value = 0f
+
         currentPosterId = posterId
         currentAnchor = anchor
         scanAttemptId = "scan-${System.currentTimeMillis()}"
+        _detectedPosterName.value = detectedName
         _state.value = TalkingPhotoState.POSTER_DETECTED
         android.util.Log.d(
             FLOW_TAG,
-            "scanAttempt=$scanAttemptId posterDetected=true posterId=$posterId source=${_posterSource.value} previewMode=${_previewMode.value}"
+            "scanAttempt=$scanAttemptId posterDetected=true posterId=$posterId posterName=$detectedName source=${_posterSource.value} previewMode=${_previewMode.value}"
         )
         
         viewModelScope.launch {
@@ -195,6 +235,13 @@ class TalkingPhotoViewModel(
                 val exception = result.exceptionOrNull()
                 val errorCode = exception?.message ?: "UNKNOWN"
                 android.util.Log.e(FLOW_TAG, "scanAttempt=$scanAttemptId initializationFailed=true errorCode=$errorCode", exception)
+
+                if (errorCode == "ARTIFACT_NOT_READY") {
+                    _error.value = null
+                    _state.value = TalkingPhotoState.ARTIFACT_WAITING
+                    android.util.Log.d(FLOW_TAG, "scanAttempt=$scanAttemptId posterDetectedOnly posterId=$posterId posterName=$detectedName")
+                    return@launch
+                }
                 
                 _error.value = when (errorCode) {
                     "NO_DEFAULT_SCRIPT" -> TalkingPhotoError.GenerationFailed(
@@ -223,8 +270,21 @@ class TalkingPhotoViewModel(
     fun onPosterLost(posterId: String) {
         if (posterId == currentPosterId) {
             _isTracking.value = false
-            scheduleLostTrackingReset()
+            // Clear screen bounds so overlay doesn't render at stale position
+            _posterScreenBounds.value = null
+            _lipScreenBounds.value = null
         }
+    }
+
+    /** Called when the lip-sync video finishes playing once. Stops and waits for user to press reset. */
+    fun onVideoComplete() {
+        controller.stop()
+        _videoPath.value = null
+        _posterScreenBounds.value = null
+        _lipScreenBounds.value = null
+        _isTracking.value = false
+        _state.value = TalkingPhotoState.TRACKING_READY
+        // Do NOT trigger softResetTrigger — detection stays locked until user presses reset
     }
     
     /**
@@ -235,11 +295,6 @@ class TalkingPhotoViewModel(
     fun onTrackingUpdate(trackingData: TrackingData) {
         controller.updateTracking(trackingData)
         _isTracking.value = trackingData.isTracking
-        if (trackingData.isTracking) {
-            cancelLostTrackingReset()
-        } else {
-            scheduleLostTrackingReset()
-        }
         _transform.value = if (trackingData.isTracking) {
             buildProjectedTransform(trackingData) ?: run {
                 val alpha = 0.2f
@@ -256,21 +311,32 @@ class TalkingPhotoViewModel(
         } else {
             null
         }
-        _state.value = controller.getState()
+        if (currentPosterId != null) {
+            _state.value = controller.getState()
+        }
     }
-    
+
     /**
      * Called when an error occurs.
      * 
      * Requirement: 14.1, 14.2, 14.3
      */
     fun onError(errorMessage: String) {
+        val current = _state.value
+        if (current == TalkingPhotoState.PLAYING ||
+            current == TalkingPhotoState.ARTIFACT_WAITING ||
+            current == TalkingPhotoState.FETCHING_ARTIFACT
+        ) {
+            Log.w(TAG, "Ignoring AR error during active session ($current): $errorMessage")
+            return
+        }
         Log.e(TAG, "❌ AR/UI Error reported: $errorMessage")
         _error.value = TalkingPhotoError.GenerationFailed(errorMessage)
         _state.value = TalkingPhotoState.ERROR_RETRYABLE
     }
 
     fun onPreviewReady() {
+        isPreviewReady = true
         if (_state.value == TalkingPhotoState.IDLE || _state.value == TalkingPhotoState.ERROR_RETRYABLE) {
             _error.value = null
             _state.value = TalkingPhotoState.POSTERS_LOADING
@@ -294,30 +360,42 @@ class TalkingPhotoViewModel(
         _posterSource.value = source
         android.util.Log.d(FLOW_TAG, "scanAttempt=$scanAttemptId posterSource=$source")
     }
+
+    fun onPosterDatabaseReady(count: Int, source: String) {
+        _loadedPosterCount.value = count
+        loadedPosterCountValue = count
+        _loadedPosterSource.value = source
+        android.util.Log.d(FLOW_TAG, "posterDatabaseReady count=$count source=$source")
+    }
     
     /**
      * Refreshes the scan to allow scanning a new poster.
-     * 
-     * Requirement: 6.2, 6.3
+     * Soft reset: clears only the current poster session without recreating the ARCore session
+     * or re-downloading posters. The session and image database remain live.
      */
     fun refreshScan() {
-        Log.d(TAG, "Refreshing scan state and hard-resetting AR")
-        cancelLostTrackingReset()
+        Log.d(TAG, "Soft-resetting scan state (session stays alive)")
         controller.stop()
-        hardResetAR()
 
         currentPosterId = null
         currentAnchor = null
-        
-        _state.value = TalkingPhotoState.IDLE
+
         _error.value = null
         _isTracking.value = false
         _generationProgress.value = 0f
         _downloadProgress.value = 0f
         _lipCoordinates.value = null
         _transform.value = null
+        _posterScreenBounds.value = null
+        _lipScreenBounds.value = null
         _lastArtifactStatus.value = "idle"
         _posterSource.value = "unknown"
+        _detectedPosterName.value = null
+        _videoPath.value = null
+
+        // Go straight back to scanning — posters are already loaded, session is running.
+        _state.value = TalkingPhotoState.TRACKING_READY
+        _softResetTrigger.value += 1
     }
 
     /**
@@ -327,6 +405,31 @@ class TalkingPhotoViewModel(
     fun hardResetAR() {
         Log.w(TAG, "🔄 Hard resetting AR session...")
         _sessionRecreateTrigger.value += 1
+    }
+
+    /**
+     * Clears current poster/video state and returns to scanning mode.
+     * Posters stay cached — no re-download.
+     */
+    fun fullResetAndReload() {
+        Log.w(TAG, "⊘ Reset — clearing playback state, returning to scan")
+        controller.stop()
+        currentPosterId = null
+        currentAnchor = null
+        _error.value = null
+        _isTracking.value = false
+        _generationProgress.value = 0f
+        _downloadProgress.value = 0f
+        _lipCoordinates.value = null
+        _transform.value = null
+        _posterScreenBounds.value = null
+        _lipScreenBounds.value = null
+        _lastArtifactStatus.value = "idle"
+        _posterSource.value = "unknown"
+        _detectedPosterName.value = null
+        _videoPath.value = null
+        _state.value = TalkingPhotoState.TRACKING_READY
+        _softResetTrigger.value += 1
     }
     
     /**
@@ -339,7 +442,6 @@ class TalkingPhotoViewModel(
         val anchor = currentAnchor
         
         if (posterId != null && anchor != null) {
-            cancelLostTrackingReset()
             controller.stop()
             _error.value = null
             _state.value = TalkingPhotoState.IDLE
@@ -370,24 +472,7 @@ class TalkingPhotoViewModel(
     
     override fun onCleared() {
         super.onCleared()
-        cancelLostTrackingReset()
         controller.release()
-    }
-
-    private fun scheduleLostTrackingReset() {
-        if (currentPosterId == null) return
-        if (lostTrackingResetJob?.isActive == true) return
-        lostTrackingResetJob = viewModelScope.launch {
-            delay(LOST_TRACKING_RESET_TIMEOUT_MS)
-            if (!_isTracking.value && currentPosterId != null) {
-                refreshScan()
-            }
-        }
-    }
-
-    private fun cancelLostTrackingReset() {
-        lostTrackingResetJob?.cancel()
-        lostTrackingResetJob = null
     }
 
     private fun buildProjectedTransform(trackingData: TrackingData): Matrix? {

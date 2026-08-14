@@ -84,8 +84,10 @@ npm start
 ```bash
 # Build and push images
 docker build -t your-registry/talkar-backend:staging ./backend
+docker build -t your-registry/talkar-wav2lip-worker:staging -f ./backend/Dockerfile.wav2lip-worker ./backend
 docker build -t your-registry/talkar-frontend:staging ./admin-dashboard
 docker push your-registry/talkar-backend:staging
+docker push your-registry/talkar-wav2lip-worker:staging
 docker push your-registry/talkar-frontend:staging
 
 # Deploy to staging
@@ -135,10 +137,13 @@ kubectl apply -f k8s/database-deployment.yaml -n talkar-production
 # 4. Deploy backend
 kubectl apply -f k8s/backend-deployment.yaml -n talkar-production
 
-# 5. Deploy frontend
+# 5. Deploy Wav2Lip worker
+kubectl apply -f k8s/wav2lip-worker-deployment.yaml -n talkar-production
+
+# 6. Deploy frontend
 kubectl apply -f k8s/frontend-deployment.yaml -n talkar-production
 
-# 6. Deploy monitoring
+# 7. Deploy monitoring
 kubectl apply -f monitoring/ -n talkar-production
 
 # 7. Verify deployment
@@ -281,6 +286,15 @@ AWS_S3_BUCKET=talkar-production-assets
 SYNC_API_URL=https://api.sync.com/v1
 SYNC_API_KEY=your-sync-api-key
 
+# Wav2Lip / poster-talk
+TALKING_PHOTO_RELEASE_PROFILE=ga
+TALKING_PHOTO_QUEUE_MODE=sqs
+TALKING_PHOTO_MIRROR_TO_S3=true
+TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK=false
+WAV2LIP_WORKER_URL=http://talkar-wav2lip-worker-service:8088
+WAV2LIP_WORKER_AUTH_TOKEN=your-worker-auth-token
+WAV2LIP_WORKER_SIGNING_SECRET=your-worker-signing-secret
+
 # CORS
 CORS_ORIGIN=https://admin.talkar.com
 ```
@@ -317,6 +331,8 @@ data:
   aws-access-key-id: <base64-encoded-aws-access-key>
   aws-secret-access-key: <base64-encoded-aws-secret-key>
   sync-api-key: <base64-encoded-sync-api-key>
+  wav2lip-worker-auth-token: <base64-encoded-wav2lip-worker-auth-token>
+  wav2lip-worker-signing-secret: <base64-encoded-wav2lip-worker-signing-secret>
   firebase-api-key: <base64-encoded-firebase-api-key>
   firebase-sender-id: <base64-encoded-firebase-sender-id>
   firebase-app-id: <base64-encoded-firebase-app-id>

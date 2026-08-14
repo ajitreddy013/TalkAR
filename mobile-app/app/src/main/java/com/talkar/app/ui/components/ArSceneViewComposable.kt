@@ -9,6 +9,10 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.ImageProxy
+import android.graphics.Bitmap
+import com.talkar.app.data.services.ImageMatcherService
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -17,7 +21,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
 import androidx.compose.material3.Text
-import androidx.compose.material3.Button
 import androidx.compose.material3.Surface
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +37,7 @@ import com.google.ar.core.ArCoreApk
 import com.talkar.app.ar.video.models.TrackingData
 import com.talkar.app.ar.video.tracking.ARTrackingManager
 import com.talkar.app.ar.video.tracking.ARTrackingManagerImpl
+import com.talkar.app.data.repository.PosterRepository
 import com.talkar.app.ar.video.tracking.ReferencePoster
 import com.talkar.app.ar.video.tracking.TrackingListener
 import com.talkar.app.ar.video.tracking.TrackedPoster
@@ -58,11 +62,13 @@ fun ArSceneViewComposable(
     onPreviewModeChanged: (String) -> Unit = {},
     onTrackingReady: () -> Unit = {},
     onPosterSourceChanged: (String) -> Unit = {},
-    onPosterDetected: (posterId: String, anchor: com.google.ar.core.Anchor?) -> Unit = { _, _ -> },
+    onPosterDatabaseReady: (count: Int, source: String) -> Unit = { _, _ -> },
+    onPosterDetected: (posterId: String, posterName: String, anchor: com.google.ar.core.Anchor?) -> Unit = { _, _, _ -> },
     onPosterLost: (posterId: String) -> Unit = {},
     onTrackingUpdate: (trackingData: TrackingData) -> Unit = {},
     onError: (errorMessage: String) -> Unit = {},
-    sessionRecreateTrigger: Int = 0
+    sessionRecreateTrigger: Int = 0,
+    softResetTrigger: Int = 0
 ) {
     // Log composable entry
     Log.d("ArSceneView", "🎬 ArSceneViewComposable entered")
@@ -70,17 +76,22 @@ fun ArSceneViewComposable(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
+    val imageMatcher = remember { ImageMatcherService(context) }
     
     var arTrackingManager by remember { mutableStateOf<ARTrackingManager?>(null) }
     var session by remember { mutableStateOf<Session?>(null) }
     var glSurfaceViewRef by remember { mutableStateOf<GLSurfaceView?>(null) }
+    // isInitializing: true only while ARCore session itself is being created (fast, <1s).
+    // Poster loading happens in background after camera is already showing.
     var isInitializing by remember { mutableStateOf(true) }
+    var isLoadingPosters by remember { mutableStateOf(false) }
     var frameProcessingStarted by remember { mutableStateOf(false) }
     var cameraRendererActivated by remember { mutableStateOf(false) }
     var isSessionRunning by remember { mutableStateOf(false) }
     var isResumingSession by remember { mutableStateOf(false) }
     var useBasicCameraFallback by remember { mutableStateOf(false) }
     var currentlyTrackedPosterId by remember { mutableStateOf<String?>(null) }
+    var posterDetectionLocked by remember { mutableStateOf(false) }
     var sessionRecreateCount by remember { mutableIntStateOf(0) }
     var internalRecreateTrigger by remember { mutableIntStateOf(0) }
     var frameCount by remember { mutableIntStateOf(0) }
@@ -91,6 +102,25 @@ fun ArSceneViewComposable(
     val latestProjectionMatrix = remember { FloatArray(16) { if (it % 5 == 0) 1f else 0f } }
     
     Log.d("ArSceneView", "📊 State: isInitializing=$isInitializing, session=${session != null}, frameProcessingStarted=$frameProcessingStarted, recreateCount=$sessionRecreateCount")
+
+    LaunchedEffect(sessionRecreateTrigger) {
+        posterDetectionLocked = false
+        currentlyTrackedPosterId = null
+        arTrackingManager?.refreshScan()
+    }
+
+    // Soft reset: clear tracking state and unlock detection.
+    // ARTrackingManagerImpl.refreshScan() records trackedIndexAtReset so the
+    // previously-tracked poster is skipped until it leaves frame; any other
+    // poster is accepted immediately — no cooldown delay needed.
+    LaunchedEffect(softResetTrigger) {
+        if (softResetTrigger > 0) {
+            currentlyTrackedPosterId = null
+            arTrackingManager?.refreshScan()
+            posterDetectionLocked = false
+            Log.d("ArSceneView", "Soft reset: detection unlocked")
+        }
+    }
     
     fun resumeSessionSafely(source: String) {
         val currentSession = session ?: return
@@ -207,6 +237,9 @@ fun ArSceneViewComposable(
             // Release tracking manager resources
             arTrackingManager?.release()
             Log.d("ArSceneView", "✅ Tracking manager released")
+            
+            imageMatcher.destroy()
+            Log.d("ArSceneView", "✅ Image matcher destroyed")
             
             glSurfaceViewRef?.onPause()
             glSurfaceViewRef = null
@@ -367,17 +400,19 @@ fun ArSceneViewComposable(
                 }
                 
                 arSession.configure(config)
-                Log.d("ArSceneView", "✅ ARCore session configured successfully. UpdateMode=${config.updateMode}, FocusMode=${config.focusMode}")
-                
-                // Delay publishing session/tracking manager until posters are loaded and configured
-                
-                // Create tracking manager
+                Log.d("ArSceneView", "✅ ARCore session configured. UpdateMode=${config.updateMode}, FocusMode=${config.focusMode}")
+
+                // Create tracking manager and register listener BEFORE publishing session.
                 val trackingManager = ARTrackingManagerImpl(context, arSession)
 
-                // Set up tracking listener
                 trackingManager.setListener(object : TrackingListener {
                     override fun onPosterDetected(poster: TrackedPoster) {
-                        Log.d("ArSceneView", "Poster detected: ${poster.id}")
+                        if (posterDetectionLocked) {
+                            Log.d("ArSceneView", "Detection locked — ignoring: ${poster.id}")
+                            return
+                        }
+                        posterDetectionLocked = true
+                        Log.d("ArSceneView", "Poster detected: id=${poster.id} name=${poster.name}")
                         currentlyTrackedPosterId = poster.id
                         val source = when {
                             poster.id.startsWith("test_") -> "test_fallback"
@@ -385,152 +420,116 @@ fun ArSceneViewComposable(
                             else -> "backend"
                         }
                         onPosterSourceChanged(source)
-                        onPosterDetected(poster.id, poster.anchor)
+                        onPosterDetected(poster.id, poster.name, poster.anchor)
                     }
-                    
+
                     override fun onPosterTracking(poster: TrackedPoster) {
                         val pose = poster.anchor.pose
-                        val trackingData = TrackingData(
-                            position = com.talkar.app.ar.video.models.Vector3(
-                                pose.tx(),
-                                pose.ty(),
-                                pose.tz()
-                            ),
-                            rotation = com.talkar.app.ar.video.models.Quaternion(
-                                pose.qx(),
-                                pose.qy(),
-                                pose.qz(),
-                                pose.qw()
-                            ),
-                            scale = com.talkar.app.ar.video.models.Vector2(
-                                poster.extentX,
-                                poster.extentZ
-                            ),
+                        Log.d("ArSceneView", "onPosterTracking: extentX=${poster.extentX}m extentZ=${poster.extentZ}m ratio=${poster.extentZ/poster.extentX}")
+                        onTrackingUpdate(TrackingData(
+                            position = com.talkar.app.ar.video.models.Vector3(pose.tx(), pose.ty(), pose.tz()),
+                            rotation = com.talkar.app.ar.video.models.Quaternion(pose.qx(), pose.qy(), pose.qz(), pose.qw()),
+                            scale = com.talkar.app.ar.video.models.Vector2(poster.extentX, poster.extentZ),
                             isTracking = true,
                             timestamp = System.currentTimeMillis(),
                             viewMatrix = latestViewMatrix.copyOf(),
                             projectionMatrix = latestProjectionMatrix.copyOf()
-                        )
-                        onTrackingUpdate(trackingData)
+                        ))
                     }
-                    
+
                     override fun onPosterLost(posterId: String) {
                         Log.d("ArSceneView", "Poster lost: $posterId")
-                        if (currentlyTrackedPosterId == posterId) {
-                            currentlyTrackedPosterId = null
-                        }
+                        if (currentlyTrackedPosterId == posterId) currentlyTrackedPosterId = null
                         onPosterLost(posterId)
                     }
-                    
+
                     override fun onDetectionTimeout() {
                         Log.w("ArSceneView", "Poster detection timeout")
-                        // Ensure main thread for UI state update
                         scope.launch(Dispatchers.Main) {
                             onError("No poster detected. Please point camera at a poster with a human face.")
                         }
                     }
                 })
-                
-                // Load reference posters from backend
-                Log.d("ArSceneView", "Loading posters from backend...")
+
+                // ── Phase 1: Publish session AND clear isInitializing so camera shows immediately ──
+                withContext(Dispatchers.Main) {
+                    arTrackingManager = trackingManager
+                    session = arSession
+                    isInitializing = false   // camera view renders now; poster loading continues below
+                    isLoadingPosters = true
+                }
+                Log.d("ArSceneView", "Loading posters from backend (camera already showing)...")
+
                 val posterRepository = com.talkar.app.data.repository.PosterRepository(
                     apiClient = com.talkar.app.TalkARApplication.instance.apiClient,
                     imageRepository = com.talkar.app.TalkARApplication.instance.imageRepository,
                     context = context
                 )
-                withContext(Dispatchers.Main) {
-                    posterRepositoryRef = posterRepository
-                }
-                
-                // Try to load posters with timeout
+                withContext(Dispatchers.Main) { posterRepositoryRef = posterRepository }
+
                 val postersResult = withContext(Dispatchers.IO) {
                     try {
-                        kotlinx.coroutines.withTimeout(10000) { // 10 second timeout
-                            posterRepository.loadPosters()
-                        }
+                        kotlinx.coroutines.withTimeout(60_000) { posterRepository.loadPosters() }
                     } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-                        Log.w("ArSceneView", "Poster loading timed out; using bundled fallback posters")
-                        val bundledFallback = posterRepository.loadBundledFallbackPosters()
-                        if (bundledFallback.isSuccess) {
-                            bundledFallback
-                        } else {
-                            Log.w("ArSceneView", "Bundled fallback unavailable after timeout; using test poster")
-                            posterRepository.loadTestPoster().map { listOf(it) }
+                        Log.w("ArSceneView", "Poster loading timed out; using bundled fallback")
+                        posterRepository.loadBundledFallbackPosters().recoverCatching {
+                            posterRepository.loadTestPoster().getOrThrow().let { listOf(it) }
                         }
                     }
                 }
-                
+
                 val posters: List<ReferencePoster> = postersResult.getOrElse {
-                    Log.e("ArSceneView", "Failed to load posters from backend", it)
-                    // Try to load test poster as fallback
-                    val testPosterResult = posterRepository.loadTestPoster()
-                    val testPoster = testPosterResult.getOrNull()
-                    if (testPoster != null) {
-                        Log.d("ArSceneView", "Using test poster as fallback")
-                        listOf(testPoster)
-                    } else {
-                        Log.e("ArSceneView", "Failed to load test poster", it)
-                        emptyList()
-                    }
+                    Log.e("ArSceneView", "Failed to load posters", it)
+                    posterRepository.loadTestPoster().getOrNull()?.let { listOf(it) } ?: emptyList()
                 }
-                
-                if (posters.isEmpty()) {
-                    Log.w("ArSceneView", "⚠️ No posters loaded - detection will not work")
-                    Log.w("ArSceneView", "Camera will still be visible for testing")
-                } else {
+
+                imageMatcher.loadTemplates(posters)
+
+                val posterDatabaseSource = if (posters.isEmpty()) "none"
+                    else PosterRepository.classifySourceByPosterId(posters.first().id).name.lowercase()
+                withContext(Dispatchers.Main) {
+                    onPosterDatabaseReady(posters.size, posterDatabaseSource)
+                }
+
+                if (posters.isNotEmpty()) {
                     Log.d("ArSceneView", "Initializing tracking with ${posters.size} posters")
                     val initResult = trackingManager.initialize(posters)
-                    
                     if (initResult.isSuccess) {
-                        // Update ARCore session config with the image database from tracking manager
                         try {
                             val sessionConfig = arSession.config
                             val database = trackingManager.getAugmentedImageDatabase()
                             if (database != null) {
-                                Log.d("ArSceneView", "Updating ARCore config with image database from tracking manager")
                                 sessionConfig.augmentedImageDatabase = database
                                 arSession.configure(sessionConfig)
-                                Log.d("ArSceneView", "✅ ARCore config updated with ${database.numImages} images")
-                            } else {
-                                Log.e("ArSceneView", "❌ AugmentedImageDatabase is null after initialization!")
+                                Log.d("ArSceneView", "✅ ARCore image database loaded: ${database.numImages} images")
                             }
                         } catch (e: Exception) {
-                            Log.e("ArSceneView", "Failed to update ARCore config", e)
+                            Log.e("ArSceneView", "Failed to update ARCore config with image database", e)
                         }
-                        
-                        Log.d("ArSceneView", "✅ ARCore initialized successfully with ${posters.size} posters")
                     } else {
-                        Log.e("ArSceneView", "Failed to initialize tracking manager with current poster set")
-                        Log.d("ArSceneView", "Retrying tracking initialization with test poster fallback")
-                        val testPoster = posterRepository.loadTestPoster().getOrNull()
-                        if (testPoster != null) {
-                            val retryResult = trackingManager.initialize(listOf(testPoster))
-                            if (retryResult.isSuccess) {
+                        // Fallback: try test poster
+                        posterRepository.loadTestPoster().getOrNull()?.let { tp ->
+                            trackingManager.initialize(listOf(tp)).onSuccess {
                                 try {
-                                    val sessionConfig = arSession.config
-                                    val database = trackingManager.getAugmentedImageDatabase()
-                                    if (database != null) {
-                                        sessionConfig.augmentedImageDatabase = database
-                                        arSession.configure(sessionConfig)
+                                    val db = trackingManager.getAugmentedImageDatabase()
+                                    if (db != null) {
+                                        val cfg = arSession.config
+                                        cfg.augmentedImageDatabase = db
+                                        arSession.configure(cfg)
                                         Log.d("ArSceneView", "✅ ARCore initialized with test poster fallback")
                                     }
                                 } catch (e: Exception) {
-                                    Log.e("ArSceneView", "Failed to update ARCore config for test poster fallback", e)
+                                    Log.e("ArSceneView", "Failed to configure ARCore with test poster", e)
                                 }
-                            } else {
-                                Log.e("ArSceneView", "Test poster fallback initialization failed")
                             }
-                        } else {
-                            Log.e("ArSceneView", "Test poster fallback unavailable")
                         }
                     }
+                } else {
+                    Log.w("ArSceneView", "⚠️ No posters loaded — detection will not work")
                 }
-                
-                // Publish session/tracking manager on main thread for Compose state consistency.
-                // This triggers the lifecycle LaunchedEffect to resume the session safely.
+
                 withContext(Dispatchers.Main) {
-                    arTrackingManager = trackingManager
-                    session = arSession
+                    isLoadingPosters = false
                     onTrackingReady()
                 }
                 
@@ -551,44 +550,49 @@ fun ArSceneViewComposable(
 
     // Periodic backend poster index refresh while AR screen is active.
     // To avoid disrupting active playback/tracking, only reconfigure when no poster is currently tracked.
-    LaunchedEffect(session, arTrackingManager, currentlyTrackedPosterId) {
+    LaunchedEffect(session, arTrackingManager, useBasicCameraFallback, currentlyTrackedPosterId) {
         while (isActive) {
             delay(120_000) // 2 minutes
-            val arSession = session ?: continue
-            val trackingManager = arTrackingManager ?: continue
-            val posterRepository = posterRepositoryRef ?: continue
-
+            
             if (currentlyTrackedPosterId != null) {
                 Log.d("ArSceneView", "Skipping periodic poster refresh; poster is currently tracked")
                 continue
             }
-
+            
+            val posterRepository = posterRepositoryRef ?: continue
+            
             try {
                 val refreshedPosters = withContext(Dispatchers.IO) {
                     posterRepository.loadPosters().getOrElse { emptyList() }
                 }
                 if (refreshedPosters.isEmpty()) {
-                    Log.w("ArSceneView", "Periodic poster refresh returned empty list; keeping existing database")
+                    Log.w("ArSceneView", "Periodic poster refresh returned empty list")
                     continue
                 }
-
-                val initResult = withContext(Dispatchers.IO) {
-                    trackingManager.initialize(refreshedPosters)
-                }
-                if (initResult.isSuccess) {
-                    try {
-                        val cfg = arSession.config
-                        val database = trackingManager.getAugmentedImageDatabase()
-                        if (database != null) {
-                            cfg.augmentedImageDatabase = database
-                            arSession.configure(cfg)
-                            Log.d("ArSceneView", "Periodic poster refresh applied: ${database.numImages} posters")
-                        }
-                    } catch (e: Exception) {
-                        Log.e("ArSceneView", "Failed applying periodic poster refresh config", e)
+                
+                imageMatcher.loadTemplates(refreshedPosters)
+                
+                val arSession = session
+                val trackingManager = arTrackingManager
+                if (arSession != null && trackingManager != null) {
+                    val initResult = withContext(Dispatchers.IO) {
+                        trackingManager.initialize(refreshedPosters)
                     }
-                } else {
-                    Log.w("ArSceneView", "Periodic poster refresh initialize failed; existing config preserved")
+                    if (initResult.isSuccess) {
+                        try {
+                            val cfg = arSession.config
+                            val database = trackingManager.getAugmentedImageDatabase()
+                            if (database != null) {
+                                cfg.augmentedImageDatabase = database
+                                arSession.configure(cfg)
+                                Log.d("ArSceneView", "Periodic poster refresh applied to ARCore: ${database.numImages} posters")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ArSceneView", "Failed applying periodic poster refresh config to ARCore", e)
+                        }
+                    } else {
+                        Log.w("ArSceneView", "Periodic poster refresh initialize failed for ARCore")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("ArSceneView", "Periodic poster refresh failed", e)
@@ -616,33 +620,63 @@ fun ArSceneViewComposable(
     Box(modifier = modifier) {
         if (useBasicCameraFallback) {
             onPreviewModeChanged("CAMERAX_FALLBACK")
-            
-            // Simulate poster detection for testing on unsupported devices
-            LaunchedEffect(Unit) {
-                delay(4000) // 4 seconds delay to allow camera preview to start and show UI
-                Log.d("ArSceneView", "Simulating poster detection for fallback mode")
-                onPosterDetected("test-image-1", null)
+
+            LaunchedEffect(useBasicCameraFallback) {
+                if (useBasicCameraFallback) {
+                    val posterRepository = posterRepositoryRef ?: PosterRepository(
+                        apiClient = com.talkar.app.TalkARApplication.instance.apiClient,
+                        imageRepository = com.talkar.app.TalkARApplication.instance.imageRepository,
+                        context = context
+                    ).also { posterRepositoryRef = it }
+
+                    val fallbackPosters = withContext(Dispatchers.IO) {
+                        posterRepository.loadPosters().getOrElse { emptyList() }
+                    }
+
+                    if (fallbackPosters.isNotEmpty()) {
+                        imageMatcher.loadTemplates(fallbackPosters)
+                    }
+
+                    val source = when {
+                        fallbackPosters.isEmpty() -> "none"
+                        else -> PosterRepository.classifySourceByPosterId(fallbackPosters.first().id).name.lowercase()
+                    }
+                    onPosterDatabaseReady(fallbackPosters.size, source)
+                    onTrackingReady()
+                }
             }
             
             BasicCameraPreview(
                 modifier = Modifier.fillMaxSize(),
                 lifecycleOwner = lifecycleOwner,
+                imageMatcher = imageMatcher,
+                isDetectionLocked = posterDetectionLocked,
+                onPosterDetected = { posterId, posterName ->
+                    if (posterDetectionLocked) return@BasicCameraPreview
+                    posterDetectionLocked = true
+                    currentlyTrackedPosterId = posterId
+                    val source = PosterRepository.classifySourceByPosterId(posterId).name.lowercase()
+                    onPosterSourceChanged(source)
+                    onPosterDetected(posterId, posterName, null)
+                },
                 onPreviewReady = onPreviewReady,
                 onError = onError
             )
         } else if (isInitializing) {
-            // Show a black screen or loading while checking ARCore
+            // Session creation is fast (<1s) — minimal black screen with a clear message.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Initializing AR...",
-                    color = Color.White,
-                    fontSize = 16.sp
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp)
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(color = Color.White)
+                    Text("Starting camera...", color = Color.White, fontSize = 15.sp)
+                }
             }
         } else {
             // Render AR camera view only after initialization confirmed SUPPORTED
@@ -663,6 +697,7 @@ fun ArSceneViewComposable(
                                 view = view,
                                 sessionProvider = { session },
                                 trackingManagerProvider = { arTrackingManager },
+                                shouldProcessTrackingProvider = { true },
                                 isSessionRunningProvider = { isSessionRunning },
                                 latestViewMatrix = latestViewMatrix,
                                 latestProjectionMatrix = latestProjectionMatrix,
@@ -687,6 +722,7 @@ fun ArSceneViewComposable(
             )
         }
 
+
         // --- Detected Image Overlay ---
         if (currentlyTrackedPosterId != null) {
             Box(
@@ -708,38 +744,6 @@ fun ArSceneViewComposable(
             }
         }
 
-        // --- Diagnostic Overlay (DEBUG only) ---
-        if (com.talkar.app.BuildConfig.DEBUG) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp)
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .padding(8.dp)
-            ) {
-                Column {
-                    Text("AR Diagnostic", color = Color.Green, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text("Session: ${if (session != null) "Ready" else "Null"}", color = Color.White, fontSize = 10.sp)
-                    Text("Running: $isSessionRunning", color = Color.White, fontSize = 10.sp)
-                    Text("Initializing: $isInitializing", color = Color.White, fontSize = 10.sp)
-                    Text("Frames: $frameCount", color = Color.White, fontSize = 10.sp)
-                    Text("Re-Inits: $sessionRecreateCount", color = Color.White, fontSize = 10.sp)
-                    if (lastErrorMessage != null) {
-                        Text("Last Error: $lastErrorMessage", color = Color.Red, fontSize = 10.sp)
-                    }
-                    Button(
-                        onClick = { 
-                            internalRecreateTrigger++
-                            Log.d("ArSceneView", "Manually triggered session recreation")
-                        },
-                        modifier = Modifier.padding(top = 4.dp).height(30.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
-                    ) {
-                        Text("Re-Init GL", fontSize = 10.sp)
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -747,10 +751,15 @@ fun ArSceneViewComposable(
 private fun BasicCameraPreview(
     modifier: Modifier,
     lifecycleOwner: androidx.lifecycle.LifecycleOwner,
+    imageMatcher: ImageMatcherService,
+    isDetectionLocked: Boolean,
+    onPosterDetected: (String, String) -> Unit,
     onPreviewReady: () -> Unit,
     onError: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
@@ -762,17 +771,65 @@ private fun BasicCameraPreview(
             cameraProviderFuture.addListener({
                 try {
                     val cameraProvider = cameraProviderFuture.get()
-                    val preview = Preview.Builder().build().also {
+                    val preview = Preview.Builder()
+                        .setTargetRotation(android.view.Surface.ROTATION_0)
+                        .build().also {
                         it.setSurfaceProvider(previewView.surfaceProvider)
                     }
+                    
+                    var lastCheckTime = 0L
+                    val checkIntervalMs = 1000L // Analyze 1 frame per second
+                    
+                    val imageAnalysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                        .build()
+                        
+                    imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(ctx)) { imageProxy ->
+                        if (isDetectionLocked) {
+                            imageProxy.close()
+                            return@setAnalyzer
+                        }
+
+                        val currentTime = System.currentTimeMillis()
+                        if (currentTime - lastCheckTime < checkIntervalMs) {
+                            imageProxy.close()
+                            return@setAnalyzer
+                        }
+                        lastCheckTime = currentTime
+                        
+                        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                        val rawBitmap = try {
+                            imageProxy.toBitmap()
+                        } catch (e: Exception) {
+                            Log.e("BasicCameraPreview", "Failed to convert image proxy to bitmap", e)
+                            null
+                        }
+                        
+                        if (rawBitmap != null) {
+                            scope.launch(Dispatchers.Default) {
+                                val rotatedBitmap = rotateBitmapHelper(rawBitmap, rotationDegrees)
+                                val match = imageMatcher.matchFrame(rotatedBitmap)
+                                rotatedBitmap.recycle()
+                                if (match != null) {
+                                    withContext(Dispatchers.Main) {
+                                        onPosterDetected(match.imageId, match.imageName)
+                                    }
+                                }
+                            }
+                        }
+                        imageProxy.close()
+                    }
+                    
                     cameraProvider.unbindAll()
                     cameraProvider.bindToLifecycle(
                         lifecycleOwner,
                         CameraSelector.DEFAULT_BACK_CAMERA,
-                        preview
+                        preview,
+                        imageAnalysis
                     )
                     onPreviewReady()
-                    Log.d("ArSceneView", "✅ CameraX fallback preview started")
+                    Log.d("ArSceneView", "✅ CameraX fallback preview and analyzer started")
                 } catch (e: Exception) {
                     Log.e("ArSceneView", "Failed to start CameraX fallback preview", e)
                     onError("Camera preview unavailable: ${e.message}")
@@ -781,6 +838,15 @@ private fun BasicCameraPreview(
             previewView
         }
     )
+}
+
+private fun rotateBitmapHelper(bitmap: Bitmap, degrees: Int): Bitmap {
+    if (degrees == 0) return bitmap
+    val matrix = android.graphics.Matrix()
+    matrix.postRotate(degrees.toFloat())
+    val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    bitmap.recycle()
+    return rotated
 }
 
 
@@ -899,6 +965,7 @@ private fun setupCameraRenderer(
     view: android.view.View,
     sessionProvider: () -> Session?,
     trackingManagerProvider: () -> ARTrackingManager?,
+    shouldProcessTrackingProvider: () -> Boolean,
     isSessionRunningProvider: () -> Boolean,
     latestViewMatrix: FloatArray,
     latestProjectionMatrix: FloatArray,
@@ -930,11 +997,13 @@ private fun setupCameraRenderer(
             -1.0f,  1.0f,
              1.0f,  1.0f
         )
+        // ARCore transformDisplayUvCoords expects (0,0) at top-left (bitmap convention).
+        // V is therefore flipped vs the OpenGL "v=0 is bottom" convention.
         private val quadTexCoords = floatArrayOf(
-            0.0f, 0.0f,
-            1.0f, 0.0f,
-            0.0f, 1.0f,
-            1.0f, 1.0f
+            0.0f, 1.0f,  // NDC bottom-left  → camera bottom-left
+            1.0f, 1.0f,  // NDC bottom-right → camera bottom-right
+            0.0f, 0.0f,  // NDC top-left     → camera top-left
+            1.0f, 0.0f   // NDC top-right    → camera top-right
         )
         private val transformedTexCoords = FloatArray(8)
         private val vertexBuffer = java.nio.ByteBuffer.allocateDirect(quadCoords.size * 4)
@@ -1090,6 +1159,7 @@ private fun setupCameraRenderer(
                     width,
                     height
                 )
+                Log.d("ArSceneView", "setDisplayGeometry: rotation=$rotation viewport=${width}x${height}")
             } catch (e: Exception) {
                 Log.e("ArSceneView", "Error setting display geometry", e)
             }
@@ -1139,17 +1209,19 @@ private fun setupCameraRenderer(
                 }
                 
                 val camera = frame.camera
-                
+
                 // Always draw camera background; tracking may be PAUSED initially.
                 drawCameraBackground(frame)
 
-                // Process poster tracking continuously to allow timeout logic and early detection
-                trackingManagerProvider()?.processFrame(frame)
-
-                // Update matrices only when camera tracking is active to avoid jumpy geometry
+                // Update matrices BEFORE processFrame so tracking callbacks receive
+                // same-frame matrices (avoids one-frame lag that shifts the overlay).
                 if (camera.trackingState == TrackingState.TRACKING) {
                     camera.getViewMatrix(latestViewMatrix, 0)
                     camera.getProjectionMatrix(latestProjectionMatrix, 0, 0.1f, 100f)
+                }
+
+                if (shouldProcessTrackingProvider()) {
+                    trackingManagerProvider()?.processFrame(frame)
                 }
                 
                 // Signal successful frame draw

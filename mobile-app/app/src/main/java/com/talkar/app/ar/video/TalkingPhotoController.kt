@@ -64,6 +64,11 @@ interface TalkingPhotoController {
      * Registers callbacks for lifecycle events.
      */
     fun setCallbacks(callbacks: TalkingPhotoCallbacks)
+
+    /**
+     * Gets the path of the downloaded video file.
+     */
+    fun getVideoPath(): String? = null
 }
 
 /**
@@ -80,4 +85,12 @@ interface TalkingPhotoCallbacks {
     fun onTrackingLost() {}
     fun onTrackingResumed() {}
     fun onLipCoordinatesReady(lipCoordinates: LipCoordinates) {}
+    /** Screen-fraction bounds [left, top, right, bottom] of the poster, 0..1. */
+    fun onPosterScreenBounds(left: Float, top: Float, right: Float, bottom: Float) {}
+    /**
+     * Directly-projected lip region screen fractions [left, top, right, bottom].
+     * More accurate than computing from poster bounds × lip UV fractions, especially
+     * when the poster is viewed from an angle (projected as a trapezoid, not a rect).
+     */
+    fun onLipScreenBounds(left: Float, top: Float, right: Float, bottom: Float) {}
 }

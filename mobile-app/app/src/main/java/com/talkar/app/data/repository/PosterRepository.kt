@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
 import com.talkar.app.ar.video.tracking.ReferencePoster
+import com.talkar.app.ar.video.tracking.ARTrackingErrorHandler
 import com.talkar.app.data.api.ApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,6 +34,9 @@ class PosterRepository(
     companion object {
         private const val TAG = "PosterRepository"
         private const val DEFAULT_POSTER_WIDTH_METERS = 0.3f // 30cm default poster width
+        private const val MIN_POSTER_DIMENSION_PX = 128
+        private const val MIN_POSTER_ASPECT_RATIO = 0.25f
+        private const val MAX_POSTER_ASPECT_RATIO = 4.0f
         
         // Development mode - set to false to use real backend data
         // Set to true only for testing without backend
@@ -116,6 +120,9 @@ class PosterRepository(
             fallbackFiles.forEach { (id, name, assetPath) ->
                 try {
                     val imageData = context.assets.open(assetPath).use { it.readBytes() }
+                    if (!isValidPosterImage(imageData, id, name, "bundled_fallback")) {
+                        return@forEach
+                    }
                     posters.add(
                         ReferencePoster(
                             id = id,
@@ -153,9 +160,24 @@ class PosterRepository(
                 Log.d(TAG, "📥 Found ${activePosters.size} posters from /posters/index")
                 for (poster in activePosters) {
                     try {
+                        val humanFaceResult = ARTrackingErrorHandler.validateHumanFace(
+                            hasHumanFace = poster.talkingPhoto.eligible,
+                            posterId = poster.id
+                        )
+                        if (humanFaceResult.isFailure) {
+                            Log.w(
+                                TAG,
+                                "    ⚠️ Skipping poster not eligible for talking-photo flow: ${poster.name} (${poster.id})"
+                            )
+                            continue
+                        }
+
                         val imageData = downloadImage(poster.imageUrl)
                         if (imageData == null) {
                             Log.w(TAG, "    ❌ Failed to download image: ${poster.name}")
+                            continue
+                        }
+                        if (!isValidPosterImage(imageData, poster.id, poster.name, "backend")) {
                             continue
                         }
                         posters.add(
@@ -164,7 +186,7 @@ class PosterRepository(
                                 name = poster.name,
                                 imageData = imageData,
                                 physicalWidthMeters = DEFAULT_POSTER_WIDTH_METERS,
-                                hasHumanFace = true // Allow all images to be detected
+                                hasHumanFace = poster.talkingPhoto.eligible
                             )
                         )
                     } catch (e: Exception) {
@@ -188,6 +210,9 @@ class PosterRepository(
                     val imageData = downloadImage(image.imageUrl)
                     if (imageData == null) {
                         Log.w(TAG, "    ❌ Failed to download image: ${image.name}")
+                        continue
+                    }
+                    if (!isValidPosterImage(imageData, image.id, image.name, "backend_legacy")) {
                         continue
                     }
 
@@ -282,6 +307,10 @@ class PosterRepository(
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
             val imageData = outputStream.toByteArray()
             outputStream.close()
+
+            if (!isValidPosterImage(imageData, posterId = "test_poster", posterName = "Test Poster", source = "test_fallback")) {
+                return@withContext Result.failure(IllegalStateException("Test poster image failed validation"))
+            }
             
             val poster = ReferencePoster(
                 id = "test_poster",
@@ -397,6 +426,10 @@ class PosterRepository(
                         bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
                         val imageData = outputStream.toByteArray()
                         outputStream.close()
+
+                        if (!isValidPosterImage(imageData, id, name, "mock")) {
+                            continue
+                        }
                         
                         val poster = ReferencePoster(
                             id = id,
@@ -422,5 +455,46 @@ class PosterRepository(
             Log.e(TAG, "❌ Failed to load mock posters", e)
             Result.failure(e)
         }
+    }
+
+    private fun isValidPosterImage(
+        imageData: ByteArray,
+        posterId: String,
+        posterName: String,
+        source: String
+    ): Boolean {
+        if (imageData.isEmpty()) {
+            Log.w(TAG, "⚠️ Skipping empty poster image: $posterName ($posterId) from $source")
+            return false
+        }
+
+        val bitmap = BitmapFactory.decodeByteArray(imageData, 0, imageData.size)
+        if (bitmap == null) {
+            Log.w(TAG, "⚠️ Skipping undecodable poster image: $posterName ($posterId) from $source")
+            return false
+        }
+
+        val width = bitmap.width
+        val height = bitmap.height
+        val aspectRatio = width.toFloat() / height.toFloat()
+        val validDimensions = width >= MIN_POSTER_DIMENSION_PX && height >= MIN_POSTER_DIMENSION_PX
+        val validAspectRatio = aspectRatio in MIN_POSTER_ASPECT_RATIO..MAX_POSTER_ASPECT_RATIO
+
+        if (!validDimensions || !validAspectRatio) {
+            Log.w(
+                TAG,
+                "⚠️ Skipping poster image outside ARCore-friendly bounds: $posterName ($posterId) " +
+                    "source=$source size=${width}x${height} ratio=${"%.2f".format(aspectRatio)}"
+            )
+            bitmap.recycle()
+            return false
+        }
+
+        Log.d(
+            TAG,
+            "✅ Valid poster image: $posterName ($posterId) source=$source size=${width}x${height}"
+        )
+        bitmap.recycle()
+        return true
     }
 }

@@ -52,6 +52,21 @@ If signing secret is configured on worker, both signature headers are required.
 ## Reference Implementation
 - Middleware: `backend/src/middleware/workerAuth.ts`
 - Worker route template: `backend/src/scripts/wav2lipWorkerTemplate.ts`
+- Local worker entrypoint: `backend/src/scripts/wav2lipWorker.ts`
+
+## Local Development
+1. Start the backend API.
+2. Set the worker env vars:
+   - `WAV2LIP_WORKER_AUTH_TOKEN`
+   - `WAV2LIP_WORKER_SIGNING_SECRET` if you want signed requests
+   - `WAV2LIP_WORKER_URL=http://127.0.0.1:8088`
+   - `WAV2LIP_PATH=/path/to/Wav2Lip`
+   - `WAV2LIP_CHECKPOINT_PATH=/path/to/Wav2Lip/checkpoints/wav2lip_gan.pth`
+3. Run the worker:
+   - `cd backend && npm run dev:wav2lip-worker`
+4. Ensure `ffmpeg` and Python are available on the machine.
+
+The worker generates audio from the script text using Google Translate TTS by default, then runs the configured Wav2Lip inference script and serves the generated MP4 from `/artifacts/...`.
 
 ## Replay Store Backends
 - `WAV2LIP_NONCE_STORE=memory` (default): single-instance nonce replay protection.

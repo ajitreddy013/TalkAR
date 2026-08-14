@@ -156,7 +156,7 @@ router.post(
   validateImageUpload,
   async (req, res, next) => {
     try {
-      const { name, description, script } = req.body;
+      const { name, description, script, voiceId } = req.body;
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
       
       let imageUrl: string;
@@ -200,9 +200,10 @@ router.post(
         await Dialogue.create({
           imageId: image.id,
           text: script,
-          language: "en", // Default to English
+          language: "en",
           isActive: true,
           isDefault: true,
+          ...(voiceId ? { voiceId } : {}),
         });
       }
 
@@ -214,10 +215,20 @@ router.post(
         ]
       });
 
-      await preprocessPosterImage(image.id);
+      void preprocessPosterImage(image.id).catch((error) => {
+        console.warn("[images] poster preprocessing failed after create", {
+          imageId: image.id,
+          message: (error as Error).message,
+        });
+      });
 
       if (script && script.trim() !== "") {
-        await enqueueTalkingPhotoGeneration(image.id);
+        void enqueueTalkingPhotoGeneration(image.id).catch((error) => {
+          console.warn("[images] talking photo generation failed after create", {
+            imageId: image.id,
+            message: (error as Error).message,
+          });
+        });
       }
 
       return res.status(201).json(createdImage);
@@ -237,7 +248,7 @@ router.put(
   async (req, res, next) => {
     try {
       const { id } = req.params;
-      const { name, description, isActive, script } = req.body;
+      const { name, description, isActive, script, voiceId } = req.body;
       const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
 
       const image = await Image.findByPk(id, {
@@ -287,29 +298,48 @@ router.put(
       });
 
       if (shouldRegenerateArtifact) {
-        await preprocessPosterImage(id);
+        void preprocessPosterImage(id).catch((error) => {
+          console.warn("[images] poster preprocessing failed after update", {
+            imageId: id,
+            message: (error as Error).message,
+          });
+        });
       }
 
-      // Update default script if provided
-      if (script !== undefined) {
+      // Update default script and/or voiceId if provided
+      if (script !== undefined || voiceId !== undefined) {
         const defaultDialogue = image.dialogues?.find((d: Dialogue) => d.isDefault);
-        const scriptChanged = defaultDialogue?.text !== script;
+        const scriptChanged = script !== undefined && defaultDialogue?.text !== script;
         if (defaultDialogue) {
-          await defaultDialogue.update({ text: script });
-        } else if (script.trim() !== "") {
+          await defaultDialogue.update({
+            ...(script !== undefined ? { text: script } : {}),
+            ...(voiceId !== undefined ? { voiceId } : {}),
+          });
+        } else if (script && script.trim() !== "") {
           await Dialogue.create({
             imageId: id,
             text: script,
             language: "en",
             isActive: true,
             isDefault: true,
+            ...(voiceId ? { voiceId } : {}),
           });
         }
-        if (script.trim() !== "" && scriptChanged) {
-          await enqueueTalkingPhotoGeneration(id);
+        if (script && script.trim() !== "" && scriptChanged) {
+          void enqueueTalkingPhotoGeneration(id).catch((error) => {
+            console.warn("[images] talking photo generation failed after update", {
+              imageId: id,
+              message: (error as Error).message,
+            });
+          });
         }
       } else if (shouldRegenerateArtifact) {
-        await enqueueTalkingPhotoGeneration(id);
+        void enqueueTalkingPhotoGeneration(id).catch((error) => {
+          console.warn("[images] talking photo generation failed after image update", {
+            imageId: id,
+            message: (error as Error).message,
+          });
+        });
       }
 
       const updatedImage = await Image.findByPk(id, {

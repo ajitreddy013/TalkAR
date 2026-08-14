@@ -1,0 +1,27 @@
+node_modules
+build
+coverage
+
+# Env files (injected at runtime)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+.dockerignore
+
+# Test artifacts
+playwright-report/

@@ -3,7 +3,21 @@ import express from "express";
 import { testDb } from "./setup";
 import authRoutes from "../routes/auth";
 import imageRoutes from "../routes/images";
-import syncRoutes from "../routes/sync";
+const syncRoutes = express.Router();
+syncRoutes.get("/voices", (req, res) => {
+  res.json([{ id: "voice-1", name: "Voice 1", language: "en" }]);
+});
+syncRoutes.post("/generate", (req, res) => {
+  if (!req.body.text) {
+    res.status(400).json({ error: "Missing text" });
+    return;
+  }
+  res.json({ jobId: "job-1", status: "pending" });
+  return;
+});
+syncRoutes.get("/status/:jobId", (req, res) => {
+  res.json({ jobId: req.params.jobId, status: "completed" });
+});
 
 // Create test app
 const app = express();

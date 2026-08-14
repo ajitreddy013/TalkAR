@@ -1,9 +1,9 @@
 version: "3.8"
 
 services:
-  # PostgreSQL Database
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     environment:
       POSTGRES_DB: talkar_db
       POSTGRES_USER: postgres
@@ -12,51 +12,76 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD-SHELL", "pg_isready -U postgres -d talkar_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # Backend API
+  # ── Backend API ───────────────────────────────────────────────────────────
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: prod
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=development
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=talkar_db
-      - DB_USER=postgres
-      - DB_PASSWORD=${DB_PASSWORD}
-      - JWT_SECRET=${JWT_SECRET}
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_REGION=us-east-1
-      - AWS_S3_BUCKET=talkar-assets
-      - SYNC_API_URL=https://api.sync.com/v1
-      - SYNC_API_KEY=${SYNC_API_KEY}
-      - CORS_ORIGIN=http://localhost:3001
+      NODE_ENV: production
+      PORT: 3000
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: talkar_db
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/talkar_db
+      DB_DIALECT: postgres
+      # Auth
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 7d
+      # AWS
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-talkar-assets}
+      # External APIs
+      SYNC_API_URL: ${SYNC_API_URL:-https://api.sync.so/v2}
+      SYNC_API_KEY: ${SYNC_API_KEY}
+      AI_PROVIDER: ${AI_PROVIDER:-groq}
+      TTS_PROVIDER: ${TTS_PROVIDER:-elevenlabs}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GROQCLOUD_API_KEY: ${GROQCLOUD_API_KEY}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY}
+      GOOGLE_CLOUD_TTS_API_KEY: ${GOOGLE_CLOUD_TTS_API_KEY}
+      # Wav2Lip worker
+      TALKING_PHOTO_RELEASE_PROFILE: ${TALKING_PHOTO_RELEASE_PROFILE:-ga}
+      TALKING_PHOTO_QUEUE_MODE: ${TALKING_PHOTO_QUEUE_MODE:-local}
+      TALKING_PHOTO_MIRROR_TO_S3: ${TALKING_PHOTO_MIRROR_TO_S3:-false}
+      TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK: ${TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK:-false}
+      WAV2LIP_WORKER_URL: ${WAV2LIP_WORKER_URL:-http://localhost:8088}
+      WAV2LIP_WORKER_AUTH_TOKEN: ${WAV2LIP_WORKER_AUTH_TOKEN}
+      WAV2LIP_WORKER_SIGNING_SECRET: ${WAV2LIP_WORKER_SIGNING_SECRET}
+      # CORS
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
+    restart: unless-stopped
 
-  # Admin Dashboard
+  # ── Admin Dashboard ───────────────────────────────────────────────────────
   admin-dashboard:
-    build: ./admin-dashboard
+    build:
+      context: ./admin-dashboard
+      target: prod
+      args:
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:3000/api/v1}
     ports:
       - "3001:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:3000/api/v1
     depends_on:
       - backend
-    volumes:
-      - ./admin-dashboard:/app
-      - /app/node_modules
+    restart: unless-stopped
 
 volumes:
   postgres_data:

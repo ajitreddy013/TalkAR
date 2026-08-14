@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talkar-wav2lip-worker
+  labels:
+    app: talkar-wav2lip-worker
+    tier: worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: talkar-wav2lip-worker
+  template:
+    metadata:
+      labels:
+        app: talkar-wav2lip-worker
+        tier: worker
+    spec:
+      containers:
+        - name: wav2lip-worker
+          image: talkar-wav2lip-worker:latest
+          ports:
+            - containerPort: 8088
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: WAV2LIP_WORKER_PORT
+              value: "8088"
+            - name: WAV2LIP_PATH
+              value: "/opt/Wav2Lip"
+            - name: WAV2LIP_CHECKPOINT_PATH
+              value: "/opt/Wav2Lip/checkpoints/wav2lip_gan.pth"
+            - name: WAV2LIP_TTS_PROVIDER
+              value: "gtts"
+            - name: WAV2LIP_OUTPUT_DIR
+              value: "/data/wav2lip"
+            - name: WAV2LIP_WORKER_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: wav2lip-worker-auth-token
+            - name: WAV2LIP_WORKER_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: wav2lip-worker-signing-secret
+            - name: WAV2LIP_WORKER_MAX_SKEW_MS
+              value: "300000"
+            - name: WAV2LIP_PYTHON_BIN
+              value: "python3"
+            - name: WAV2LIP_FFMPEG_BIN
+              value: "ffmpeg"
+          volumeMounts:
+            - name: wav2lip-output
+              mountPath: /data/wav2lip
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "1000m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8088
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8088
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: wav2lip-output
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: talkar-wav2lip-worker-service
+  labels:
+    app: talkar-wav2lip-worker
+spec:
+  selector:
+    app: talkar-wav2lip-worker
+  ports:
+    - port: 8088
+      targetPort: 8088
+      protocol: TCP
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: talkar-wav2lip-worker-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: talkar-wav2lip-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

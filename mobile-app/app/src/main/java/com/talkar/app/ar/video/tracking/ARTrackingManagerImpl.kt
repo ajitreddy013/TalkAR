@@ -41,6 +41,12 @@ class ARTrackingManagerImpl(
     private var posterMap: Map<Int, ReferencePoster> = emptyMap()
     private var detectionStartTime: Long = 0
     private var hasReportedTimeout: Boolean = false
+    private var hasProcessedScanFrame: Boolean = false
+    // Per-image ARCore state from the previous frame — used to detect PAUSED→TRACKING transitions.
+    private val previousTrackingStates = mutableMapOf<Int, ARCoreTrackingState>()
+    // ARCore index of the poster that was being tracked when refreshScan() was called.
+    // We skip re-detecting it until it leaves the frame (PAUSED), but accept any OTHER poster immediately.
+    private var trackedIndexAtReset: Int = -1
     
     override fun getAugmentedImageDatabase(): AugmentedImageDatabase? = imageDatabase
     
@@ -74,6 +80,7 @@ class ARTrackingManagerImpl(
                         return@forEachIndexed
                     }
 
+                    Log.d(TAG, "Bitmap for ${poster.id}: ${bitmap.width}×${bitmap.height}, physicalWidth=${poster.physicalWidthMeters}m → extentZ≈${poster.physicalWidthMeters * bitmap.height.toFloat() / bitmap.width}m")
                     val imageIndex = database.addImage(
                         poster.id, // Use poster ID as the unique key in the database
                         bitmap,
@@ -92,7 +99,9 @@ class ARTrackingManagerImpl(
             }
             
             imageDatabase = database
-            detectionStartTime = System.currentTimeMillis()
+            detectionStartTime = 0
+            hasReportedTimeout = false
+            hasProcessedScanFrame = false
             
             Log.d(TAG, "✅ AR tracking initialized successfully")
             Result.success(Unit)
@@ -107,9 +116,14 @@ class ARTrackingManagerImpl(
         try {
             // Check for detection timeout (Requirement 14.1)
             if (currentTrackedPoster == null) {
+                if (!hasProcessedScanFrame) {
+                    detectionStartTime = System.currentTimeMillis()
+                    hasReportedTimeout = false
+                    hasProcessedScanFrame = true
+                }
                 val elapsed = System.currentTimeMillis() - detectionStartTime
                 if (elapsed > DETECTION_TIMEOUT_MS && !hasReportedTimeout) {
-                    Log.w(TAG, "⚠️ Poster detection timeout after ${'$'}{elapsed}ms")
+                    Log.w(TAG, "⚠️ Poster detection timeout after ${elapsed}ms")
                     listener?.onDetectionTimeout()
                     hasReportedTimeout = true
                     // Don't reset timer - let user take action
@@ -122,27 +136,38 @@ class ARTrackingManagerImpl(
             if (!updatedAugmentedImages.isEmpty()) {
                 Log.d(TAG, "Frame update: found ${updatedAugmentedImages.size} augmented images")
             }
-            
+
             for (augmentedImage in updatedAugmentedImages) {
+                val prevState = previousTrackingStates[augmentedImage.index]
+                val currState = augmentedImage.trackingState
+                previousTrackingStates[augmentedImage.index] = currState
+
                 // Single poster mode: if we're already tracking a poster, ignore others
-                if (currentTrackedPoster != null && 
-                    augmentedImage.index != posterMap.entries.find { 
-                        it.value.id == currentTrackedPoster?.id 
+                if (currentTrackedPoster != null &&
+                    augmentedImage.index != posterMap.entries.find {
+                        it.value.id == currentTrackedPoster?.id
                     }?.key) {
                     continue
                 }
-                
-                when (augmentedImage.trackingState) {
+
+                when (currState) {
                     ARCoreTrackingState.TRACKING -> {
                         val poster = posterMap[augmentedImage.index]
                         if (poster == null) {
-                            Log.w(TAG, "Unknown augmented image index: ${'$'}{augmentedImage.index}")
+                            Log.w(TAG, "Unknown augmented image index: ${augmentedImage.index}")
                             continue
                         }
-                        
-                        // Create or update tracked poster
+
                         if (currentTrackedPoster == null) {
-                            // First detection - create new anchor
+                            // After a reset, skip the same poster that was previously tracked
+                            // while it stays continuously TRACKING (still in frame).
+                            // Accept any OTHER poster immediately — no waiting for transitions.
+                            if (trackedIndexAtReset == augmentedImage.index &&
+                                prevState == ARCoreTrackingState.TRACKING) {
+                                Log.d(TAG, "Skipping ${poster.name} — was tracked at reset, waiting for it to leave frame")
+                                continue
+                            }
+                            trackedIndexAtReset = -1
                             val trackedPoster = TrackedPoster(
                                 id = poster.id,
                                 name = poster.name,
@@ -154,9 +179,8 @@ class ARTrackingManagerImpl(
                             currentTrackedPoster = trackedPoster
                             currentAnchor = trackedPoster.anchor
                             listener?.onPosterDetected(trackedPoster)
-                            Log.d(TAG, "✅ Poster detected: ${'$'}{poster.id}")
+                            Log.d(TAG, "✅ Poster detected: ${poster.id} name=${poster.name}")
                         } else {
-                            // Update existing tracking - reuse anchor, just update state
                             val trackedPoster = currentTrackedPoster!!.copy(
                                 trackingState = TrackingState.TRACKING,
                                 extentX = augmentedImage.extentX,
@@ -165,15 +189,15 @@ class ARTrackingManagerImpl(
                             currentTrackedPoster = trackedPoster
                             listener?.onPosterTracking(trackedPoster)
                         }
-                        
+
                         return currentTrackedPoster
                     }
-                    
+
                     ARCoreTrackingState.PAUSED -> {
                         // Poster temporarily lost (out of frame)
-                        if (currentTrackedPoster != null && 
+                        if (currentTrackedPoster != null &&
                             posterMap[augmentedImage.index]?.id == currentTrackedPoster?.id) {
-                            Log.d(TAG, "⏸️ Poster tracking paused: ${'$'}{currentTrackedPoster?.id}")
+                            Log.d(TAG, "⏸️ Poster tracking paused: ${currentTrackedPoster?.id}")
                             listener?.onPosterLost(currentTrackedPoster!!.id)
                         }
                     }
@@ -182,7 +206,7 @@ class ARTrackingManagerImpl(
                         // Poster tracking stopped
                         if (currentTrackedPoster != null && 
                             posterMap[augmentedImage.index]?.id == currentTrackedPoster?.id) {
-                            Log.d(TAG, "⏹️ Poster tracking stopped: ${'$'}{currentTrackedPoster?.id}")
+                            Log.d(TAG, "⏹️ Poster tracking stopped: ${currentTrackedPoster?.id}")
                             listener?.onPosterLost(currentTrackedPoster!!.id)
                             currentTrackedPoster = null
                             currentAnchor = null
@@ -204,17 +228,18 @@ class ARTrackingManagerImpl(
     
     override fun refreshScan() {
         Log.d(TAG, "🔄 Refresh scan - clearing current poster")
-        
-        // Clear current tracking
         val previousPosterId = currentTrackedPoster?.id
+        // Record the ARCore index of the poster we were tracking so we can skip
+        // re-detecting it immediately (it may still be visible in frame).
+        trackedIndexAtReset = posterMap.entries
+            .find { it.value.id == currentTrackedPoster?.id }?.key ?: -1
+        Log.d(TAG, "  trackedIndexAtReset=$trackedIndexAtReset (poster=$previousPosterId)")
         currentTrackedPoster = null
         currentAnchor?.detach()
         currentAnchor = null
-        
-        // Reset detection timer and timeout flag
         detectionStartTime = System.currentTimeMillis()
         hasReportedTimeout = false
-        
+        hasProcessedScanFrame = false
         if (previousPosterId != null) {
             listener?.onPosterLost(previousPosterId)
         }

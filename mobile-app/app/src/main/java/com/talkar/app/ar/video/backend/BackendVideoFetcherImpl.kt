@@ -7,6 +7,7 @@ import com.talkar.app.ar.video.models.StatusResponse
 import com.talkar.app.ar.video.models.TalkingPhotoArtifactResponse
 import com.talkar.app.ar.video.models.TalkingPhotoRequest
 import com.talkar.app.data.api.ApiService
+import com.talkar.app.data.api.TalkingPhotoRetryRequest
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import okhttp3.OkHttpClient
@@ -53,6 +54,36 @@ class BackendVideoFetcherImpl(
                 Result.failure(Exception(mapped))
             }
         } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun requestTalkingPhotoGeneration(posterId: String): Result<Unit> {
+        return try {
+            val response = apiService.retryTalkingPhotoArtifact(
+                imageId = posterId,
+                request = TalkingPhotoRetryRequest(
+                    source = "mobile_runtime",
+                    reason = "artifact_not_ready"
+                )
+            )
+            if (response.isSuccessful && response.body()?.success == true) {
+                Log.d(TAG, "Queued talking-photo generation for posterId=$posterId")
+                Result.success(Unit)
+            } else {
+                val rawError = response.errorBody()?.string().orEmpty()
+                val errorCode = response.body()?.errorCode
+                    ?: when {
+                        rawError.contains("NO_DEFAULT_SCRIPT") -> "NO_DEFAULT_SCRIPT"
+                        rawError.contains("NO_FACE_IN_POSTER") -> "NO_FACE_IN_POSTER"
+                        rawError.contains("ARTIFACT_NOT_READY") -> "ARTIFACT_NOT_READY"
+                        else -> "PROVIDER_FAILED"
+                    }
+                Log.w(TAG, "Failed to queue talking-photo generation for posterId=$posterId code=$errorCode")
+                Result.failure(Exception(errorCode))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error queueing talking-photo generation for posterId=$posterId", e)
             Result.failure(e)
         }
     }

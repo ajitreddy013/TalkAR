@@ -1,22 +1,38 @@
+# docker-compose.override.yml — automatically applied on top of docker-compose.yml
+# during local development (docker compose up).
+# Switches both services to the `dev` Dockerfile target for hot-reload.
+
+version: "3.8"
+
 services:
   backend:
-    # Run in watch mode using ts-node-dev, force Postgres dialect to avoid sqlite native module
-    command: sh -c "export DB_DIALECT=postgres && npm run dev"
-    # Keep the existing bind mounts from base compose for hot reload
+    build:
+      target: dev
+    environment:
+      NODE_ENV: development
+      # Override to force postgres dialect even in dev
+      DB_DIALECT: postgres
+    # Bind-mount source so ts-node-dev picks up changes without rebuilding
     volumes:
       - ./backend:/app
-      - /app/node_modules
+      - backend_node_modules:/app/node_modules
+    # No restart in dev — let it crash visibly
+    restart: "no"
 
   admin-dashboard:
-    # Ensure React dev server binds to 0.0.0.0; keep base port mapping 3001:3000
-    command: npm start
+    build:
+      target: dev
     environment:
-      - HOST=0.0.0.0
-      - WATCHPACK_POLLING=true
-    # Healthcheck against internal port 3000
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 30s
+      HOST: "0.0.0.0"
+      WATCHPACK_POLLING: "true"
+      # Keep API URL pointing at the backend container
+      REACT_APP_API_URL: http://localhost:3000/api/v1
+    # Bind-mount source for hot-reload
+    volumes:
+      - ./admin-dashboard:/app
+      - admin_node_modules:/app/node_modules
+    restart: "no"
+
+volumes:
+  backend_node_modules:
+  admin_node_modules:

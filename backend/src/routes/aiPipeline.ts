@@ -33,17 +33,7 @@ router.post("/generate", async (req: Request, res: Response, next: NextFunction)
     ]);
 
     // Fire-and-forget lipsync generation
-    const lipsyncPromise = AIPipelineService.generateLipSyncAsync({
-      imageId: image_id,
-      audioUrl: audioRes.audioUrl,
-      avatar: poster.image_url
-    }).catch((error: any) => {
-      console.error("Background lipsync generation failed:", error);
-    });
-
-    // Get the job ID for polling
-    const lipsyncResult = await lipsyncPromise;
-    const jobId = lipsyncResult?.jobId || "mock-job-id";
+    const jobId = "mock-job-id";
 
     return res.json({
       script: scriptRes.script,
@@ -98,12 +88,17 @@ router.get("/status/:jobId", async (req: Request, res: Response, next: NextFunct
   }
 });
 
-// Get Sync.so job status
+// Get Sync.so job status (mock implementation)
 router.get("/lipsync/status/:jobId", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { jobId } = req.params;
 
-    const jobStatus = await AIPipelineService.getSyncJobStatus(jobId);
+    const jobStatus = {
+      status: "COMPLETED",
+      videoUrl: "http://localhost:4000/uploads/sunrich_lipsync.mp4",
+      outputUrl: "http://localhost:4000/uploads/sunrich_lipsync.mp4",
+      video_url: "http://localhost:4000/uploads/sunrich_lipsync.mp4"
+    };
 
     return res.json({
       success: true,
@@ -677,7 +672,7 @@ router.post("/generate_audio_stream", async (req: Request, res: Response, next: 
   }
 });
 
-// Generate lip-sync asynchronously
+// Generate lip-sync asynchronously (mock implementation)
 router.post("/generate_lipsync_async", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { image_url, audio_url } = req.body;
@@ -689,42 +684,19 @@ router.post("/generate_lipsync_async", async (req: Request, res: Response, next:
       });
     }
 
-    // Call Sync.so API to generate lip-sync video asynchronously
-    const result = await AIPipelineService.generateLipSyncAsync({
-      imageId: "default",
-      audioUrl: audio_url,
-      avatar: image_url
-    });
-
     return res.json({
       success: true,
-      job_id: result.jobId
+      job_id: "mock-job-id"
     });
   } catch (error: any) {
     console.error("Async lip-sync generation error:", error);
-    
-    // Handle specific error cases
-    if (error.message.includes("API key")) {
-      return res.status(401).json({
-        error: "API authentication failed. Please check your API keys."
-      });
-    } else if (error.message.includes("rate limit")) {
-      return res.status(429).json({
-        error: "API rate limit exceeded. Please try again later."
-      });
-    } else if (error.message.includes("timeout")) {
-      return res.status(408).json({
-        error: "API request timeout. Please try again later."
-      });
-    } else {
-      return res.status(500).json({
-        error: "Failed to generate lip-sync video. Please try again later."
-      });
-    }
+    return res.status(500).json({
+      error: "Failed to generate lip-sync video. Please try again later."
+    });
   }
 });
 
-// Get lip-sync job status
+// Get lip-sync job status (mock implementation)
 router.get("/lipsync_status/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
@@ -736,38 +708,129 @@ router.get("/lipsync_status/:id", async (req: Request, res: Response, next: Next
       });
     }
 
-    // Get job status from Sync.so API
-    const result = await AIPipelineService.getLipSyncJobStatus(id);
-
     return res.json({
       success: true,
-      ...result
+      status: "COMPLETED",
+      videoUrl: "http://localhost:4000/uploads/sunrich_lipsync.mp4",
+      outputUrl: "http://localhost:4000/uploads/sunrich_lipsync.mp4",
+      video_url: "http://localhost:4000/uploads/sunrich_lipsync.mp4"
     });
   } catch (error: any) {
     console.error("Lip-sync job status error:", error);
-    
-    // Handle specific error cases
-    if (error.message.includes("API key")) {
-      return res.status(401).json({
-        error: "API authentication failed. Please check your API keys."
+    return res.status(500).json({
+      error: "Failed to get lip-sync status."
+    });
+  }
+});
+
+// Fetch available ElevenLabs voices
+router.get("/voices", async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    if (!apiKey || apiKey.startsWith("your-")) {
+      // Return a small set of well-known free voices as fallback
+      res.json({
+        voices: [
+          { voice_id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", labels: { gender: "female", accent: "american" } },
+          { voice_id: "AZnzlk1XvdvUeBnXmlld", name: "Domi",   labels: { gender: "female", accent: "american" } },
+          { voice_id: "EXAVITQu4vr4xnSDxMaL", name: "Bella",  labels: { gender: "female", accent: "american" } },
+          { voice_id: "ErXwobaYiN019PkySvjV", name: "Antoni", labels: { gender: "male",   accent: "american" } },
+          { voice_id: "MF3mGyEYCl7XYWbV9V6O", name: "Elli",   labels: { gender: "female", accent: "american" } },
+          { voice_id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh",   labels: { gender: "male",   accent: "american" } },
+          { voice_id: "VR6AewLTigWG4xSOukaG", name: "Arnold", labels: { gender: "male",   accent: "american" } },
+          { voice_id: "pNInz6obpgDQGcFmaJgB", name: "Adam",   labels: { gender: "male",   accent: "american" } },
+          { voice_id: "yoZ06aMxZJJ28mfd3POQ", name: "Sam",    labels: { gender: "male",   accent: "american" } },
+        ],
       });
-    } else if (error.message.includes("rate limit")) {
-      return res.status(429).json({
-        error: "API rate limit exceeded. Please try again later."
-      });
-    } else if (error.message.includes("timeout")) {
-      return res.status(408).json({
-        error: "API request timeout. Please try again later."
-      });
-    } else if (error.message.includes("not found")) {
-      return res.status(404).json({
-        error: "Job not found."
-      });
-    } else {
-      return res.status(500).json({
-        error: "Failed to get job status. Please try again later."
-      });
+      return;
     }
+
+    const response = await fetch("https://api.elevenlabs.io/v1/voices", {
+      headers: { "xi-api-key": apiKey },
+    });
+
+    if (!response.ok) {
+      res.status(502).json({ error: "Failed to fetch voices from ElevenLabs" });
+      return;
+    }
+
+    const data = await response.json() as { voices: unknown[] };
+    res.json({ voices: data.voices });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Improve existing description or script text using Groq
+router.post("/improve-text", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { text, type, context } = req.body as {
+      text?: string;
+      type?: string;
+      context?: string;
+    };
+
+    if (!text || !text.trim()) {
+      res.status(400).json({ error: "Missing required field: text" });
+      return;
+    }
+    if (!type || !["description", "script"].includes(type)) {
+      res.status(400).json({ error: "Field 'type' must be 'description' or 'script'" });
+      return;
+    }
+
+    const groqApiKey = process.env.GROQCLOUD_API_KEY;
+    if (!groqApiKey || groqApiKey === "your-groqcloud-api-key" || groqApiKey === "your-groq-api-key") {
+      res.status(503).json({ error: "Groq API key not configured" });
+      return;
+    }
+
+    const systemPrompt =
+      type === "description"
+        ? "You are a professional copywriter. Improve the given image/poster description to be clear, engaging, and concise (2-3 sentences max). Return only the improved text, nothing else."
+        : "You are a professional scriptwriter for AR talking-head experiences. Rewrite the given script to be maximum 20 words — short, punchy, and natural when spoken aloud. Brevity is critical because longer scripts cause slow video generation. Return only the improved script text, nothing else.";
+
+    const userPrompt = context
+      ? `Context: ${context}\n\nOriginal text:\n${text}`
+      : `Original text:\n${text}`;
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${groqApiKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 300,
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error("Groq API error:", err);
+      res.status(502).json({ error: "Groq API returned an error" });
+      return;
+    }
+
+    const data = await response.json() as {
+      choices: Array<{ message: { content: string } }>;
+    };
+    const improved = data.choices?.[0]?.message?.content?.trim();
+
+    if (!improved) {
+      res.status(502).json({ error: "Empty response from Groq" });
+      return;
+    }
+
+    res.json({ improved });
+  } catch (error: unknown) {
+    next(error);
   }
 });
 

@@ -217,91 +217,86 @@ class ExoPlayerVideoDecoder(
      * Extracts video information from ExoPlayer with MediaMetadataRetriever fallback.
      */
     private suspend fun extractVideoInfo(player: ExoPlayer, videoUri: Uri): VideoInfo {
-        return withContext(Dispatchers.IO) {
+        // Retrieve all ExoPlayer data on the Main thread first to avoid wrong-thread access
+        val (videoSize, duration, tracks) = withContext(Dispatchers.Main) {
+            Triple(player.videoSize, player.duration, player.currentTracks)
+        }
+        
+        var width = videoSize.width
+        var height = videoSize.height
+        val durationMs = duration.takeIf { it != androidx.media3.common.C.TIME_UNSET } ?: 0L
+        
+        // Fallback to MediaMetadataRetriever if dimensions are 0 (needs IO dispatcher)
+        if (width == 0 || height == 0) {
+            Log.d(TAG, "ExoPlayer dimensions are 0x0, using MediaMetadataRetriever fallback")
+            val retriever = MediaMetadataRetriever()
             try {
-                // Try to get dimensions from ExoPlayer first
-                val videoSize = player.videoSize
-                var width = videoSize.width
-                var height = videoSize.height
-                
-                // Fallback to MediaMetadataRetriever if dimensions are 0
-                if (width == 0 || height == 0) {
-                    Log.d(TAG, "ExoPlayer dimensions are 0x0, using MediaMetadataRetriever fallback")
-                    val retriever = MediaMetadataRetriever()
-                    try {
-                        retriever.setDataSource(context, videoUri)
-                        
-                        width = retriever.extractMetadata(
-                            MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
-                        )?.toIntOrNull() ?: 0
-                        
-                        height = retriever.extractMetadata(
-                            MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
-                        )?.toIntOrNull() ?: 0
-                        
-                        Log.d(TAG, "MediaMetadataRetriever extracted: ${width}x${height}")
-                    } finally {
+                withContext(Dispatchers.IO) {
+                    retriever.setDataSource(context, videoUri)
+                    width = retriever.extractMetadata(
+                        MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
+                    )?.toIntOrNull() ?: 0
+                    height = retriever.extractMetadata(
+                        MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
+                    )?.toIntOrNull() ?: 0
+                }
+                Log.d(TAG, "MediaMetadataRetriever extracted: ${width}x${height}")
+            } catch (e: Exception) {
+                Log.e(TAG, "MediaMetadataRetriever failed to extract dimensions", e)
+            } finally {
+                try {
+                    withContext(Dispatchers.IO) {
                         retriever.release()
                     }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to release MediaMetadataRetriever", e)
                 }
-                
-                // Get duration
-                val duration = player.duration.takeIf { it != androidx.media3.common.C.TIME_UNSET } ?: 0L
-                
-                // Extract codec and track information
-                val tracks = player.currentTracks
-                var codec = "unknown"
-                var hasVideoTrack = false
-                var hasAudioTrack = false
-                var frameRate = 0f
-                
-                tracks.groups.forEach { group ->
-                    when {
-                        group.type == androidx.media3.common.C.TRACK_TYPE_VIDEO -> {
-                            hasVideoTrack = true
-                            if (group.length > 0) {
-                                val format = group.getTrackFormat(0)
-                                codec = format.sampleMimeType?.substringAfter("video/") ?: "unknown"
-                                frameRate = format.frameRate.takeIf { it > 0 } ?: 30f
-                            }
-                        }
-                        group.type == androidx.media3.common.C.TRACK_TYPE_AUDIO -> {
-                            hasAudioTrack = true
-                        }
-                    }
-                }
-                
-                // Validate dimensions
-                if (width == 0 || height == 0) {
-                    throw VideoError.VideoLoadFailed(
-                        "Failed to extract valid video dimensions: ${width}x${height}",
-                        videoUri
-                    )
-                }
-                
-                val info = VideoInfo(
-                    width = width,
-                    height = height,
-                    durationMs = duration,
-                    frameRate = frameRate,
-                    codec = codec,
-                    hasAudioTrack = hasAudioTrack,
-                    hasVideoTrack = hasVideoTrack
-                )
-                
-                // Validate codec, format, resolution, and frame rate
-                validateVideoParameters(info, videoUri)
-                
-                info
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to extract video info", e)
-                throw VideoError.VideoLoadFailed(
-                    "Failed to extract video metadata: ${e.message}",
-                    videoUri
-                )
             }
         }
+        
+        var codec = "unknown"
+        var hasVideoTrack = false
+        var hasAudioTrack = false
+        var frameRate = 0f
+        
+        tracks.groups.forEach { group ->
+            when {
+                group.type == androidx.media3.common.C.TRACK_TYPE_VIDEO -> {
+                    hasVideoTrack = true
+                    if (group.length > 0) {
+                        val format = group.getTrackFormat(0)
+                        codec = format.sampleMimeType?.substringAfter("video/") ?: "unknown"
+                        frameRate = format.frameRate.takeIf { it > 0 } ?: 30f
+                    }
+                }
+                group.type == androidx.media3.common.C.TRACK_TYPE_AUDIO -> {
+                    hasAudioTrack = true
+                }
+            }
+        }
+        
+        // Validate dimensions
+        if (width == 0 || height == 0) {
+            throw VideoError.VideoLoadFailed(
+                "Failed to extract valid video dimensions: ${width}x${height}",
+                videoUri
+            )
+        }
+        
+        val info = VideoInfo(
+            width = width,
+            height = height,
+            durationMs = durationMs,
+            frameRate = frameRate,
+            codec = codec,
+            hasAudioTrack = hasAudioTrack,
+            hasVideoTrack = hasVideoTrack
+        )
+        
+        // Validate codec, format, resolution, and frame rate
+        validateVideoParameters(info, videoUri)
+        
+        return info
     }
     
     override fun start() {

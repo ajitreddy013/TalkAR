@@ -2,7 +2,6 @@ package com.talkar.app
 
 import android.app.Application
 import com.talkar.app.data.repository.ImageRepository
-import com.talkar.app.data.repository.SyncRepository
 import com.talkar.app.data.api.ApiClient
 import com.talkar.app.data.local.ImageDatabase
 import com.talkar.app.data.services.ARImageRecognitionService
@@ -21,18 +20,11 @@ class TalkARApplication : Application() {
     // Application-scoped coroutine scope
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     
-    // Repository instances
     val imageRepository by lazy { 
         ImageRepository(
             apiClient = ApiClient.create(),
             database = ImageDatabase.getDatabase(this),
             context = this
-        )
-    }
-    
-    val syncRepository by lazy { 
-        SyncRepository(
-            apiClient = ApiClient.create()
         )
     }
     

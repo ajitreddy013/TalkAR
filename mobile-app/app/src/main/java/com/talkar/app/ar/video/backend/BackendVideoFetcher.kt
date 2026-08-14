@@ -13,6 +13,9 @@ import com.talkar.app.ar.video.models.TalkingPhotoRequest
  */
 interface BackendVideoFetcher {
     suspend fun getTalkingPhotoArtifact(posterId: String): Result<TalkingPhotoArtifactResponse>
+
+    suspend fun requestTalkingPhotoGeneration(posterId: String): Result<Unit>
+
     /**
      * Requests lip-sync video generation for a poster.
      * 

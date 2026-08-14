@@ -89,7 +89,7 @@ describe("Phase 2 runtime controls", () => {
     process.env.AWS_REGION = "us-east-1";
     process.env.AWS_S3_BUCKET = "bucket";
     process.env.JWT_SECRET = "secret";
-    process.env.TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK = "true";
+    process.env.WAV2LIP_WORKER_URL = "https://worker.example.com";
     process.env.TALKING_PHOTO_QUEUE_BACKLOG_THRESHOLD_WARNING = "50";
     process.env.TALKING_PHOTO_QUEUE_BACKLOG_THRESHOLD_CRITICAL = "150";
     process.env.TALKING_PHOTO_DLQ_BACKLOG_THRESHOLD = "5";
@@ -105,7 +105,7 @@ describe("Phase 2 runtime controls", () => {
     process.env.AWS_REGION = "us-east-1";
     process.env.AWS_S3_BUCKET = "bucket";
     process.env.JWT_SECRET = "secret";
-    process.env.TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK = "true";
+    delete process.env.WAV2LIP_WORKER_URL;
     process.env.TALKING_PHOTO_QUEUE_BACKLOG_THRESHOLD_WARNING = "50";
     process.env.TALKING_PHOTO_QUEUE_BACKLOG_THRESHOLD_CRITICAL = "150";
     process.env.TALKING_PHOTO_DLQ_BACKLOG_THRESHOLD = "5";

@@ -40,6 +40,20 @@ spec:
               value: "120"
             - name: TALKING_PHOTO_DRAIN_MODE
               value: "false"
+            - name: TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK
+              value: "false"
+            - name: WAV2LIP_WORKER_URL
+              value: "http://talkar-wav2lip-worker-service:8088"
+            - name: WAV2LIP_WORKER_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: wav2lip-worker-auth-token
+            - name: WAV2LIP_WORKER_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: wav2lip-worker-signing-secret
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -50,11 +64,6 @@ spec:
                 secretKeyRef:
                   name: talkar-secrets
                   key: jwt-secret
-            - name: SYNC_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: talkar-secrets
-                  key: sync-api-key
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
@@ -106,4 +115,3 @@ spec:
         target:
           type: Utilization
           averageUtilization: 70
-

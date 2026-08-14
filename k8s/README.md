@@ -18,10 +18,13 @@ kubectl apply -f k8s/database-deployment.yaml -n talkar-production
 # 2) Backend (API + HPA + service)
 kubectl apply -f k8s/backend-deployment.yaml -n talkar-production
 
-# 2.1) Talking-photo worker + HPA (required for SQS processing)
+# 2.1) Wav2Lip worker service (real lip-sync renderer)
+kubectl apply -f k8s/wav2lip-worker-deployment.yaml -n talkar-production
+
+# 2.2) Talking-photo worker + HPA (required for SQS processing)
 kubectl apply -f k8s/talking-photo-worker-deployment.yaml -n talkar-production
 
-# 2.2) Optional KEDA autoscaling from SQS queue depth
+# 2.3) Optional KEDA autoscaling from SQS queue depth
 kubectl apply -f k8s/talking-photo-worker-keda-scaledobject.yaml -n talkar-production
 
 # 3) Frontend (dashboard + service + frontend ingress if used)

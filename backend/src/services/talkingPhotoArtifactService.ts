@@ -1,16 +1,18 @@
 import crypto from "crypto";
 import axios from "axios";
+import fs from "fs";
+import path from "path";
 import { Dialogue, Image } from "../models/Image";
 import {
   ArtifactStatus,
   TalkingPhotoArtifact,
 } from "../models/TalkingPhotoArtifact";
-import { generateSyncVideo, getSyncStatus } from "./syncService";
 import { randomUUID } from "crypto";
 import { uploadBufferToS3 } from "./uploadService";
 import { getPosterPreprocessResult } from "./posterPreprocessService";
 import { cleanupArtifactVersionsInS3 } from "./talkingPhotoLifecycleService";
 import { getEffectiveRuntimeFlags } from "./talkingPhotoRuntimeService";
+import { config } from "../config";
 
 export type ArtifactErrorCode =
   | "ARTIFACT_NOT_READY"
@@ -34,31 +36,84 @@ type FaceBoxShape = {
   height: number;
 };
 
-const DEFAULT_VIDEO =
-  "https://assets.sync.so/docs/example-talking-head.mp4";
-function managedProviderEnabled(): boolean {
-  return process.env.TALKING_PHOTO_REAL_PROVIDER === "true" && !!process.env.SYNC_API_KEY;
-}
-
-function selfHostedFallbackEnabled(): boolean {
-  const effective = getEffectiveRuntimeFlags();
-  return effective.enableFallback;
-}
 const processingStartedAt = new Map<string, number>();
 const idempotencyMap = new Map<string, { imageId: string; version: number; queuedAt: number }>();
 const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
 
-type ProviderName = "managed" | "self_hosted";
+type ProviderName = "managed" | "wav2lip_worker";
 type RetrySource = "image_upsert_or_script_update" | "manual_admin" | "mobile_runtime";
 
 export type QueueJob = {
   imageId: string;
+  imageUrl: string;
   dialogueId: string;
   text: string;
   language: string;
+  voiceId?: string;
+  emotion?: string;
   version: number;
   correlationId: string;
 };
+
+function isLikelyPublicProviderUrl(url: string): boolean {
+  if (!/^https:\/\//i.test(url)) return false;
+  return !/\/\/(localhost|127\.0\.0\.1|10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/i.test(url);
+}
+
+function contentTypeForImage(filePath: string): string {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === ".png") return "image/png";
+  if (extension === ".webp") return "image/webp";
+  if (extension === ".gif") return "image/gif";
+  return "image/jpeg";
+}
+
+function resolveLocalUploadPath(url: string): string | null {
+  const uploadMarker = "/uploads/";
+  const uploadIndex = url.indexOf(uploadMarker);
+  if (uploadIndex === -1) return null;
+  const rawFilename = url.slice(uploadIndex + uploadMarker.length).split("?")[0];
+  if (!rawFilename) return null;
+  const filename = path.basename(decodeURIComponent(rawFilename));
+  return path.join(process.cwd(), "uploads", filename);
+}
+
+async function resolveProviderImageUrl(
+  imageId: string,
+  imageUrl: string,
+  options?: { allowS3Upload?: boolean }
+): Promise<string> {
+  if (isLikelyPublicProviderUrl(imageUrl)) return imageUrl;
+
+  const localPath = resolveLocalUploadPath(imageUrl);
+  if (options?.allowS3Upload !== false && localPath && fs.existsSync(localPath) && process.env.AWS_S3_BUCKET) {
+    const extension = path.extname(localPath).toLowerCase() || ".jpg";
+    const key = `talking-photo/${imageId}/source${extension}`;
+    const uploadedUrl = await uploadBufferToS3(
+      fs.readFileSync(localPath),
+      key,
+      contentTypeForImage(localPath)
+    );
+    console.info("[talking-photo] uploaded local poster for provider access", {
+      imageId,
+      uploadedUrl,
+    });
+    return uploadedUrl;
+  }
+
+  const normalizedBaseUrl = config.baseUrl.replace(/\/$/, "");
+  const normalizedPath = imageUrl.startsWith("/") ? imageUrl : `/${imageUrl}`;
+  const fallbackUrl = /^https?:\/\//i.test(imageUrl)
+    ? imageUrl
+    : `${normalizedBaseUrl}${normalizedPath}`;
+  console.warn("[talking-photo] using non-public poster URL; provider may fail", {
+    imageId,
+    imageUrl: fallbackUrl,
+    hasLocalFile: !!localPath && fs.existsSync(localPath),
+    hasS3Bucket: !!process.env.AWS_S3_BUCKET,
+  });
+  return fallbackUrl;
+}
 
 function buildWorkerAuthHeaders(payload: unknown) {
   const authToken = process.env.WAV2LIP_WORKER_AUTH_TOKEN;
@@ -157,47 +212,116 @@ async function markArtifactFailed(
   );
 }
 
-async function runSelfHostedFallback(job: QueueJob): Promise<string | null> {
-  if (!selfHostedFallbackEnabled()) return null;
-  try {
-    const workerUrl = process.env.WAV2LIP_WORKER_URL;
-    if (!workerUrl) return null;
-    const endpoint = `${workerUrl.replace(/\/$/, "")}/generate`;
-    const timeoutMs = Number(process.env.WAV2LIP_WORKER_TIMEOUT_MS || 60000);
-    const requestPayload = {
-      posterId: job.imageId,
-      dialogueId: job.dialogueId,
-      text: job.text,
-      language: job.language,
-      version: job.version,
-      correlationId: job.correlationId,
-    };
-    const authHeaders = buildWorkerAuthHeaders(requestPayload);
-    const response = await axios.post(
-      endpoint,
-      requestPayload,
-      {
-        timeout: timeoutMs,
-        headers: {
-          ...authHeaders,
-          "x-correlation-id": job.correlationId,
-        },
-      }
-    );
+type Wav2LipWorkerResponse = {
+  success?: boolean;
+  videoUrl?: string | null;
+  artifactUrl?: string | null;
+  outputUrl?: string | null;
+  url?: string | null;
+  metadata?: {
+    lipLandmarks?: LandmarkShape | null;
+    lipCoordinates?: LandmarkShape | null;
+    posterFaceBox?: FaceBoxShape | null;
+    confidence?: number | null;
+  } | null;
+  lipLandmarks?: LandmarkShape | null;
+  lipCoordinates?: LandmarkShape | null;
+  posterFaceBox?: FaceBoxShape | null;
+  confidence?: number | null;
+  error?: string | null;
+  message?: string | null;
+};
 
-    const data = response.data || {};
-    if (data.success === false) {
-      return null;
-    }
-    const artifactUrl =
-      data.videoUrl || data.artifactUrl || data.outputUrl || data.url || null;
-    if (typeof artifactUrl === "string" && artifactUrl.trim() !== "") {
-      return artifactUrl;
-    }
-    return null;
-  } catch {
+async function runWav2LipWorker(
+  job: QueueJob,
+  preprocess: {
+    lipRoi?: string | null;
+    faceBox?: string | null;
+    confidence?: number | null;
+  }
+): Promise<{
+  videoUrl: string;
+  lipLandmarks: LandmarkShape | null;
+  posterFaceBox: FaceBoxShape | null;
+  confidence: number | null;
+} | null> {
+  const workerUrl = process.env.WAV2LIP_WORKER_URL;
+  if (!workerUrl) return null;
+
+  const endpoint = `${workerUrl.replace(/\/$/, "")}/generate`;
+  const timeoutMs = Number(process.env.WAV2LIP_WORKER_TIMEOUT_MS || 60000);
+  const requestPayload = {
+    posterId: job.imageId,
+    imageUrl: job.imageUrl,
+    dialogueId: job.dialogueId,
+    text: job.text,
+    language: job.language,
+    voiceId: job.voiceId,
+    emotion: job.emotion,
+    version: job.version,
+    correlationId: job.correlationId,
+    posterFaceBox: preprocess.faceBox ? safeParseJson(preprocess.faceBox) : null,
+  };
+  const authHeaders = buildWorkerAuthHeaders(requestPayload);
+  let response;
+  try {
+    response = await axios.post<Wav2LipWorkerResponse>(endpoint, requestPayload, {
+      timeout: timeoutMs,
+      headers: {
+        ...authHeaders,
+        "x-correlation-id": job.correlationId,
+      },
+    });
+  } catch (error: any) {
+    const status = error?.response?.status;
+    const payload = error?.response?.data;
+    const detail =
+      typeof payload === "string"
+        ? payload
+        : payload?.message || payload?.error || payload?.detail || null;
+    throw new Error(
+      status
+        ? `Worker request failed with status ${status}${detail ? `: ${detail}` : ""}`
+        : `Worker request failed: ${error?.message || "unknown error"}`
+    );
+  }
+
+  const data = response.data || {};
+  if (data.success === false) {
     return null;
   }
+
+  const videoUrl =
+    data.videoUrl || data.artifactUrl || data.outputUrl || data.url || null;
+  if (typeof videoUrl !== "string" || videoUrl.trim() === "") {
+    return null;
+  }
+
+  const lipLandmarks =
+    data.lipLandmarks ||
+    data.lipCoordinates ||
+    data.metadata?.lipLandmarks ||
+    data.metadata?.lipCoordinates ||
+    safeParseJson<LandmarkShape>(preprocess.lipRoi || null) ||
+    null;
+  const posterFaceBox =
+    data.posterFaceBox ||
+    data.metadata?.posterFaceBox ||
+    safeParseJson<FaceBoxShape>(preprocess.faceBox || null) ||
+    null;
+  const confidence =
+    typeof data.confidence === "number"
+      ? data.confidence
+      : typeof data.metadata?.confidence === "number"
+        ? data.metadata.confidence
+        : preprocess.confidence ?? null;
+
+  return {
+    videoUrl,
+    lipLandmarks,
+    posterFaceBox,
+    confidence,
+  };
 }
 
 async function mirrorArtifactToS3IfNeeded(
@@ -283,10 +407,10 @@ export async function processTalkingPhotoJob(job: QueueJob): Promise<void> {
       return;
     }
 
-    const faceBox = safeParseJson<FaceBoxShape>(preprocess.faceBox) || null;
-    const landmarks = safeParseJson<LandmarkShape>(preprocess.lipRoi) || null;
-    const confidence = preprocess.confidence ?? 0;
-    if (!faceBox || !landmarks) {
+    const preprocessFaceBox = safeParseJson<FaceBoxShape>(preprocess.faceBox) || null;
+    const preprocessLandmarks = safeParseJson<LandmarkShape>(preprocess.lipRoi) || null;
+    const preprocessConfidence = preprocess.confidence ?? 0;
+    if (!preprocessFaceBox || !preprocessLandmarks) {
       const totalMs = Date.now() - startedAt;
       await TalkingPhotoArtifact.update(
         {
@@ -305,23 +429,25 @@ export async function processTalkingPhotoJob(job: QueueJob): Promise<void> {
       return;
     }
 
-    let provider: ProviderName = "managed";
     const providerStartedAt = Date.now();
-    let providerVideoUrl = await resolveVideoUrl(text, language);
+    const workerResult = await runWav2LipWorker(job, {
+      lipRoi: preprocess.lipRoi,
+      faceBox: preprocess.faceBox,
+      confidence: preprocess.confidence,
+    });
     stageStartedAt.providerGenerateMs = Date.now() - providerStartedAt;
 
-    if (!providerVideoUrl) {
-      provider = "self_hosted";
-      const fallbackStartedAt = Date.now();
-      providerVideoUrl = await runSelfHostedFallback(job);
-      stageStartedAt.providerGenerateMs += Date.now() - fallbackStartedAt;
-    }
+    let provider: ProviderName = "wav2lip_worker";
+    let providerVideoUrl = workerResult?.videoUrl || null;
+    const lipLandmarks = workerResult?.lipLandmarks || preprocessLandmarks;
+    const resolvedFaceBox = workerResult?.posterFaceBox || preprocessFaceBox;
+    const resolvedConfidence = workerResult?.confidence ?? preprocessConfidence;
 
     if (!providerVideoUrl) {
       await markArtifactFailed(
         imageId,
         "PROVIDER_FAILED",
-        "All configured providers failed to generate artifact.",
+        "Wav2Lip worker failed to generate artifact.",
         provider,
         {
           ...stageStartedAt,
@@ -345,12 +471,12 @@ export async function processTalkingPhotoJob(job: QueueJob): Promise<void> {
       {
         dialogueId,
         status: "ready",
-        videoUrl: artifactVideoUrl || DEFAULT_VIDEO,
-        lipLandmarks: JSON.stringify(landmarks),
-        posterFaceBox: JSON.stringify(faceBox),
+        videoUrl: artifactVideoUrl,
+        lipLandmarks: JSON.stringify(lipLandmarks),
+        posterFaceBox: JSON.stringify(resolvedFaceBox),
         errorCode: null,
         errorMessage: null,
-        confidence,
+        confidence: resolvedConfidence,
         provider,
         stageTimings: JSON.stringify({
           ...stageStartedAt,
@@ -382,7 +508,7 @@ export async function processTalkingPhotoJob(job: QueueJob): Promise<void> {
       provider,
       correlationId,
       processingDurationMs: Date.now() - metricsStart,
-      confidence,
+      confidence: resolvedConfidence,
     });
     processingStartedAt.delete(imageId);
   } catch (err: any) {
@@ -401,6 +527,7 @@ export async function processTalkingPhotoJob(job: QueueJob): Promise<void> {
 async function publishGenerationJob(job: QueueJob): Promise<void> {
   const runtime = getEffectiveRuntimeFlags();
   const drainMode = process.env.TALKING_PHOTO_DRAIN_MODE === "true";
+  const queueMode = String(process.env.TALKING_PHOTO_QUEUE_MODE || "local").toLowerCase();
   if (runtime.disableEnqueue || runtime.forceReadyOnly || drainMode) {
     console.info("[talking-photo] enqueue skipped by runtime mode", {
       imageId: job.imageId,
@@ -410,9 +537,19 @@ async function publishGenerationJob(job: QueueJob): Promise<void> {
     return;
   }
 
-  // SQS path can be enabled in production; fallback remains async in-process.
-  // Keeping fallback ensures local/dev/test compatibility.
-  if (process.env.TALKING_PHOTO_QUEUE_MODE === "sqs") {
+  // Local mode runs generation in-process so queued artifacts can advance
+  // immediately in dev and test environments without a separate worker.
+  if (queueMode !== "sqs") {
+    console.info("[talking-photo] processing job in-process", {
+      imageId: job.imageId,
+      queueMode,
+    });
+    await processTalkingPhotoJob(job);
+    return;
+  }
+
+  // SQS path can be enabled in production.
+  if (queueMode === "sqs") {
     try {
       const AWS = await import("aws-sdk");
       const queueUrl = process.env.TALKING_PHOTO_SQS_URL;
@@ -433,12 +570,6 @@ async function publishGenerationJob(job: QueueJob): Promise<void> {
       });
     }
   }
-
-  setImmediate(() => {
-    processTalkingPhotoJob(job).catch((err) => {
-      console.error("[talking-photo] local job execution failure", err);
-    });
-  });
 }
 
 export async function enqueueTalkingPhotoGeneration(
@@ -507,44 +638,24 @@ export async function enqueueTalkingPhotoGeneration(
     });
   }
 
+  const queueMode = String(process.env.TALKING_PHOTO_QUEUE_MODE || "local").toLowerCase();
+  const providerImageUrl = await resolveProviderImageUrl(imageId, image.imageUrl, {
+    allowS3Upload: queueMode === "sqs",
+  });
+
   await publishGenerationJob({
     imageId,
+    imageUrl: providerImageUrl,
     dialogueId: defaultDialogue.id,
     text: defaultDialogue.text,
     language: defaultDialogue.language || "en",
+    voiceId: defaultDialogue.voiceId,
+    emotion: defaultDialogue.emotion,
     version: nextVersion,
     correlationId: options?.correlationId || randomUUID(),
   });
 
   return { imageId, version: nextVersion };
-}
-
-async function resolveVideoUrl(text: string, language: string): Promise<string | null> {
-  if (!managedProviderEnabled()) return null;
-  try {
-    const job = await generateSyncVideo({
-      text,
-      language,
-      voiceId: "voice-2",
-    });
-    const jobId = job.jobId;
-    for (let i = 0; i < 8; i++) {
-      const status = await getSyncStatus(jobId);
-      if (status.status === "completed" && status.videoUrl) {
-        return status.videoUrl;
-      }
-      if (status.status === "failed") {
-        return null;
-      }
-      await new Promise((r) => setTimeout(r, 1200));
-    }
-  } catch {
-    console.warn("[talking-photo] provider error while resolving video url", {
-      language,
-    });
-    return null;
-  }
-  return null;
 }
 
 export async function getTalkingPhotoArtifact(imageId: string) {

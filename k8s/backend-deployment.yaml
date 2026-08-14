@@ -48,15 +48,28 @@ spec:
                   key: aws-secret-access-key
             - name: AWS_S3_BUCKET
               value: "talkar-production-assets"
-            - name: SYNC_API_KEY
+            - name: CORS_ORIGIN
+              value: "https://admin.talkar.com"
+            - name: TALKING_PHOTO_RELEASE_PROFILE
+              value: "ga"
+            - name: TALKING_PHOTO_QUEUE_MODE
+              value: "sqs"
+            - name: TALKING_PHOTO_MIRROR_TO_S3
+              value: "true"
+            - name: TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK
+              value: "false"
+            - name: WAV2LIP_WORKER_URL
+              value: "http://talkar-wav2lip-worker-service:8088"
+            - name: WAV2LIP_WORKER_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: talkar-secrets
-                  key: sync-api-key
-            - name: SYNC_API_URL
-              value: "https://api.sync.com/v1"
-            - name: CORS_ORIGIN
-              value: "https://admin.talkar.com"
+                  key: wav2lip-worker-auth-token
+            - name: WAV2LIP_WORKER_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: talkar-secrets
+                  key: wav2lip-worker-signing-secret
           resources:
             requests:
               memory: "256Mi"

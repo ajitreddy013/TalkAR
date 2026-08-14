@@ -13,7 +13,12 @@ Execute Phase 3 GA rollout with progressive cutover (`10% -> 25% -> 50% -> 100%`
 - `AWS_REGION=<aws-region>`
 - `AWS_S3_BUCKET=<bucket>`
 - `JWT_SECRET=<secret>`
-- `TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK=true|false`
+- `TALKING_PHOTO_QUEUE_MODE=sqs`
+- `TALKING_PHOTO_MIRROR_TO_S3=true`
+- `TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK=false`
+- `WAV2LIP_WORKER_URL=http://talkar-wav2lip-worker-service:8088`
+- `WAV2LIP_WORKER_AUTH_TOKEN=<secret>`
+- `WAV2LIP_WORKER_SIGNING_SECRET=<secret>`
 - `TALKING_PHOTO_QUEUE_BACKLOG_THRESHOLD_WARNING=<int>`
 - `TALKING_PHOTO_QUEUE_BACKLOG_THRESHOLD_CRITICAL=<int>`
 - `TALKING_PHOTO_DLQ_BACKLOG_THRESHOLD=<int>`
@@ -23,6 +28,7 @@ Execute Phase 3 GA rollout with progressive cutover (`10% -> 25% -> 50% -> 100%`
 - `TALKING_PHOTO_WORKER_BATCH_SIZE=5`
 - `TALKING_PHOTO_WORKER_MAX_CONCURRENCY=2`
 - `TALKING_PHOTO_DRAIN_MODE=false`
+- `WAV2LIP_WORKER_URL=http://talkar-wav2lip-worker-service:8088`
 
 ## Preflight (must pass)
 ```bash
@@ -119,4 +125,3 @@ Required:
 - all step gate summaries pass
 - no unresolved critical alerts
 - evidence bundle complete
-

@@ -4,7 +4,6 @@ dotenv.config();
 
 import "./bootstrap"; // Trigger restart - Groq and gTTS fully optimized and verified
 // Paid keys removed
-console.log("DEBUG: SYNC_API_KEY present:", !!process.env.SYNC_API_KEY);
 console.log("DEBUG: NODE_ENV:", process.env.NODE_ENV);
 
 import express, { Request, Response, NextFunction } from "express";
@@ -21,7 +20,6 @@ import { notFound } from "./middleware/notFound";
 import { defineAssociations } from "./models/associations";
 import logger from "./utils/logger"; // Structured logger
 import imageRoutes from "./routes/images";
-import syncRoutes from "./routes/sync";
 import adminRoutes from "./routes/admin";
 import authRoutes from "./routes/auth";
 import multiImageRoutes from "./routes/multiImageRoutes";
@@ -165,7 +163,6 @@ try {
 // Routes
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/images", imageRoutes);
-app.use("/api/v1/sync", syncRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/ai-pipeline", aiPipelineRoutes);
 app.use("/api/v1/ai-config", aiConfigRoutes);

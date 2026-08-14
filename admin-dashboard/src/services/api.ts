@@ -1,9 +1,9 @@
 import axios from "axios";
 
 export const API_BASE_URL =
-  process.env.REACT_APP_API_URL || "http://localhost:3000";
+  process.env.REACT_APP_API_URL || "http://localhost:4000";
 
-// Derive the backend origin (e.g., http://localhost:3000) for building absolute asset URLs
+// Derive the backend origin (e.g., http://localhost:4000) for building absolute asset URLs
 export const API_ORIGIN = new URL(API_BASE_URL).origin;
 
 export const api = axios.create({

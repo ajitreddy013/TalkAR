@@ -115,6 +115,8 @@ let lastAIPipelineErrors: Record<string, string | null> = {
 };
 
 export class AIPipelineService {
+
+
   /**
    * Generate complete AI pipeline: script → audio → lipsync
    */
@@ -926,23 +928,13 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
         return cachedResult;
       }
 
-      // In development, use mock implementation
-      if (!process.env.SYNC_API_KEY) {
-        console.log("Using mock lip-sync generation");
-        const result = this.generateMockLipSync(request);
-        this.setInCache(cacheKey, result);
-        return result;
-      }
-
-      // In production, call Sync.so API
-      console.log("Calling Sync.so API for lip-sync generation");
-      const result = await this.callSyncAPI(request);
+      console.log("Using mock lip-sync generation");
+      const result = this.generateMockLipSync(request);
       this.setInCache(cacheKey, result);
       return result;
     } catch (error: any) {
       lastAIPipelineErrors.lipsync = error.message;
       console.error("Lip-sync generation error:", error);
-      // DO NOT fallback to mock - throw error instead
       throw new Error(`Lip-sync generation failed: ${error.message}`);
     }
   }
@@ -961,22 +953,12 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
         return cachedResult;
       }
 
-      // In development, use mock implementation
-      if (!process.env.SYNC_API_KEY) {
-        console.log("Using mock lip-sync generation for streaming");
-        const result = this.generateMockLipSync(request);
-        this.setInCache(cacheKey, result);
-        return result;
-      }
-
-      // In production, call Sync.so API with optimized settings
-      console.log("Calling Sync.so API for streaming lip-sync generation");
-      const result = await this.callSyncAPI(request);
+      console.log("Using mock lip-sync generation for streaming");
+      const result = this.generateMockLipSync(request);
       this.setInCache(cacheKey, result);
       return result;
     } catch (error) {
       console.error("Streaming lip-sync generation error:", error);
-      // Fallback to regular lip-sync generation
       console.log("Falling back to regular lip-sync generation");
       return this.generateLipSync(request);
     }
@@ -1339,14 +1321,14 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
 
       // Create a system prompt
-      const systemPrompt = "You are an AI advertisement script writer. Generate concise, engaging scripts for augmented reality experiences.";
-      
+      const systemPrompt = "You are an AR talking-head script writer. Write extremely short scripts — maximum 20 words. The script will be spoken aloud in a lip-sync video so brevity is critical. Return only the script text, nothing else.";
+
       // Create user prompt
       let userPrompt: string;
       if (request.productName) {
-        userPrompt = `Generate a 2-line punchy advertisement script for ${request.productName}. Language: ${request.language}. Emotion: ${request.emotion || "excited"}. Only return the script text.`;
+        userPrompt = `Write a punchy 1-sentence script (max 20 words) for ${request.productName}. Language: ${request.language}. Emotion: ${request.emotion || "excited"}.`;
       } else {
-        userPrompt = `Generate a short, engaging script for an interactive museum guide about exhibit ${request.imageId}. Language: ${request.language}. Emotion: ${request.emotion || "neutral"}. Keep it under 200 characters. Only return the script text.`;
+        userPrompt = `Write a 1-sentence AR guide script (max 20 words) for exhibit ${request.imageId}. Language: ${request.language}. Emotion: ${request.emotion || "neutral"}.`;
       }
 
       const response = await axios.post(
@@ -1357,7 +1339,7 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
           ],
-          max_tokens: 150,
+          max_tokens: 50,
           temperature: 0.7
         },
         {
@@ -1438,387 +1420,6 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
     }
   }
 
-
-
-  /**
-   * Call Sync.so API for lip-sync generation
-   */
-  private static async callSyncAPI(request: LipSyncGenerationRequest): Promise<LipSyncGenerationResponse> {
-    try {
-      const syncApiKey = process.env.SYNC_API_KEY;
-      const syncApiUrl = process.env.SYNC_API_URL || "https://api.sync.so/v2";
-      
-      if (!syncApiKey) {
-        throw new Error("Sync API key not configured");
-      }
-
-      // Validate request parameters
-      if (!request.audioUrl) {
-        throw new Error("Audio URL is required for lip-sync generation");
-      }
-
-      // Determine avatar URL first
-      let avatarUrl: string;
-      if (request.avatar) {
-        // If it's just a filename, convert to full URL
-        if (!request.avatar.startsWith('http')) {
-          avatarUrl = `${config.baseUrl}/uploads/${request.avatar}`;
-        } else {
-          avatarUrl = request.avatar;
-        }
-      } else {
-        // Fallback: Use current BASE_URL to construct avatar URL
-        avatarUrl = `${config.baseUrl}/uploads/${request.imageId}.jpg`;
-      }
-
-      // Upload local files to public host so Sync.so can access them
-      // (localhost.run tunnels are unreliable for external API access)
-      const publicAudioUrl = await this.uploadToPublicHost(request.audioUrl, 'audio');
-      const publicAvatarUrl = await this.uploadToPublicHost(avatarUrl, 'avatar');
-      
-      console.log(`Sync.so inputs - Avatar: ${publicAvatarUrl}, Audio: ${publicAudioUrl}`);
-
-      // Prepare request body matching Sync.so API v2 requirements
-      const requestBody: any = {
-        model: "lipsync-2",
-        input: [
-          {
-            type: "video",
-            url: publicAvatarUrl
-          },
-          {
-            type: "audio",
-            url: publicAudioUrl
-          }
-        ],
-        options: {
-          sync_mode: "loop"
-        }
-      };
-
-      // Add emotion if provided
-      if (request.emotion) {
-        requestBody.emotion = request.emotion;
-      }
-
-      console.log("Calling Sync.so API with request:", requestBody);
-
-      // Get HTTP agent from app for keep-alive
-      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
-      
-      const response = await axios.post(
-        `${syncApiUrl}/generate`,
-        requestBody,
-        {
-          headers: {
-            "x-api-key": syncApiKey,
-            "Content-Type": "application/json"
-          },
-          timeout: 20000, // Reduced timeout for faster failure
-          httpAgent: agent
-        }
-      );
-
-      // Handle job ID and polling if needed
-      if (response.data.id) {
-        // This is an async job, poll for completion
-        const jobId = response.data.id;
-        console.log(`Sync.so job started with ID: ${jobId}. Polling for completion...`);
-        
-        // Poll until video is ready (up to ~60s)
-        const pollResult = await this.pollSyncJob(jobId);
-        
-        // Save completed video URL to database
-        await this.saveVideoUrlToDatabase(request.imageId, pollResult.videoUrl, avatarUrl, request.emotion);
-        
-        return pollResult;
-      } else {
-        // Job completed immediately
-        const videoUrl = response.data.outputUrl || response.data.videoUrl;
-        const duration = response.data.duration || 15;
-
-        // Save video URL to database
-        await this.saveVideoUrlToDatabase(request.imageId, videoUrl, avatarUrl, request.emotion);
-
-        return {
-          videoUrl,
-          duration
-        };
-      }
-    } catch (error: any) {
-      console.error("Sync.so API error:", JSON.stringify(error.response?.data, null, 2) || error.message);
-      console.error("Sync.so API status:", error.response?.status);
-      
-      // Handle specific error cases
-      if (error.response?.status === 401) {
-        throw new Error("Invalid Sync API key");
-      } else if (error.response?.status === 422) {
-        const detail = JSON.stringify(error.response.data);
-        throw new Error(`Sync API validation error (422): ${detail}`);
-      } else if (error.response?.status === 429) {
-        throw new Error("Sync API rate limit exceeded");
-      } else if (error.response?.status === 400) {
-        throw new Error(`Sync API bad request: ${error.response.data?.message || 'Invalid request'}`);
-      } else if (error.response?.status >= 500) {
-        throw new Error("Sync API service unavailable");
-      } else if (error.code === 'ECONNABORTED') {
-        throw new Error("Sync API request timeout");
-      } else if (error.code === 'ENOTFOUND') {
-        throw new Error("Sync API service unreachable");
-      }
-      
-      throw new Error(`Failed to generate lip-sync video with Sync.so API: ${error.message}`);
-    }
-  }
-
-  /**
-   * Upload a local file to a public temporary hosting service (tmpfiles.org)
-   * so that external APIs like Sync.so can access it.
-   * For audio files, converts to WAV format first (Sync.so requires proper audio headers).
-   */
-  private static async uploadToPublicHost(url: string, fileType: string): Promise<string> {
-    try {
-      // Resolve the URL to a local file path
-      let localPath: string | null = null;
-      
-      if (url.includes('/audio/')) {
-        const filename = url.split('/audio/').pop();
-        if (filename) {
-          localPath = path.join(process.cwd(), 'audio', filename);
-        }
-      } else if (url.includes('/uploads/')) {
-        const filename = url.split('/uploads/').pop();
-        if (filename) {
-          localPath = path.join(process.cwd(), 'uploads', filename);
-        }
-      }
-      
-      if (!localPath || !fs.existsSync(localPath)) {
-        console.warn(`Cannot find local file for ${url} (resolved: ${localPath}). Using original URL.`);
-        return url;
-      }
-      
-      // For audio files, convert to WAV format with proper headers
-      let uploadPath = localPath;
-      if (fileType === 'audio') {
-        const wavPath = localPath.replace(/\.\w+$/, '.wav');
-        try {
-          const { execSync } = require('child_process');
-          // Convert to 16-bit PCM WAV (Sync.so requirement)
-          execSync(`ffmpeg -y -i "${localPath}" -ar 44100 -ac 1 -sample_fmt s16 "${wavPath}"`, {
-            timeout: 10000,
-            stdio: 'pipe'
-          });
-          if (fs.existsSync(wavPath)) {
-            console.log(`Converted audio to WAV: ${wavPath}`);
-            uploadPath = wavPath;
-          }
-        } catch (convErr: any) {
-          console.warn(`ffmpeg audio conversion failed, uploading original: ${convErr.message}`);
-        }
-      } else if (fileType === 'avatar') {
-        // Sync.so lipsync-2 requires VIDEO input, not static image.
-        // Convert image to 5-second loopable MP4 video.
-        const mp4Path = localPath.replace(/\.\w+$/, '.mp4');
-        try {
-          const { execSync } = require('child_process');
-          // Create 5s video, 25fps, H.264, yuv420p (compatible pixel format)
-          // Scale to even dimensions to satisfy x264
-          execSync(`ffmpeg -y -loop 1 -i "${localPath}" -c:v libx264 -t 5 -pix_fmt yuv420p -r 25 -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" "${mp4Path}"`, {
-            timeout: 20000,
-            stdio: 'pipe'
-          });
-          if (fs.existsSync(mp4Path)) {
-            console.log(`Converted avatar image to MP4 video: ${mp4Path}`);
-            uploadPath = mp4Path;
-          }
-        } catch (convErr: any) {
-           console.warn(`ffmpeg video conversion failed, uploading original: ${convErr.message}`);
-        }
-      }
-      
-      console.log(`Uploading ${fileType} file to public host: ${uploadPath}`);
-      
-      // Upload to uguu.se (Primary - reliable, supports HTTPS and HEAD requests)
-      const FormData = (await import('form-data')).default;
-      let directUrl: string | null = null;
-      
-      try {
-        console.log(`Uploading to uguu.se: ${uploadPath}`);
-        const form = new FormData();
-        form.append('files[]', fs.createReadStream(uploadPath));
-        
-        const response = await axios.post('https://uguu.se/upload.php', form, {
-          headers: form.getHeaders(),
-          timeout: 60000
-        });
-        
-        if (response.data?.success && response.data?.files?.[0]?.url) {
-          directUrl = response.data.files[0].url;
-          console.log(`Uploaded ${fileType} to uguu.se: ${directUrl}`);
-        }
-      } catch (err: any) {
-        console.warn(`uguu.se upload failed: ${err.message}. Trying backup host...`);
-      }
-      
-      // Fallback to tmpfiles.org if uguu.se failed
-      if (!directUrl) {
-         try {
-           console.log(`Uploading to tmpfiles.org (backup): ${uploadPath}`);
-           const form = new FormData();
-           form.append('file', fs.createReadStream(uploadPath));
-           
-           const response = await axios.post('https://tmpfiles.org/api/v1/upload', form, {
-             headers: form.getHeaders(),
-             timeout: 60000 
-           });
-           
-           if (response.data?.status === 'success' && response.data?.data?.url) {
-             let tmpUrl = response.data.data.url;
-             // Ensure HTTPS
-             if (tmpUrl.startsWith('http:')) {
-               tmpUrl = tmpUrl.replace('http:', 'https:');
-             }
-             directUrl = tmpUrl.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-             console.log(`Uploaded ${fileType} to tmpfiles.org: ${directUrl}`);
-           }
-         } catch (err: any) {
-           console.error(`tmpfiles.org upload failed: ${err.message}`);
-         }
-      }
-
-      // Clean up temporary converted files
-      if (uploadPath !== localPath && fs.existsSync(uploadPath)) {
-        fs.unlinkSync(uploadPath);
-      }
-      
-      if (directUrl) {
-        return directUrl;
-      }
-      
-      console.warn(`All public upload attempts failed for ${fileType}. Using original URL.`);
-      return url;
-      
-      console.warn(`tmpfiles.org upload failed for ${fileType}. Using original URL.`);
-      return url;
-    } catch (error: any) {
-      console.error(`Failed to upload ${fileType} to public host:`, error.message);
-      // Fallback to original URL
-      return url;
-    }
-  }
-
-  /**
-   * Poll Sync.so API for job completion
-   */
-  static async pollSyncJob(jobId: string): Promise<LipSyncGenerationResponse> {
-    try {
-      const syncApiKey = process.env.SYNC_API_KEY;
-      const syncApiUrl = process.env.SYNC_API_URL || "https://api.sync.so/v2";
-      
-      if (!syncApiKey) {
-        throw new Error("Sync API key not configured");
-      }
-
-      // Poll for job completion
-      const maxAttempts = 30; // Maximum polling attempts
-      const pollInterval = 2000; // 2 seconds between polls
-
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        console.log(`Polling Sync.so job ${jobId}, attempt ${attempt}/${maxAttempts}`);
-        
-        try {
-          // Get HTTP agent from app for keep-alive
-          const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
-          
-          const response = await axios.get(
-            `${syncApiUrl}/generations/${jobId}`,
-            {
-              headers: {
-                "x-api-key": syncApiKey,
-                "Content-Type": "application/json"
-              },
-              timeout: 30000, // 30 second timeout
-              httpAgent: agent
-            }
-          );
-
-          const jobStatus = response.data.status;
-          
-          if (jobStatus === "COMPLETED") {
-            const videoUrl = response.data.output_url || response.data.outputUrl || response.data.videoUrl;
-            const duration = response.data.duration || 15;
-            
-            console.log(`Sync.so job ${jobId} completed successfully. Video: ${videoUrl}`);
-            return {
-              videoUrl,
-              duration
-            };
-          } else if (jobStatus === "FAILED" || jobStatus === "REJECTED") {
-            const errorDetail = response.data.error || response.data.message || JSON.stringify(response.data);
-            console.error(`Sync.so job ${jobId} failed. Full response:`, JSON.stringify(response.data, null, 2));
-            throw new Error(`Sync.so job failed: ${errorDetail}`);
-          } else if (jobStatus === "PROCESSING" || jobStatus === "PENDING") {
-            // Job still processing, wait and retry
-            if (attempt < maxAttempts) {
-              await new Promise(resolve => setTimeout(resolve, pollInterval));
-              continue;
-            } else {
-              throw new Error(`Sync.so job timed out after ${maxAttempts} attempts`);
-            }
-          } else {
-            throw new Error(`Unknown job status: ${jobStatus}`);
-          }
-        } catch (pollError: any) {
-          if (attempt === maxAttempts) {
-            throw new Error(`Failed to poll Sync.so job: ${pollError.message}`);
-          }
-          // Wait and retry
-          await new Promise(resolve => setTimeout(resolve, pollInterval));
-        }
-      }
-      
-      throw new Error(`Sync.so job polling timed out`);
-    } catch (error) {
-      console.error("Sync.so job polling error:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get Sync.so job status
-   */
-  static async getSyncJobStatus(jobId: string): Promise<any> {
-    try {
-      const syncApiKey = process.env.SYNC_API_KEY;
-      const syncApiUrl = process.env.SYNC_API_URL || "https://api.sync.so/v2";
-      
-      if (!syncApiKey) {
-        throw new Error("Sync API key not configured");
-      }
-
-      // Get HTTP agent from app for keep-alive
-      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
-      
-      const response = await axios.get(
-        `${syncApiUrl}/jobs/${jobId}`,
-        {
-          headers: {
-            "x-api-key": syncApiKey,
-            "Content-Type": "application/json"
-          },
-          timeout: 30000, // 30 second timeout
-          httpAgent: agent
-        }
-      );
-
-      return response.data;
-    } catch (error: any) {
-      console.error("Sync.so job status error:", error.response?.data || error.message);
-      throw new Error(`Failed to get Sync.so job status: ${error.message}`);
-    }
-  }
-
   /**
    * Stream audio using ElevenLabs streaming API
    */
@@ -1885,144 +1486,6 @@ The tone should be ${tone} - ${this.getToneDescription(tone)}.`;
       }
       
       throw new Error(`Failed to stream audio with ElevenLabs API: ${error.message}`);
-    }
-  }
-
-  /**
-   * Generate lip-sync video asynchronously
-   */
-  static async generateLipSyncAsync(request: LipSyncGenerationRequest): Promise<LipSyncGenerationResponse> {
-    try {
-      const syncApiKey = process.env.SYNC_API_KEY;
-      const syncApiUrl = process.env.SYNC_API_URL || "https://api.sync.so/v2";
-      
-      if (!syncApiKey) {
-        throw new Error("Sync API key not configured");
-      }
-
-      // Validate request parameters
-      if (!request.audioUrl) {
-        throw new Error("Audio URL is required for lip-sync generation");
-      }
-
-      // Prepare request body matching Sync.so API requirements
-      const requestBody: any = {
-        audio_url: request.audioUrl
-      };
-
-      // Add avatar if provided, otherwise use imageId
-      let avatarUrl: string;
-      if (request.avatar) {
-        requestBody.avatar = request.avatar;
-        avatarUrl = request.avatar;
-      } else {
-        // Get image URL from database or use default
-        avatarUrl = `https://talkar-image-storage.com/${request.imageId}.jpg`;
-        requestBody.avatar = avatarUrl;
-      }
-
-      // Add emotion if provided
-      if (request.emotion) {
-        requestBody.emotion = request.emotion;
-      }
-
-      console.log("Calling Sync.so API with request:", requestBody);
-
-      // Get HTTP agent from app for keep-alive
-      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
-      
-      const response = await axios.post(
-        `${syncApiUrl}/generate`,
-        requestBody,
-        {
-          headers: {
-            "x-api-key": syncApiKey,
-            "Content-Type": "application/json"
-          },
-          timeout: 20000, // Reduced timeout for faster failure
-          httpAgent: agent
-        }
-      );
-
-      // Handle job ID and polling if needed
-      if (response.data.jobId) {
-        // This is an async job, need to poll for completion
-        const jobId = response.data.jobId;
-        console.log(`Sync.so job started with ID: ${jobId}`);
-        
-        // Poll for completion (in a real implementation, this would be done asynchronously)
-        // For now, we'll return the job ID and let the client poll
-        return {
-          videoUrl: response.data.videoUrl || response.data.outputUrl || "",
-          duration: response.data.duration || 15,
-          jobId: jobId
-        };
-      } else {
-        // Job completed immediately
-        const videoUrl = response.data.videoUrl || response.data.outputUrl;
-        const duration = response.data.duration || 15;
-
-        // Save video URL to database
-        await this.saveVideoUrlToDatabase(request.imageId, videoUrl, avatarUrl, request.emotion);
-
-        return {
-          videoUrl,
-          duration
-        };
-      }
-    } catch (error: any) {
-      console.error("Sync.so API error:", error.response?.data || error.message);
-      
-      // Handle specific error cases
-      if (error.response?.status === 401) {
-        throw new Error("Invalid Sync API key");
-      } else if (error.response?.status === 429) {
-        throw new Error("Sync API rate limit exceeded");
-      } else if (error.response?.status === 400) {
-        throw new Error(`Sync API bad request: ${error.response.data?.message || 'Invalid request'}`);
-      } else if (error.response?.status >= 500) {
-        throw new Error("Sync API service unavailable");
-      } else if (error.code === 'ECONNABORTED') {
-        throw new Error("Sync API request timeout");
-      } else if (error.code === 'ENOTFOUND') {
-        throw new Error("Sync API service unreachable");
-      }
-      
-      throw new Error(`Failed to generate lip-sync video with Sync.so API: ${error.message}`);
-    }
-  }
-
-  /**
-   * Get lip-sync job status
-   */
-  static async getLipSyncJobStatus(jobId: string): Promise<any> {
-    try {
-      const syncApiKey = process.env.SYNC_API_KEY;
-      const syncApiUrl = process.env.SYNC_API_URL || "https://api.sync.so/v2";
-      
-      if (!syncApiKey) {
-        throw new Error("Sync API key not configured");
-      }
-
-      // Get HTTP agent from app for keep-alive
-      const agent = (global as any).app?.get('httpAgent') as http.Agent || new http.Agent({ keepAlive: true });
-      
-      const response = await axios.get(
-        `${syncApiUrl}/jobs/${jobId}`,
-        {
-          headers: {
-            "x-api-key": syncApiKey,
-            "Content-Type": "application/json"
-          },
-          timeout: 30000, // 30 second timeout
-          httpAgent: agent
-        }
-      );
-
-      return response.data;
-    } catch (error: any) {
-      console.error("Sync.so job status error:", error.response?.data || error.message);
-      throw new Error(`Failed to get Sync.so job status: ${error.message}`);
     }
   }
 

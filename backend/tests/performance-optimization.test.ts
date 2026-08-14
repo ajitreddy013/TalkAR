@@ -10,6 +10,7 @@ import request from 'supertest';
 import express from 'express';
 import { sequelize } from '../src/config/database';
 import aiPipelineRoutes from '../src/routes/aiPipeline';
+import performanceRoutes from '../src/routes/performance';
 import { PerformanceMetricsService } from '../src/services/performanceMetricsService';
 
 // Create Express app for testing
@@ -17,6 +18,7 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/api/v1/ai-pipeline', aiPipelineRoutes);
+app.use('/api/v1/performance', performanceRoutes);
 
 // Error handler
 app.use((err: any, req: any, res: any, next: any) => {

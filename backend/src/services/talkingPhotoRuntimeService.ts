@@ -49,7 +49,7 @@ function profileDefaults(): RuntimeOverrides {
     return {
       disableEnqueue: false,
       forceReadyOnly: false,
-      enableFallback: true,
+      enableFallback: false,
     };
   }
   return {
@@ -136,7 +136,7 @@ export function validateReleasePolicyAtStartup() {
   ];
 
   if (profile === "beta" || profile === "ga") {
-    required.push("TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK");
+    required.push("WAV2LIP_WORKER_URL");
   }
   if (profile === "ga") {
     required.push(

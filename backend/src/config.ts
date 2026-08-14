@@ -17,7 +17,6 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   // openaiKey: removed
   // elevenKey: removed
-  syncKey: process.env.SYNC_API_KEY,
   dbUrl: process.env.DATABASE_URL,
   frontendOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
   jwtSecret: process.env.JWT_SECRET || 'default_secret_please_change',

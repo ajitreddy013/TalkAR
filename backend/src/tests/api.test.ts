@@ -3,14 +3,13 @@ import express from "express";
 import { testDb } from "./setup";
 import authRoutes from "../routes/auth";
 import imageRoutes from "../routes/images";
-import syncRoutes from "../routes/sync";
+
 
 // Create test app
 const app = express();
 app.use(express.json());
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/images", imageRoutes);
-app.use("/api/v1/sync", syncRoutes);
 
 describe("API Integration Tests", () => {
   let authToken: string;
@@ -130,77 +129,7 @@ describe("API Integration Tests", () => {
     });
   });
 
-  describe("Sync Endpoints", () => {
-    it("should get available voices", async () => {
-      const response = await request(app)
-        .get("/api/v1/sync/voices")
-        .expect(200);
 
-      expect(Array.isArray(response.body)).toBe(true);
-      expect(response.body.length).toBeGreaterThan(0);
-      expect(response.body[0]).toHaveProperty("id");
-      expect(response.body[0]).toHaveProperty("name");
-      expect(response.body[0]).toHaveProperty("language");
-    });
-
-    it("should generate sync video", async () => {
-      const syncData = {
-        text: "Hello, welcome to our store!",
-        language: "en",
-        voiceId: "voice-1",
-      };
-
-      const response = await request(app)
-        .post("/api/v1/sync/generate")
-        .send(syncData)
-        .expect(200);
-
-      expect(response.body.jobId).toBeDefined();
-      expect(response.body.status).toBe("pending");
-    });
-
-    it("should validate sync request", async () => {
-      const invalidData = {
-        text: "", // Empty text should fail
-        language: "en",
-      };
-
-      await request(app)
-        .post("/api/v1/sync/generate")
-        .send(invalidData)
-        .expect(400);
-    });
-
-    it("should get sync status", async () => {
-      // First create a job
-      const syncData = {
-        text: "Hello, welcome to our store!",
-        language: "en",
-        voiceId: "voice-1",
-      };
-
-      const createResponse = await request(app)
-        .post("/api/v1/sync/generate")
-        .send(syncData)
-        .expect(200);
-
-      const jobId = createResponse.body.jobId;
-
-      // Then get status
-      const statusResponse = await request(app)
-        .get(`/api/v1/sync/status/${jobId}`)
-        .expect(200);
-
-      expect(statusResponse.body.jobId).toBe(jobId);
-      expect(statusResponse.body.status).toBeDefined();
-    });
-
-    it("should handle non-existing job status", async () => {
-      await request(app)
-        .get("/api/v1/sync/status/non-existing-job-id")
-        .expect(404);
-    });
-  });
 
   describe("Admin Endpoints", () => {
     it("should require admin role for admin endpoints", async () => {

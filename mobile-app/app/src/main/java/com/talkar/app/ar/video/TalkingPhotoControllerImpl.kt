@@ -25,6 +25,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.MessageDigest
 
 /**
  * Implementation of TalkingPhotoController that orchestrates the complete
@@ -46,7 +47,8 @@ class TalkingPhotoControllerImpl(
         private const val ARTIFACT_INITIAL_RETRY_MS = 1000L
         private const val ARTIFACT_MAX_RETRY_MS = 6000L
         private const val ARTIFACT_TOTAL_TIMEOUT_MS = 45000L
-        private const val MIN_CONFIDENCE_THRESHOLD = 0.65f
+        private const val MIN_CONFIDENCE_THRESHOLD = 0.45f
+        private const val SYNC_SAMPLE_VIDEO_URL = "assets.sync.so/docs/example-talking-head.mp4"
     }
     
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -87,6 +89,7 @@ class TalkingPhotoControllerImpl(
 
                 var artifact: com.talkar.app.ar.video.models.TalkingPhotoArtifactResponse? = null
                 var lastError: String? = null
+                var generationQueued = false
                 val fetchStartedAt = System.currentTimeMillis()
                 var backoffMs = ARTIFACT_INITIAL_RETRY_MS
                 for (attempt in 1..ARTIFACT_MAX_ATTEMPTS) {
@@ -116,11 +119,25 @@ class TalkingPhotoControllerImpl(
                             lastError = "ARTIFACT_NOT_READY"
                             break
                         }
-                        if (candidate.status == "ready") {
+                        if (candidate.status == "ready" && isRejectedSampleArtifact(candidate.videoUrl)) {
+                            Log.w(TAG, "Rejecting vendor sample artifact for posterId=$posterId")
+                            lastError = "ARTIFACT_NOT_READY"
+                        } else if (candidate.status == "ready") {
                             artifact = candidate
                             break
+                        } else {
+                            lastError = candidate.errorCode ?: "ARTIFACT_NOT_READY"
                         }
-                        lastError = candidate.errorCode ?: "ARTIFACT_NOT_READY"
+                    }
+
+                    if ((lastError == "ARTIFACT_NOT_READY" || lastError == "PROVIDER_FAILED") && !generationQueued) {
+                        val queueResult = backendFetcher.requestTalkingPhotoGeneration(posterId)
+                        generationQueued = queueResult.isSuccess
+                        val queueError = queueResult.exceptionOrNull()?.message
+                        if (queueError == "NO_DEFAULT_SCRIPT" || queueError == "NO_FACE_IN_POSTER") {
+                            lastError = queueError
+                            break
+                        }
                     }
 
                     callbacks?.onArtifactStatus("WAITING_$attempt")
@@ -144,10 +161,16 @@ class TalkingPhotoControllerImpl(
                     ?: throw Exception("ARTIFACT_NOT_READY")
                 val videoUrl = resolvedArtifact.videoUrl
                     ?: throw Exception("ARTIFACT_NOT_READY")
-                val cacheKey = "${posterId}_v${resolvedArtifact.version}"
+                val cacheKey = buildArtifactCacheKey(
+                    posterId = posterId,
+                    version = resolvedArtifact.version,
+                    videoUrl = videoUrl,
+                    updatedAt = resolvedArtifact.updatedAt
+                )
 
                 val cachedVideo = videoCache.retrieve(cacheKey)
                 if (cachedVideo != null) {
+                    Log.d(TAG, "Using cached talking-photo artifact: $cacheKey")
                     withContext(Dispatchers.Main) {
                         setupVideo(posterId, cachedVideo.videoPath, cachedVideo.lipCoordinates)
                     }
@@ -210,6 +233,25 @@ class TalkingPhotoControllerImpl(
             }
         }
     }
+
+    private fun isRejectedSampleArtifact(videoUrl: String?): Boolean {
+        return videoUrl?.contains(SYNC_SAMPLE_VIDEO_URL) == true
+    }
+
+    private fun buildArtifactCacheKey(
+        posterId: String,
+        version: Int,
+        videoUrl: String,
+        updatedAt: String?
+    ): String {
+        val stableUrl = videoUrl.substringBefore("?")
+        val fingerprintSource = "$stableUrl:${updatedAt.orEmpty()}"
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(fingerprintSource.toByteArray())
+            .take(6)
+            .joinToString("") { "%02x".format(it) }
+        return "${posterId}_v${version}_$digest"
+    }
     
     private suspend fun setupVideo(
         posterId: String,
@@ -220,24 +262,9 @@ class TalkingPhotoControllerImpl(
             try {
                 Log.d(TAG, "Setting up video for playback")
                 
-                // Initialize renderer with lip coordinates
-                lipRenderer.setLipCoordinates(lipCoordinates)
+                // Notify lip coordinates to Compose overlay — GL renderer is bypassed.
                 callbacks?.onLipCoordinatesReady(lipCoordinates)
-                
-                // Get surface from renderer
-                val surface = lipRenderer.getSurface()
-                if (surface == null) {
-                    throw Exception("Failed to get surface from renderer")
-                }
-                
-                // Initialize video decoder
-                val videoUri = Uri.fromFile(File(videoPath))
-                val videoInfoResult = videoDecoder.initialize(videoUri, surface)
-                if (videoInfoResult.isFailure) {
-                    throw videoInfoResult.exceptionOrNull() 
-                        ?: Exception("Failed to initialize decoder")
-                }
-                
+
                 // Create session
                 session = TalkingPhotoSession(
                     posterId = posterId,
@@ -303,14 +330,36 @@ class TalkingPhotoControllerImpl(
             callbacks?.onTrackingResumed()
         }
         
-        // Update renderer transform if tracking
+        // Emit poster screen bounds and directly-projected lip bounds each tracking frame.
         if (trackingData.isTracking) {
             val transform = trackingDataToMatrix(trackingData)
-            lipRenderer.setTransform(transform)
-            lipRenderer.setVisible(updatedSession.isTrackingStable())
-            lipRenderer.renderFrame()
-        } else {
-            lipRenderer.setVisible(false)
+            val m = transform.values
+            val tl = ndcToScreen(mvpTransformPoint(m, 0f, 0f))
+            val tr = ndcToScreen(mvpTransformPoint(m, 1f, 0f))
+            val bl = ndcToScreen(mvpTransformPoint(m, 0f, 1f))
+            val br = ndcToScreen(mvpTransformPoint(m, 1f, 1f))
+            val left   = minOf(tl.first,  tr.first,  bl.first,  br.first)
+            val top    = minOf(tl.second, tr.second, bl.second, br.second)
+            val right  = maxOf(tl.first,  tr.first,  bl.first,  br.first)
+            val bottom = maxOf(tl.second, tr.second, bl.second, br.second)
+            Log.d(TAG, "Corners: tl=$tl tr=$tr bl=$bl br=$br → bounds L=${"%.3f".format(left)} T=${"%.3f".format(top)} R=${"%.3f".format(right)} B=${"%.3f".format(bottom)} W=${"%.3f".format(right-left)} H=${"%.3f".format(bottom-top)} ratio=${"%.3f".format((bottom-top)/(right-left))}")
+            callbacks?.onPosterScreenBounds(left, top, right, bottom)
+
+            // Direct lip projection: project the four lip UV corners through MVP to
+            // get exact screen positions without the intermediate bounding-box step.
+            val lip = session?.lipCoordinates
+            if (lip != null) {
+                val ltl = ndcToScreen(mvpTransformPoint(m, lip.lipX,               lip.lipY))
+                val ltr = ndcToScreen(mvpTransformPoint(m, lip.lipX + lip.lipWidth, lip.lipY))
+                val lbl = ndcToScreen(mvpTransformPoint(m, lip.lipX,               lip.lipY + lip.lipHeight))
+                val lbr = ndcToScreen(mvpTransformPoint(m, lip.lipX + lip.lipWidth, lip.lipY + lip.lipHeight))
+                val lLeft   = minOf(ltl.first,  ltr.first,  lbl.first,  lbr.first)
+                val lTop    = minOf(ltl.second, ltr.second, lbl.second, lbr.second)
+                val lRight  = maxOf(ltl.first,  ltr.first,  lbl.first,  lbr.first)
+                val lBottom = maxOf(ltl.second, ltr.second, lbl.second, lbr.second)
+                Log.d(TAG, "LipDirect: L=${"%.3f".format(lLeft)} T=${"%.3f".format(lTop)} R=${"%.3f".format(lRight)} B=${"%.3f".format(lBottom)}")
+                callbacks?.onLipScreenBounds(lLeft, lTop, lRight, lBottom)
+            }
         }
     }
     
@@ -387,6 +436,10 @@ class TalkingPhotoControllerImpl(
     override fun setCallbacks(callbacks: TalkingPhotoCallbacks) {
         this.callbacks = callbacks
     }
+
+    override fun getVideoPath(): String? {
+        return session?.videoPath
+    }
     
     private fun setState(newState: TalkingPhotoState) {
         if (currentState != newState) {
@@ -415,42 +468,78 @@ class TalkingPhotoControllerImpl(
 
     private fun trackingDataToMatrix(trackingData: TrackingData): Matrix4 {
         val view = trackingData.viewMatrix
-        val projection = trackingData.projectionMatrix
-        if (view != null && projection != null && view.size == 16 && projection.size == 16) {
-            val model = floatArrayOf(
-                1f, 0f, 0f, 0f,
-                0f, 1f, 0f, 0f,
-                0f, 0f, 1f, 0f,
-                trackingData.position.x, trackingData.position.y, trackingData.position.z, 1f
-            )
-            val vp = multiply4x4(projection, view)
-            return Matrix4(multiply4x4(vp, model))
-        }
+        val proj = trackingData.projectionMatrix
+        if (view != null && proj != null && view.size == 16 && proj.size == 16) {
+            // extentX = poster width in metres, extentZ = poster height in metres
+            val extX = trackingData.scale.x
+            val extZ = trackingData.scale.y
+            val hx = extX * 0.5f
+            val hz = extZ * 0.5f
 
-        val tx = trackingData.position.x
-        val ty = trackingData.position.y
-        val tz = trackingData.position.z
-        val sx = (1f + trackingData.scale.x * 0.25f).coerceAtLeast(0.1f)
-        val sy = (1f + trackingData.scale.y * 0.25f).coerceAtLeast(0.1f)
-        return Matrix4(
-            floatArrayOf(
-                sx, 0f, 0f, 0f,
-                0f, sy, 0f, 0f,
-                0f, 0f, 1f, 0f,
-                tx, ty, tz, 1f
+            // Rotation matrix from quaternion (standard formula)
+            val q = trackingData.rotation
+            val qx = q.x; val qy = q.y; val qz = q.z; val qw = q.w
+            val xx = qx*qx; val yy = qy*qy; val zz = qz*qz
+            val xy = qx*qy; val xz = qx*qz; val yz = qy*qz
+            val wx = qw*qx; val wy = qw*qy; val wz = qw*qz
+            val r00=1f-2f*(yy+zz); val r10=2f*(xy+wz); val r20=2f*(xz-wy)
+            val r01=2f*(xy-wz);   val r11=1f-2f*(xx+zz); val r21=2f*(yz+wx)
+            val r02=2f*(xz+wy);   val r12=2f*(yz-wx);    val r22=1f-2f*(xx+yy)
+            val tx = trackingData.position.x
+            val ty = trackingData.position.y
+            val tz = trackingData.position.z
+
+            // Model matrix (column-major) mapping poster UV (u,v,0,1) → world space.
+            // ARCore image lies in the local XZ plane: local = ((u-0.5)*extX, 0, (v-0.5)*extZ).
+            // Column 0 (u contribution): R * (extX, 0, 0)
+            // Column 1 (v contribution): R * (0, 0, extZ)
+            // Column 2 (z=0, unused but complete the matrix)
+            // Column 3 (constant shift): R * (-hx, 0, -hz) + (tx,ty,tz)
+            val model = floatArrayOf(
+                r00*extX, r10*extX, r20*extX, 0f,
+                r02*extZ, r12*extZ, r22*extZ, 0f,
+                r01,      r11,      r21,      0f,
+                -r00*hx - r02*hz + tx,
+                -r10*hx - r12*hz + ty,
+                -r20*hx - r22*hz + tz,
+                1f
             )
-        )
+            // Correct column-major multiplication: MVP = Projection * View * Model
+            val vm  = colMajorMul(view, model)
+            val pvm = colMajorMul(proj, vm)
+            return Matrix4(pvm)
+        }
+        // Fallback (no view/proj matrices): identity-ish so renderer doesn't crash
+        return Matrix4(floatArrayOf(
+            1f, 0f, 0f, 0f,
+            0f, 1f, 0f, 0f,
+            0f, 0f, 1f, 0f,
+            0f, 0f, 0f, 1f
+        ))
     }
 
-    private fun multiply4x4(a: FloatArray, b: FloatArray): FloatArray {
+    // Project a 2D poster-UV point (x, y, z=0, w=1) through the MVP matrix → NDC (±1).
+    private fun mvpTransformPoint(m: FloatArray, x: Float, y: Float): Pair<Float, Float> {
+        val cx = m[0] * x + m[4] * y + m[12]
+        val cy = m[1] * x + m[5] * y + m[13]
+        val cw = m[3] * x + m[7] * y + m[15]
+        return if (cw != 0f) Pair(cx / cw, cy / cw) else Pair(cx, cy)
+    }
+
+    // NDC (±1, Y up) → screen fraction (0..1, Y down).
+    private fun ndcToScreen(ndc: Pair<Float, Float>): Pair<Float, Float> =
+        Pair((ndc.first + 1f) / 2f, (1f - ndc.second) / 2f)
+
+    // Column-major 4×4 multiply: C = A * B  (C[col*4+row] = Σ A[k*4+row] * B[col*4+k])
+    private fun colMajorMul(a: FloatArray, b: FloatArray): FloatArray {
         val out = FloatArray(16)
-        for (row in 0..3) {
-            for (col in 0..3) {
+        for (col in 0..3) {
+            for (row in 0..3) {
                 var sum = 0f
                 for (k in 0..3) {
-                    sum += a[row * 4 + k] * b[k * 4 + col]
+                    sum += a[k * 4 + row] * b[col * 4 + k]
                 }
-                out[row * 4 + col] = sum
+                out[col * 4 + row] = sum
             }
         }
         return out

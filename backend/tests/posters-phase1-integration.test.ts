@@ -3,11 +3,19 @@ import { Dialogue, Image } from "../src/models/Image";
 import { TalkingPhotoArtifact } from "../src/models/TalkingPhotoArtifact";
 import { PosterPreprocessResult } from "../src/models/PosterPreprocessResult";
 import { defineAssociations } from "../src/models/associations";
+import axios from "axios";
+
+jest.mock("axios");
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe("Posters Phase 1 integration", () => {
   beforeAll(async () => {
     defineAssociations();
     await sequelize.sync({ force: true });
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
   afterEach(async () => {
@@ -94,7 +102,7 @@ describe("Posters Phase 1 integration", () => {
     expect(artifact?.errorCode).toBe("NO_FACE_IN_POSTER");
   });
 
-  it("moves queued to ready when preprocess is eligible and fallback provider returns artifact", async () => {
+  it("moves queued to ready when preprocess is eligible and the worker returns an artifact", async () => {
     const image = await Image.create({
       name: "Poster C",
       description: "test",
@@ -126,20 +134,17 @@ describe("Posters Phase 1 integration", () => {
       processedAt: new Date(),
     } as any);
 
-    process.env.TALKING_PHOTO_REAL_PROVIDER = "false";
-    process.env.TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK = "true";
     process.env.WAV2LIP_WORKER_URL = "http://localhost:9999";
     jest.resetModules();
-
-    jest.doMock("axios", () => ({
-      __esModule: true,
-      default: {
-        post: jest.fn().mockResolvedValue({
-          data: { success: true, artifactUrl: "https://cdn.example.com/poster-c.mp4" },
-        }),
-        get: jest.fn(),
+    mockedAxios.post.mockResolvedValue({
+      data: {
+        success: true,
+        videoUrl: "https://cdn.example.com/poster-c.mp4",
+        lipLandmarks: { lipX: 0.4, lipY: 0.58, lipWidth: 0.2, lipHeight: 0.08 },
+        posterFaceBox: { x: 0.2, y: 0.2, width: 0.5, height: 0.6 },
+        confidence: 0.93,
       },
-    }));
+    } as any);
 
     const svc = require("../src/services/talkingPhotoArtifactService");
     const queued = await svc.enqueueTalkingPhotoGeneration(image.id, {
@@ -199,7 +204,7 @@ describe("Posters Phase 1 integration", () => {
     expect(second.version).toBe(first.version);
   });
 
-  it("attempts self-hosted fallback once when managed provider fails", async () => {
+  it("marks the artifact failed when the worker returns no video", async () => {
     const image = await Image.create({
       name: "Poster E",
       description: "test",
@@ -226,26 +231,11 @@ describe("Posters Phase 1 integration", () => {
       processedAt: new Date(),
     } as any);
 
-    process.env.TALKING_PHOTO_REAL_PROVIDER = "true";
-    process.env.SYNC_API_KEY = "test";
-    process.env.TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK = "true";
     process.env.WAV2LIP_WORKER_URL = "http://localhost:9999";
     jest.resetModules();
-
-    jest.doMock("../src/services/syncService", () => ({
-      generateSyncVideo: jest.fn().mockResolvedValue({ jobId: "managed-job-1" }),
-      getSyncStatus: jest.fn().mockResolvedValue({ status: "failed", videoUrl: null }),
-    }));
-    const mockPost = jest.fn().mockResolvedValue({
-      data: { success: true, artifactUrl: "https://cdn.example.com/poster-e.mp4" },
-    });
-    jest.doMock("axios", () => ({
-      __esModule: true,
-      default: {
-        post: mockPost,
-        get: jest.fn(),
-      },
-    }));
+    mockedAxios.post.mockResolvedValue({
+      data: { success: false, error: "generation_failed" },
+    } as any);
 
     const svc = require("../src/services/talkingPhotoArtifactService");
     await TalkingPhotoArtifact.upsert({
@@ -265,8 +255,8 @@ describe("Posters Phase 1 integration", () => {
       correlationId: "corr-fallback-once",
     });
 
-    expect(mockPost).toHaveBeenCalledTimes(1);
     const artifact = await TalkingPhotoArtifact.findOne({ where: { imageId: image.id } });
-    expect(artifact?.status).toBe("ready");
+    expect(artifact?.status).toBe("failed");
+    expect(artifact?.errorCode).toBe("PROVIDER_FAILED");
   });
 });

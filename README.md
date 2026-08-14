@@ -2,6 +2,12 @@
 
 An innovative AR-powered mobile application that recognizes images and generates lip-synced talking heads in the user's chosen language, creating immersive interactive experiences.
 
+### 📱 App Demonstrations
+
+| Scan & Video Overlay Demo | Alternative Interaction Demo |
+| :---: | :---: |
+| [![TalkAR App Demo](https://img.youtube.com/vi/vpItvAV6yYs/maxresdefault.jpg)](https://youtube.com/shorts/vpItvAV6yYs) | [![TalkAR App Demo 2](https://img.youtube.com/vi/S6mBbW4bXFY/maxresdefault.jpg)](https://youtube.com/shorts/S6mBbW4bXFY) |
+
 ## 🎯 App Vision
 
 TalkAR revolutionizes how users interact with static images by bringing them to life through AR technology. When users point their camera at recognized images (posters, advertisements, educational materials), the app generates realistic talking head avatars that speak in their preferred language, creating engaging and personalized experiences.
@@ -59,7 +65,7 @@ TalkAR/
 ### Backend API
 
 - **RESTful API**: Comprehensive endpoints for image and dialogue management
-- **Sync API Integration**: Lip-sync video generation
+- **Wav2Lip Integration**: Lip-sync video generation from images and audio
 - **Cloud Storage**: AWS S3 integration for media assets
 - **Authentication**: JWT-based secure access
 - **Analytics**: Usage tracking and insights
@@ -106,7 +112,7 @@ TalkAR/
 
 ### External Services
 
-- **Sync API**: Lip-sync video generation
+- **Wav2Lip Worker**: Asynchronous lip-sync video generation
 - **AWS S3**: Cloud storage for images and videos
 - **PostgreSQL**: Primary database
 - **Docker**: Containerization and orchestration
@@ -120,7 +126,6 @@ TalkAR/
 - Docker and Docker Compose
 - PostgreSQL (or use Docker)
 - AWS S3 account
-- Sync API account
 
 ### 1. Clone and Setup
 
@@ -156,6 +161,12 @@ docker-compose up -d
 # Backend
 cd backend && npm install && npm run dev
 
+# Wav2Lip worker
+cd backend && npm run dev:wav2lip-worker
+
+# Check worker health
+cd backend && npm run check:wav2lip-worker
+
 # Admin Dashboard
 cd admin-dashboard && npm install && npm start
 
@@ -180,8 +191,17 @@ cd admin-dashboard && npm install && npm start
 1. **Install Node.js 18+**
 2. **Install Dependencies**: `npm install`
 3. **Database Setup**: Configure PostgreSQL connection
-4. **Environment Variables**: Set up `.env` file
+4. **Environment Variables**: Copy `backend/env.example` to `backend/.env`
 5. **Development Server**: `npm run dev`
+6. **Poster-talk worker**: `npm run dev:wav2lip-worker`
+7. **Worker health check**: `npm run check:wav2lip-worker`
+
+### Production Setup
+
+1. Copy `backend/.env.production.example` into your deployment secret store or use it as the source of truth for Kubernetes secrets.
+2. Set `NODE_ENV=production` and keep `TALKING_PHOTO_ENABLE_WAV2LIP_FALLBACK=false`.
+3. Build and publish `talkar-backend` and `talkar-wav2lip-worker`.
+4. Apply the production Kubernetes manifests in order.
 
 ### React Dashboard Setup
 
@@ -197,21 +217,85 @@ cd admin-dashboard && npm install && npm start
 3. **Configure Authentication**
 4. **Update Environment Variables**
 
+## 🧠 Core Architecture & Technical Theory
+
+TalkAR uses a hybrid pipeline that splits heavy AI generation tasks (running asynchronously on self-hosted workers) from real-time AR client-side projection mapping.
+
+```mermaid
+graph TD
+    A[Admin Dashboard] -->|Upload Poster & Dialogue| B(Backend Service)
+    B -->|Detect Face & Register| C[Poster Database]
+    B -->|Post Generation Job| D[Wav2Lip Inference Worker]
+    D -->|TTS Synthesis + Wav2Lip| E[Generate MP4 Video]
+    D -->|Extract Lip Coordinates| F[Compute LipLandmarks]
+    E -->|Upload| G[AWS S3 / CDN]
+    F -->|Return Metadata| B
+    B -->|Serve Video URL + LipLandmarks| H[Mobile AR Core Client]
+    H -->|Camera Frame Ingestion| I[ARCore Reference Tracking]
+    I -->|MVP Matrix Projection| J[Map 3D Poster to 2D Screenspace]
+    J -->|Scale & Position| K[Compose AndroidView Layout]
+    K -->|Oval Clip OutlineProvider| L[Render ExoPlayer Oval Mouth Overlay]
+```
+
+### 1. Asynchronous Lip-Sync Generation Pipeline
+
+When a poster is registered or dialogue is updated, the backend initiates the generation workflow:
+- **Face & Lip Geometry Ingestion**: The poster is preprocessed using face detection libraries to extract the face bounding box (`posterFaceBox`) and define initial lip boundaries. If no face is detected, the poster is marked ineligible for dynamic overlays.
+- **Audio Synthesis**: The dialogue text is synthesized to speech using configured providers (Google Cloud TTS or ElevenLabs) and stored.
+- **Wav2Lip Inference**: The Wav2Lip worker (`Dockerfile.wav2lip-worker`) processes the image and audio. It aligns the static face with the generated audio waveforms, synthesizing mouth movements to match the phonemes.
+- **LipLandmarks Generation**: Along with the final `talking-photo.mp4`, the worker outputs the precise boundaries (`lipX`, `lipY`, `lipWidth`, `lipHeight`) defining the active mouth region relative to the overall video width and height.
+
+### 2. ARCore Perspective Projection & Matrix Mathematics
+
+To render the mouth overlay seamlessly, the mobile client must project coordinates from the physical 3D world onto the 2D mobile screen:
+- **Model-View-Projection (MVP) Matrix**: When ARCore tracks the reference poster, it retrieves the poster's 3D pose in world space. In [TalkingPhotoControllerImpl.kt](file:///Users/ajitreddy/Engineering/Projets/TalkAR/TalkAR%20-/mobile-app/app/src/main/java/com/talkar/app/ar/video/TalkingPhotoControllerImpl.kt), the controller translates the poster's corners and center coordinates into NDC (Normalized Device Coordinates) space using:
+  \[
+  P_{ndc} = M_{projection} \times M_{view} \times M_{model} \times P_{world}
+  \]
+- **Viewport Translation**: NDC coordinates (ranging from `-1` to `1`) are mapped to the device's screen pixel dimensions to determine the 2D screen fractions for the poster boundaries and the lip bounding box.
+- **Direct Lip Projection**: The relative `lipLandmarks` fetched from the backend are projected directly into screen fractions based on the poster's current skew, rotation, and distance, defining the target dimensions for the Compose layout.
+
+### 3. Jetpack Compose & ExoPlayer Oval Mask Overlay
+
+Rather than overlaying the entire generated video (which would replace the user's real-time view of the physical poster environment), TalkAR uses a hybrid overlay technique:
+- **Compose Layout Placement**: The Compose wrapper in [LipSyncVideoOverlay.kt](file:///Users/ajitreddy/Engineering/Projets/TalkAR/TalkAR%20-/mobile-app/app/src/main/java/com/talkar/app/ui/components/LipSyncVideoOverlay.kt) listens to position updates and overlays the Android `PlayerView` matching the exact position (`pvX`, `pvY`) and size of the tracked poster.
+- **Oval Outline Clipping**: Inside the Compose `AndroidView`, a `ViewOutlineProvider` is attached to the player view. It uses the dynamic `lipLandmarks` boundaries to set an oval crop mask:
+  ```kotlin
+  pv.outlineProvider = object : ViewOutlineProvider() {
+      override fun getOutline(view: View, outline: Outline) {
+          val r = view.tag as? Rect ?: return
+          outline.setOval(r.left, r.top, r.right, r.bottom)
+      }
+  }
+  pv.clipToOutline = true
+  ```
+  This clips out the rest of the video, leaving only the talking lips visible over the physical poster!
+- **Anti-Flicker Fade Animation**: To prevent black visual flashes before the ExoPlayer video frame is fully decoded, the overlay starts at `0f` alpha. Once the listener triggers `onRenderedFirstFrame()`, the view fades smoothly to full opacity:
+  ```kotlin
+  override fun onRenderedFirstFrame() {
+      pv.animate().alpha(1f).setDuration(80).start()
+  }
+  ```
+
+---
+
 ## 🔧 API Integration
 
-### Sync API
+### Wav2Lip Worker & Lip-Sync Generation
 
-- **Purpose**: Generate lip-synced talking head videos
-- **Integration**: RESTful API calls for video generation
-- **Authentication**: API key-based access
-- **Features**: Multiple voice options, language support
+- **Purpose**: Generate lip-synced talking head videos from audio and static images
+- **Integration**: Backend API queries a queue or directly forwards work to the Wav2Lip worker service
+- **Deployment**: Local or containerized worker service running Wav2Lip inference (`Dockerfile.wav2lip-worker`)
+- **Features**: Highly optimized, asynchronous job queuing, automatic cleanup of temporary files
 
-### ARCore Integration
+### ARCore Integration & Hybrid Rendering
 
-- **Image Tracking**: Recognize and track reference images
-- **3D Rendering**: Overlay talking head models
-- **Performance**: Optimized for mobile devices
-- **Compatibility**: Android 7.0+ with ARCore support
+- **Image Tracking**: Real-time reference image tracking via ARCore
+- **Perspective Projection Matrix**: The app translates 3D ARCore reference coordinates into 2D screenspace coordinate bounds (`[left, top, right, bottom]` screen fractions) in [TalkingPhotoControllerImpl.kt](file:///Users/ajitreddy/Engineering/Projets/TalkAR/TalkAR%20-/mobile-app/app/src/main/java/com/talkar/app/ar/video/TalkingPhotoControllerImpl.kt) by computing the model-view-projection (MVP) matrix and projecting 3D points.
+- **Direct Lip Projection**: Projects individual lip corners (`lipX`, `lipY`, `lipWidth`, `lipHeight`) through the MVP matrix directly to determine the exact screen bounds for the player overlay.
+- **Dynamic Lip-Sync Overlay**: Integrates Media3 ExoPlayer with Jetpack Compose using an Android `PlayerView` (configured in `TextureView` mode) positioned dynamically over the poster. The video is clipped to an oval matching the mouth region via `ViewOutlineProvider.setOval()` in [LipSyncVideoOverlay.kt](file:///Users/ajitreddy/Engineering/Projets/TalkAR/TalkAR%20-/mobile-app/app/src/main/java/com/talkar/app/ui/components/LipSyncVideoOverlay.kt).
+- **Smooth Visuals**: Applies fade-in animations when playback begins to prevent visual flicker before the first ExoPlayer frame decodes.
+- **Compatibility**: Android 7.0+ (Min SDK 24) with ARCore support
 
 ### Cloud Storage
 
@@ -280,7 +364,6 @@ See [Deployment Guide](docs/DEPLOYMENT.md) and [Worker Auth Runbook](docs/WORKER
 
 - Rotate JWT secrets periodically
 - Rotate AWS credentials using IAM roles where possible
-- Update Sync API keys through their dashboard
 - Change database passwords regularly
 
 ## 📚 Documentation

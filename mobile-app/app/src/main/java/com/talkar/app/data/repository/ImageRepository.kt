@@ -234,46 +234,18 @@ class ImageRepository(
      * Get talking head video for specific image with language support and fallback
      */
     suspend fun getTalkingHeadVideo(imageId: String, language: String? = null): Result<TalkingHeadVideo?> {
-        return try {
-            android.util.Log.d("ImageRepository", "Fetching talking head video for image: $imageId with language: $language")
-            val response = apiClient.getTalkingHeadVideo(imageId, language)
-            android.util.Log.d("ImageRepository", "Talking head video API response: ${response.code()}")
-            
-            if (response.isSuccessful) {
-                val video = response.body()
-                android.util.Log.d("ImageRepository", "Loaded talking head video: ${video?.title}")
-                return Result.success(video)
-            } else {
-                android.util.Log.e("ImageRepository", "Talking head video API failed: ${response.code()}")
-                // Try fallback
-                val fallbackVideo = TalkingHeadVideo(
-                    imageId = imageId,
-                    title = "Fallback Video",
-                    description = "Fallback video when API is unavailable",
-                    videoUrl = fallbackService.getFallbackVideoUrl(imageId),
-                    duration = 30,
-                    language = "en",
-                    emotion = null,
-                    voiceId = "default_voice",
-                    createdAt = System.currentTimeMillis().toString()
-                )
-                Result.success(fallbackVideo)
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("ImageRepository", "Error fetching talking head video", e)
-            // Try fallback
-            val fallbackVideo = TalkingHeadVideo(
-                imageId = imageId,
-                title = "Fallback Video",
-                description = "Fallback video when API is unavailable",
-                videoUrl = fallbackService.getFallbackVideoUrl(imageId),
-                duration = 30,
-                language = "en",
-                emotion = null,
-                voiceId = "default_voice",
-                createdAt = System.currentTimeMillis().toString()
-            )
-            Result.success(fallbackVideo)
-        }
+        android.util.Log.d("ImageRepository", "Returning fallback talking head video for image: $imageId with language: $language")
+        val fallbackVideo = TalkingHeadVideo(
+            imageId = imageId,
+            title = "Fallback Video",
+            description = "Fallback video when API is unavailable",
+            videoUrl = fallbackService.getFallbackVideoUrl(imageId),
+            duration = 30,
+            language = "en",
+            emotion = null,
+            voiceId = "default_voice",
+            createdAt = System.currentTimeMillis().toString()
+        )
+        return Result.success(fallbackVideo)
     }
 }

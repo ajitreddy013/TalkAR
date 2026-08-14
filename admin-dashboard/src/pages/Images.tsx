@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -32,6 +33,7 @@ import {
   Refresh,
   Visibility,
   Upload,
+  AutoAwesome,
 } from "@mui/icons-material";
 import {
   DataGrid,
@@ -52,6 +54,7 @@ import {
   ImageListQuery,
   ImageService,
 } from "../services/imageService";
+import { api } from "../services/api";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:4000";
 const uploadSteps = ["Image", "Metadata", "Script", "Review"];
@@ -93,6 +96,37 @@ export default function ImagesPage() {
   const [uploadScript, setUploadScript] = useState("");
   const [selectedMainFile, setSelectedMainFile] = useState<File | null>(null);
   const [selectedThumbFile, setSelectedThumbFile] = useState<File | null>(null);
+  const [uploadArtifactId, setUploadArtifactId] = useState<string | null>(null);
+  const [uploadArtifactStatus, setUploadArtifactStatus] = useState<"queued" | "processing" | "ready" | "failed" | null>(null);
+  const [uploadArtifactMessage, setUploadArtifactMessage] = useState<string>("");
+  const [aiImproving, setAiImproving] = useState<"description" | "script" | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const [voices, setVoices] = useState<Array<{ voice_id: string; name: string; labels?: Record<string, string> }>>([]);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>("");
+
+  const improveWithAI = async (type: "description" | "script") => {
+    const text = type === "description" ? uploadDescription : uploadScript;
+    if (!text.trim()) return;
+    setAiImproving(type);
+    setAiError(null);
+    try {
+      const response = await api.post("/api/v1/ai-pipeline/improve-text", {
+        text,
+        type,
+        context: uploadName || undefined,
+      });
+      const { improved } = response.data as { improved: string };
+      if (type === "description") setUploadDescription(improved);
+      else setUploadScript(improved);
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error ? e.message : "AI improvement failed. Please try again.";
+      setAiError(msg);
+    } finally {
+      setAiImproving(null);
+    }
+  };
 
   const fetchImages = useCallback(async () => {
     setLoading(true);
@@ -178,6 +212,17 @@ export default function ImagesPage() {
     });
   }, [images, search, statusFilter, confidenceMin, confidenceMax]);
 
+  const fetchVoices = async () => {
+    if (voices.length > 0) return;
+    try {
+      const res = await api.get("/api/v1/ai-pipeline/voices");
+      const data = res.data as { voices: Array<{ voice_id: string; name: string; labels?: Record<string, string> }> };
+      setVoices(data.voices || []);
+    } catch {
+      // non-critical — leave voices empty
+    }
+  };
+
   const openCreateDialog = () => {
     setDialogOpen(true);
     setUploadStep(0);
@@ -189,6 +234,8 @@ export default function ImagesPage() {
     setUploadScript("");
     setSelectedMainFile(null);
     setSelectedThumbFile(null);
+    setSelectedVoiceId("");
+    void fetchVoices();
   };
 
   const openEditDialog = (img: Image) => {
@@ -199,9 +246,12 @@ export default function ImagesPage() {
     setUploadState("idle");
     setUploadName(img.name);
     setUploadDescription(img.description || "");
-    setUploadScript(img.dialogues?.find((d) => d.isDefault)?.text || "");
+    const defaultDialogue = img.dialogues?.find((d) => d.isDefault);
+    setUploadScript(defaultDialogue?.text || "");
+    setSelectedVoiceId((defaultDialogue as { voiceId?: string } | undefined)?.voiceId || "");
     setSelectedMainFile(null);
     setSelectedThumbFile(null);
+    void fetchVoices();
   };
 
   const closeDialog = () => {
@@ -220,28 +270,97 @@ export default function ImagesPage() {
     if (!isEditMode && !selectedMainFile) return;
 
     setUploadState("uploading");
+    setUploadArtifactId(null);
+    setUploadArtifactStatus(null);
+    setUploadArtifactMessage("");
     const formData = new FormData();
     if (selectedMainFile) formData.append("image", selectedMainFile);
     if (selectedThumbFile) formData.append("thumbnail", selectedThumbFile);
     formData.append("name", uploadName);
     formData.append("description", uploadDescription);
     formData.append("script", uploadScript);
+    if (selectedVoiceId) formData.append("voiceId", selectedVoiceId);
 
     try {
       if (isEditMode && editId) {
-        await ImageService.updateImage(editId, formData);
+        const response = await ImageService.updateImage(editId, formData);
+        const savedImage = response.data as Image;
+        setUploadArtifactId(savedImage.id);
+        setUploadArtifactStatus(savedImage.talkingPhotoArtifact?.status || "queued");
+        setUploadArtifactMessage("Image saved. Waiting for lip-sync generation...");
       } else {
-        await ImageService.createImage(formData);
+        const response = await ImageService.createImage(formData);
+        const savedImage = response.data as Image;
+        setUploadArtifactId(savedImage.id);
+        setUploadArtifactStatus(savedImage.talkingPhotoArtifact?.status || "queued");
+        setUploadArtifactMessage("Image saved. Waiting for lip-sync generation...");
       }
       setUploadState("generating");
-      await fetchImages();
-      setUploadState("ready");
-      closeDialog();
+      try {
+        await fetchImages();
+      } catch (refreshError) {
+        console.error(refreshError);
+      }
     } catch (e) {
       console.error(e);
       setUploadState("failed");
+      setUploadArtifactMessage("Save failed. Please retry.");
     }
   };
+
+  useEffect(() => {
+    if (!dialogOpen || !uploadArtifactId) return;
+    if (uploadState !== "generating") return;
+
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const pollArtifact = async () => {
+      try {
+        const response = await ImageService.getImageById(uploadArtifactId);
+        const image = response.data as Image;
+        const status = image.talkingPhotoArtifact?.status || "queued";
+        const errorCode = image.talkingPhotoArtifact?.errorCode;
+        const errorMessage = image.talkingPhotoArtifact?.errorMessage;
+
+        if (cancelled) return;
+
+        setUploadArtifactStatus(status);
+
+        if (status === "ready") {
+          setUploadState("ready");
+          setUploadArtifactMessage("Lip-sync video is ready.");
+          await fetchImages();
+          return;
+        }
+
+        if (status === "failed") {
+          setUploadState("failed");
+          setUploadArtifactMessage(
+            errorCode
+              ? `${errorCode}: ${errorMessage || "Generation failed."}`
+              : "Lip-sync generation failed."
+          );
+          await fetchImages();
+          return;
+        }
+
+        setUploadArtifactMessage("Lip-sync generation is still running...");
+        timer = window.setTimeout(pollArtifact, 2500);
+      } catch (error) {
+        if (cancelled) return;
+        setUploadArtifactMessage("Could not refresh generation status.");
+        timer = window.setTimeout(pollArtifact, 4000);
+      }
+    };
+
+    void pollArtifact();
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [dialogOpen, uploadArtifactId, uploadState, fetchImages]);
 
   const handleDelete = async (id: string) => {
     await ImageService.deleteImage(id);
@@ -546,10 +665,50 @@ export default function ImagesPage() {
 
           {uploadState !== "idle" ? (
             <Alert severity={uploadState === "failed" ? "error" : "info"} sx={{ mb: 2 }}>
-              {uploadState === "uploading" && "Uploading files..."}
-              {uploadState === "generating" && "Generating lip-sync artifact..."}
-              {uploadState === "ready" && "Saved successfully."}
-              {uploadState === "failed" && "Save failed. Please retry."}
+              <Stack spacing={1}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                  <Typography variant="body2" fontWeight={600}>
+                    {uploadArtifactMessage ||
+                      (uploadState === "uploading"
+                        ? "Uploading files..."
+                        : uploadState === "generating"
+                          ? "Generating lip-sync artifact..."
+                          : uploadState === "ready"
+                            ? "Saved successfully."
+                            : "Save failed. Please retry.")}
+                  </Typography>
+                  {uploadState === "uploading" ? (
+                    <Chip size="small" color="info" label="Uploading" />
+                  ) : uploadState === "generating" ? (
+                    <Chip
+                      size="small"
+                      color={
+                        uploadArtifactStatus === "ready"
+                          ? "success"
+                          : uploadArtifactStatus === "failed"
+                            ? "error"
+                            : "warning"
+                      }
+                      label={
+                        uploadArtifactStatus === "ready"
+                          ? "Ready"
+                          : uploadArtifactStatus === "failed"
+                            ? "Failed"
+                            : uploadArtifactStatus === "processing"
+                              ? "Processing"
+                              : "Queued"
+                      }
+                    />
+                  ) : uploadState === "ready" ? (
+                    <Chip size="small" color="success" label="Ready" />
+                  ) : (
+                    <Chip size="small" color="error" label="Failed" />
+                  )}
+                </Stack>
+                {uploadState === "uploading" || uploadState === "generating" ? (
+                  <LinearProgress />
+                ) : null}
+              </Stack>
             </Alert>
           ) : null}
 
@@ -568,13 +727,100 @@ export default function ImagesPage() {
                 <TextField fullWidth label="Name *" value={uploadName} onChange={(e) => setUploadName(e.target.value)} />
               </Grid>
               <Grid item xs={12}>
-                <TextField fullWidth multiline minRows={3} label="Description" value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} />
+                <Stack spacing={0.5}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <Typography variant="caption" color="text.secondary">Description</Typography>
+                    <Tooltip title="Improve with AI (Groq)">
+                      <span>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={aiImproving === "description" ? <CircularProgress size={14} /> : <AutoAwesome fontSize="small" />}
+                          onClick={() => improveWithAI("description")}
+                          disabled={!uploadDescription.trim() || aiImproving !== null}
+                          sx={{ fontSize: "0.72rem", py: 0.3, px: 1 }}
+                        >
+                          Improve with AI
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  </Stack>
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={3}
+                    placeholder="Enter a description…"
+                    value={uploadDescription}
+                    onChange={(e) => setUploadDescription(e.target.value)}
+                  />
+                </Stack>
               </Grid>
+              {aiError && <Grid item xs={12}><Alert severity="error" onClose={() => setAiError(null)}>{aiError}</Alert></Grid>}
             </Grid>
           ) : null}
 
           {uploadStep === 2 ? (
-            <TextField fullWidth multiline minRows={5} label="Default Script *" value={uploadScript} onChange={(e) => setUploadScript(e.target.value)} />
+            <Stack spacing={2}>
+              <Stack spacing={0.5}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Typography variant="caption" color="text.secondary">Default Script *</Typography>
+                  <Tooltip title="Improve with AI (Groq)">
+                    <span>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={aiImproving === "script" ? <CircularProgress size={14} /> : <AutoAwesome fontSize="small" />}
+                        onClick={() => improveWithAI("script")}
+                        disabled={!uploadScript.trim() || aiImproving !== null}
+                        sx={{ fontSize: "0.72rem", py: 0.3, px: 1 }}
+                      >
+                        Improve with AI
+                      </Button>
+                    </span>
+                  </Tooltip>
+                </Stack>
+                <TextField
+                  fullWidth
+                  multiline
+                  minRows={4}
+                  placeholder="Keep it short — 20 words max for fast video generation"
+                  value={uploadScript}
+                  onChange={(e) => setUploadScript(e.target.value)}
+                />
+                {(() => {
+                  const wc = uploadScript.trim() ? uploadScript.trim().split(/\s+/).length : 0;
+                  const color = wc === 0 ? "text.disabled" : wc <= 20 ? "success.main" : wc <= 30 ? "warning.main" : "error.main";
+                  return (
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="caption" color={color} fontWeight={600}>
+                        {wc} word{wc !== 1 ? "s" : ""}{wc > 20 ? " — trim for faster video" : wc > 0 ? " ✓ good" : ""}
+                      </Typography>
+                      <Typography variant="caption" color="text.disabled">Recommended: ≤ 20 words</Typography>
+                    </Stack>
+                  );
+                })()}
+                {aiError && <Alert severity="error" onClose={() => setAiError(null)}>{aiError}</Alert>}
+              </Stack>
+
+              <FormControl fullWidth size="small">
+                <InputLabel>Voice (ElevenLabs)</InputLabel>
+                <Select
+                  value={selectedVoiceId}
+                  label="Voice (ElevenLabs)"
+                  onChange={(e) => setSelectedVoiceId(e.target.value)}
+                >
+                  <MenuItem value=""><em>Default voice</em></MenuItem>
+                  {voices.map((v) => (
+                    <MenuItem key={v.voice_id} value={v.voice_id}>
+                      {v.name}
+                      {v.labels?.gender || v.labels?.accent
+                        ? ` — ${[v.labels?.gender, v.labels?.accent].filter(Boolean).join(", ")}`
+                        : ""}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Stack>
           ) : null}
 
           {uploadStep === 3 ? (
@@ -582,16 +828,17 @@ export default function ImagesPage() {
               <Typography><strong>Name:</strong> {uploadName}</Typography>
               <Typography><strong>Description:</strong> {uploadDescription || "-"}</Typography>
               <Typography><strong>Script:</strong> {uploadScript || "-"}</Typography>
+              <Typography><strong>Voice:</strong> {selectedVoiceId ? (voices.find((v) => v.voice_id === selectedVoiceId)?.name || selectedVoiceId) : "Default"}</Typography>
               <Typography><strong>Main File:</strong> {selectedMainFile?.name || (isEditMode ? "Keep existing" : "Not selected")}</Typography>
               <Typography><strong>Thumbnail:</strong> {selectedThumbFile?.name || "Not selected"}</Typography>
             </Stack>
           ) : null}
         </DialogContent>
         <DialogActions>
-          <Button onClick={closeDialog}>Cancel</Button>
-          <Button disabled={uploadStep === 0} onClick={() => setUploadStep((s) => s - 1)}>Back</Button>
+          <Button onClick={closeDialog}>{uploadState === "idle" ? "Cancel" : "Close"}</Button>
+          <Button disabled={uploadStep === 0 || uploadState !== "idle"} onClick={() => setUploadStep((s) => s - 1)}>Back</Button>
           {uploadStep < uploadSteps.length - 1 ? (
-            <Button variant="contained" onClick={() => setUploadStep((s) => s + 1)} disabled={!validateStep()}>
+            <Button variant="contained" onClick={() => setUploadStep((s) => s + 1)} disabled={!validateStep() || uploadState !== "idle"}>
               Next
             </Button>
           ) : (

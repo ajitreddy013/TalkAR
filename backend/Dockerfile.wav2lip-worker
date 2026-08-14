@@ -1,0 +1,42 @@
+FROM node:18-bullseye
+
+WORKDIR /app
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    ffmpeg \
+    git \
+    wget \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+  && rm -rf /var/lib/apt/lists/*
+
+# Clone Wav2Lip into a stable location inside the image.
+ARG WAV2LIP_REPO=https://github.com/Rudrabha/Wav2Lip.git
+ARG WAV2LIP_REF=master
+ARG WAV2LIP_CHECKPOINT_URL=https://iiitaphyd-my.sharepoint.com/:u:/g/personal/radrabha_m_research_iiit_ac_in/Eb3LEzbfuKlJiR600lQWRxgBIY27JZg80f7V9jtMfbNDaQ?download=1
+RUN git clone --depth 1 --branch "${WAV2LIP_REF}" "${WAV2LIP_REPO}" /opt/Wav2Lip \
+  && python3 -m pip install --no-cache-dir -r /opt/Wav2Lip/requirements.txt \
+  && mkdir -p /opt/Wav2Lip/checkpoints \
+  && wget -O /opt/Wav2Lip/checkpoints/wav2lip_gan.pth "${WAV2LIP_CHECKPOINT_URL}"
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+RUN npm prune --omit=dev
+
+ENV WAV2LIP_PATH=/opt/Wav2Lip
+ENV WAV2LIP_PYTHON_BIN=python3
+ENV WAV2LIP_FFMPEG_BIN=ffmpeg
+
+EXPOSE 8088
+
+CMD ["npm", "run", "start:wav2lip-worker"]
